@@ -2,3 +2,4 @@ venv/*
 *.gif
 *.png
 */__pycache__/*
+*.code-workspace
