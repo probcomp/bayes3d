@@ -2,3 +2,4 @@ ipython
 jupyter
 numpy
 matplotlib
+Pillow

@@ -33,7 +33,7 @@ gt_poses = [
     jnp.array([
     [1.0, 0.0, 0.0, -1.0],   
     [0.0, 1.0, 0.0, -1.0],   
-    [0.0, 0.0, 1.0, 5.0],   
+    [0.0, 0.0, 1.0, 2.0],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
@@ -96,7 +96,6 @@ start = time.time()
 _, inferred_poses = inference_jit(gt_poses[0], gt_images);
 end = time.time()
 print ("Time elapsed:", end - start)
-
 
 cm = plt.get_cmap('turbo')
 
