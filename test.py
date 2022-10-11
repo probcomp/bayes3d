@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import jax
 from jax3dp3.model import make_scoring_function
 from jax3dp3.rendering import render_planes
+from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
     quaternion_to_rotation_matrix,
@@ -72,20 +73,42 @@ f_jit = jax.jit(jax.vmap(lambda t:     jnp.vstack(
         [jnp.hstack([jnp.eye(3), t.reshape(3,-1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
     )))
 pose_deltas = f_jit(make_centered_grid_enumeration_3d_points(0.2, 0.2, 0.2, 5, 5, 5))
-
 print("grid ", pose_deltas.shape)
 key, *sub_keys = jax.random.split(key, pose_deltas.shape[0] + 1)
 sub_keys_translation = jnp.array(sub_keys)
 
+key, *sub_keys = jax.random.split(key, 100)
+sub_keys = jnp.array(sub_keys)
+def f(key):
+    v = VonMisesFisher(
+        jnp.array([1.0, 0.0, 0.0, 0.0]), 800.0
+    ).sample(seed=key)
+    r =  quaternion_to_rotation_matrix(v)
+    return jnp.vstack(
+        [jnp.hstack([r, jnp.zeros((3, 1)) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
+    )
+f_jit = jax.jit(jax.vmap(f))
+rotation_deltas = f_jit(sub_keys)
+print("grid ", rotation_deltas.shape)
+key, *sub_keys = jax.random.split(key, rotation_deltas.shape[0] + 1)
+sub_keys_orientation = jnp.array(sub_keys)
+
+
 def _inner(x, gt_image):
-    proposals = jnp.einsum("ij,ajk->aik", x, pose_deltas)
-    weights_new = scorer_parallel(sub_keys_translation, proposals , gt_image)
-    x = proposals[jnp.argmax(weights_new)]
+    for _ in range(2):
+        proposals = jnp.einsum("ij,ajk->aik", x, pose_deltas)
+        weights_new = scorer_parallel(sub_keys_translation, proposals, gt_image)
+        x = proposals[jnp.argmax(weights_new)]
+
+        proposals = jnp.einsum("ij,ajk->aik", x, rotation_deltas)
+        weights_new = scorer_parallel(sub_keys_orientation, proposals, gt_image)
+        x = proposals[jnp.argmax(weights_new)]
+
     return x, x
+
 
 def inference(init_pos, gt_images):
     return jax.lax.scan(_inner, init_pos, gt_images)
-
 
 
 inference_jit = jax.jit(inference)

@@ -1,3 +1,5 @@
+# Jax3DP3
+
 Requires python version greater than 3.7
 
 ```
@@ -15,6 +17,12 @@ pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases
 
 # Installs the wheel compatible with Cuda >= 11.1 and cudnn >= 8.0.5
 pip install "jax[cuda11_cudnn805]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+```
+
+Use these commands to figure out versions:
+```
+nvcc --version
+cat /usr/local/cuda/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
 ```
 
 Run:

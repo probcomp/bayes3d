@@ -3,3 +3,5 @@ jupyter
 numpy
 matplotlib
 Pillow
+opencv-python
+tensorflow-probability
