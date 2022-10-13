@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import cv2
 
 
-data = np.load("box.npz")
+data = np.load("box2.npz")
 depth_imgs = np.array(data["depth_images"]).copy() * 0.001
 rgb_images = np.array(data["rgb_images"]).copy() 
 
@@ -55,29 +55,13 @@ coord_images = [
 ]
 gt_images = np.stack(coord_images)
 print('gt_images.shape ',gt_images.shape)
-gt_images = gt_images[125:150,:,:,:]
-rgb_images = rgb_images[125:150,:,:,:]
+gt_images = gt_images[270:320,:,:,:]
+rgb_images = rgb_images[270:320,:,:,:]
 
 make_gif(gt_images, 3.0, "imgs/rgb_real.gif")
 
 gt_images[gt_images[:,:,:,2] > 1.3] = 0.0
 
-
-plt.clf()
-plt.matshow(gt_images[-1,:,:,1])
-plt.colorbar()
-plt.savefig("imgs/y.png")
-plt.clf()
-plt.matshow(gt_images[-1,:,:,0])
-plt.colorbar()
-plt.savefig("imgs/x.png")
-plt.clf()
-plt.matshow(gt_images[-1,:,:,2])
-plt.colorbar()
-plt.savefig("imgs/z.png")
-plt.clf()
-plt.plot(gt_images[-1,60,:,0])
-plt.savefig("imgs/x_plot.png")
 
 
 gt_images[gt_images[:,:,:,2] < 0.2] = 0.0
@@ -90,10 +74,10 @@ make_gif(gt_images, 3.0, "rgb_real_filtered.gif")
 r = 0.01
 outlier_prob = 0.2
 
-shape = get_rectangular_prism_shape(0.184 / 2.0, 0.12 / 2.0, 0.069 / 2.0)
+shape = get_rectangular_prism_shape( 0.28 / 2.0, 0.21/ 2.0, 0.11 / 2.0)
 initial_pose = jnp.array(
     [
-        [1.0, 0.0, 0.0, 0.15],
+        [1.0, 0.0, 0.0, -0.4],
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.6],
         [0.0, 0.0, 0.0, 1.0],
@@ -170,12 +154,12 @@ images = []
 middle_width = 50
 for i in range(gt_images.shape[0]):
     dst = Image.new(
-        "RGBA", (3 * w + 2*middle_width, h)
+        "RGBA", (3 * original_width + 2*middle_width, original_height)
     )
     rgb = rgb_images[i]
     rgb_img = Image.fromarray(
-        rgb[:,:,::-1].astype(np.int8), mode="RGB"
-    ).resize((w,h)).convert("RGBA")
+        rgb[:,:,:].astype(np.int8), mode="RGB"
+    ).convert("RGBA")
     dst.paste(
         rgb_img,
         (0, 0),
@@ -183,25 +167,27 @@ for i in range(gt_images.shape[0]):
 
     obsedved_image_pil = Image.fromarray(
         (cm(np.array(gt_images[i,:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
-    )
+    ).resize((original_width, original_height))
 
     dst.paste(
         obsedved_image_pil,
-        (w+middle_width, 0),
+        (original_width+middle_width, 0),
     )
 
     pose = inferred_poses[i]
     rendered_image = render_planes_jit(pose)
     rendered_image_pil = Image.fromarray(
         (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
-    )
+    ).resize((original_width, original_height))
+    rendered_image_pil.putalpha(128)
+    rgb_img_copy = rgb_img.copy()
+    rgb_img_copy.putalpha(128)
 
     dst.paste(
-        rendered_image_pil,
-        (2*w + 2*middle_width, 0),
+        Image.alpha_composite(rendered_image_pil, rgb_img_copy),
+        (2*original_width + 2*middle_width, 0),
     )
     images.append(dst)
-
 
 
 images[0].save(
@@ -212,3 +198,5 @@ images[0].save(
     duration=100,
     loop=0,
 )
+
+from IPython import embed; embed()

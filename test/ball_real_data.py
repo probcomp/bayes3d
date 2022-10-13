@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import cv2
 
 
-data = np.load("ball.npz")
+data = np.load("ball2.npz")
 depth_imgs = np.array(data["depth_images"]).copy() * 0.001
 rgb_images = np.array(data["rgb_images"]).copy() 
 
@@ -56,8 +56,8 @@ coord_images = [
 ]
 gt_images = np.stack(coord_images)
 print('gt_images.shape ',gt_images.shape)
-gt_images = gt_images[160:,:,:,:]
-rgb_images = rgb_images[160:,:,:,:]
+gt_images = gt_images[170:210,:,:,:]
+rgb_images = rgb_images[170:210,:,:,:]
 
 make_gif(gt_images, 3.0, "imgs/rgb_real.gif")
 
@@ -87,7 +87,7 @@ def scorer(key, pose, gt_image):
 
 initial_pose = jnp.array(
     [
-        [1.0, 0.0, 0.0, 0.25],
+        [1.0, 0.0, 0.0, -0.35],
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.5],
         [0.0, 0.0, 0.0, 1.0],
@@ -161,11 +161,11 @@ images = []
 middle_width = 50
 for i in range(gt_images.shape[0]):
     dst = Image.new(
-        "RGBA", (3 * w + 2*middle_width, h)
+        "RGBA", (3 * original_width + 2*middle_width, original_height)
     )
     rgb = rgb_images[i]
     rgb_img = Image.fromarray(
-        rgb[:,:,::-1].astype(np.int8), mode="RGB"
+        rgb[:,:,:].astype(np.int8), mode="RGB"
     ).convert("RGBA")
     dst.paste(
         rgb_img,
@@ -178,7 +178,7 @@ for i in range(gt_images.shape[0]):
 
     dst.paste(
         obsedved_image_pil,
-        (w+middle_width, 0),
+        (original_width+middle_width, 0),
     )
 
     pose = inferred_poses[i]
@@ -186,17 +186,20 @@ for i in range(gt_images.shape[0]):
     rendered_image_pil = Image.fromarray(
         (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
     ).resize((original_width, original_height))
+    rendered_image_pil.putalpha(128)
+    rgb_img_copy = rgb_img.copy()
+    rgb_img_copy.putalpha(128)
 
     dst.paste(
-        rendered_image_pil,
-        (2*w + 2*middle_width, 0),
+        Image.alpha_composite(rendered_image_pil, rgb_img_copy),
+        (2*original_width + 2*middle_width, 0),
     )
     images.append(dst)
 
 
 
 images[0].save(
-    fp="imgs/out.gif",
+    fp="imgs/ball_out.gif",
     format="GIF",
     append_images=images,
     save_all=True,
@@ -204,24 +207,25 @@ images[0].save(
     loop=0,
 )
 
-# from scipy import ndimage
-# img = (gt_images[0,:, :, 2] > 0)
-# labeled, nr_objects = ndimage.label(img)
-# plt.imshow(labeled)
-# plt.colorbar()
-# plt.savefig("imgs/cc.png")
-# counts = []
-# for i in range(nr_objects):
-#     counts.append(
-#         (labeled == i).sum() 
-#     )
-# idx = np.argsort(counts)[-2]
-# plt.clf()
-# plt.imshow(labeled == idx)
-# plt.colorbar()
-# plt.savefig("imgs/cc.png")
+from scipy import ndimage
+img = (gt_images[1,:, :, 2] > 0)
+labeled, nr_objects = ndimage.label(img)
+plt.clf()
+plt.imshow(labeled)
+plt.colorbar()
+plt.savefig("imgs/cc.png")
+counts = []
+for i in range(nr_objects):
+    counts.append(
+        (labeled == i).sum() 
+    )
+idx = np.argsort(counts)[-2]
+plt.clf()
+plt.imshow(labeled == idx)
+plt.colorbar()
+plt.savefig("imgs/cc.png")
 
-# np.mean(gt_images[0,labeled == idx,:],axis=0)
+np.mean(gt_images[0,labeled == idx,:],axis=0)
 
 
 from IPython import embed; embed()
