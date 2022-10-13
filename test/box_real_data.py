@@ -90,7 +90,7 @@ make_gif(gt_images, 3.0, "rgb_real_filtered.gif")
 r = 0.01
 outlier_prob = 0.2
 
-shape = get_rectangular_prism_shape(0.15 / 2.0, 0.11 / 2.0, 0.04 / 2.0)
+shape = get_rectangular_prism_shape(0.184 / 2.0, 0.12 / 2.0, 0.069 / 2.0)
 initial_pose = jnp.array(
     [
         [1.0, 0.0, 0.0, 0.15],
@@ -137,7 +137,7 @@ render_planes_jit = jax.jit(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy))
 render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)))
 
 def _inner(x, gt_image):
-    for _ in range(5):
+    for _ in range(10):
         proposals = jnp.einsum("ij,ajk->aik", x, pose_deltas)
         weights_new = scorer_parallel(sub_keys_translation, proposals, gt_image)
         x = proposals[jnp.argmax(weights_new)]

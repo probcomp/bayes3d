@@ -68,13 +68,12 @@ def render_sphere(pose, shape, h,w, fx_fy, cx_cy):
     pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
     u = pixel_coords_dir / jnp.linalg.norm(pixel_coords_dir,axis=-1, keepdims=True)
 
-    u_dot_c = jnp.einsum("ijk,k->ij", u ,center)
+    u_dot_c = jnp.einsum("ijk,k->ij", u, -center)
 
     nabla = u_dot_c**2 - (center_norm_square - radius**2)
     valid = nabla > 0
 
     d = valid * (-u_dot_c - jnp.sqrt(nabla))
-    points = jnp.einsum("...i,...ki", d[:,:,None], pixel_coords_dir[:,:,:,None])
+    points = jnp.einsum("...i,...ki", d[:,:,None], u[:,:,:,None])
     points_homogeneous = jnp.concatenate([points, jnp.ones((h,w,1))],axis=-1)
-
     return points_homogeneous

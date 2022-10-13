@@ -56,8 +56,8 @@ coord_images = [
 ]
 gt_images = np.stack(coord_images)
 print('gt_images.shape ',gt_images.shape)
-gt_images = gt_images[160:190,:,:,:]
-rgb_images = rgb_images[160:190,:,:,:]
+gt_images = gt_images[160:,:,:,:]
+rgb_images = rgb_images[160:,:,:,:]
 
 make_gif(gt_images, 3.0, "imgs/rgb_real.gif")
 
@@ -70,26 +70,29 @@ print('gt_images.shape ',gt_images.shape)
 make_gif(gt_images, 3.0, "imgs/rgb_real_filtered.gif")
 
 
-r = 0.01
+r = 0.05
 outlier_prob = 0.2
 
-initial_pose = jnp.array(
-    [
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.6],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-)
 gt_images = jnp.array(gt_images)
 
-radius = 0.1
+radius = 0.06
+
 key = jax.random.PRNGKey(3)
 def scorer(key, pose, gt_image):
     rendered_image = render_sphere(pose, radius, h, w, fx_fy, cx_cy)
     weight = neural_descriptor_likelihood(gt_image, rendered_image, r, outlier_prob)
     return weight
 
+
+
+initial_pose = jnp.array(
+    [
+        [1.0, 0.0, 0.0, 0.25],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.5],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+)
 
 score = scorer(key, initial_pose, gt_images[0,:,:,:])
 print("score", score)
@@ -99,7 +102,7 @@ scorer_parallel = jax.vmap(scorer, in_axes = (0, 0, None))
 f_jit = jax.jit(jax.vmap(lambda t:     jnp.vstack(
         [jnp.hstack([jnp.eye(3), t.reshape(3,-1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
     )))
-pose_deltas = f_jit(make_centered_grid_enumeration_3d_points(0.1, 0.1, 0.1, 8, 8, 8))
+pose_deltas = f_jit(make_centered_grid_enumeration_3d_points(0.05, 0.05, 0.05, 8, 8, 8))
 print("grid ", pose_deltas.shape)
 key, *sub_keys = jax.random.split(key, pose_deltas.shape[0] + 1)
 sub_keys_translation = jnp.array(sub_keys)
@@ -124,7 +127,7 @@ render_planes_jit = jax.jit(lambda p:  render_sphere(p, radius, h, w, fx_fy, cx_
 render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_sphere(p, radius, h, w, fx_fy, cx_cy)))
 
 def _inner(x, gt_image):
-    for _ in range(1):
+    for _ in range(10):
         proposals = jnp.einsum("ij,ajk->aik", x, pose_deltas)
         weights_new = scorer_parallel(sub_keys_translation, proposals, gt_image)
         x = proposals[jnp.argmax(weights_new)]
@@ -163,7 +166,7 @@ for i in range(gt_images.shape[0]):
     rgb = rgb_images[i]
     rgb_img = Image.fromarray(
         rgb[:,:,::-1].astype(np.int8), mode="RGB"
-    ).resize((w,h)).convert("RGBA")
+    ).convert("RGBA")
     dst.paste(
         rgb_img,
         (0, 0),
@@ -171,7 +174,7 @@ for i in range(gt_images.shape[0]):
 
     obsedved_image_pil = Image.fromarray(
         (cm(np.array(gt_images[i,:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
-    )
+    ).resize((original_width, original_height))
 
     dst.paste(
         obsedved_image_pil,
@@ -182,7 +185,7 @@ for i in range(gt_images.shape[0]):
     rendered_image = render_planes_jit(pose)
     rendered_image_pil = Image.fromarray(
         (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
-    )
+    ).resize((original_width, original_height))
 
     dst.paste(
         rendered_image_pil,
@@ -200,5 +203,25 @@ images[0].save(
     duration=100,
     loop=0,
 )
+
+# from scipy import ndimage
+# img = (gt_images[0,:, :, 2] > 0)
+# labeled, nr_objects = ndimage.label(img)
+# plt.imshow(labeled)
+# plt.colorbar()
+# plt.savefig("imgs/cc.png")
+# counts = []
+# for i in range(nr_objects):
+#     counts.append(
+#         (labeled == i).sum() 
+#     )
+# idx = np.argsort(counts)[-2]
+# plt.clf()
+# plt.imshow(labeled == idx)
+# plt.colorbar()
+# plt.savefig("imgs/cc.png")
+
+# np.mean(gt_images[0,labeled == idx,:],axis=0)
+
 
 from IPython import embed; embed()
