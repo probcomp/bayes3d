@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import cv2
 
 
-data = np.load("box2.npz")
+data = np.load("box3.npz")
 depth_imgs = np.array(data["depth_images"]).copy() * 0.001
 rgb_images = np.array(data["rgb_images"]).copy() 
 
@@ -55,8 +55,10 @@ coord_images = [
 ]
 gt_images = np.stack(coord_images)
 print('gt_images.shape ',gt_images.shape)
-gt_images = gt_images[270:320,:,:,:]
-rgb_images = rgb_images[270:320,:,:,:]
+MIN = 470
+MAX = 510
+gt_images = gt_images[MIN:MAX,:,:,:]
+rgb_images = rgb_images[MIN:MAX,:,:,:]
 
 make_gif(gt_images, 3.0, "imgs/rgb_real.gif")
 
@@ -69,17 +71,17 @@ gt_images[gt_images[:,:,:,1] > 0.1,:] = 0.0
 gt_images = np.concatenate([gt_images, np.ones(gt_images.shape[:3])[:,:,:,None] ], axis=-1)
 print('gt_images.shape ',gt_images.shape)
 
-make_gif(gt_images, 3.0, "rgb_real_filtered.gif")
+make_gif(gt_images, 3.0, "imgs/rgb_real_filtered.gif")
 
 r = 0.01
 outlier_prob = 0.2
 
-shape = get_rectangular_prism_shape( 0.28 / 2.0, 0.21/ 2.0, 0.11 / 2.0)
+shape = get_rectangular_prism_shape( 0.38 / 2.0, 0.48/ 2.0, 0.15 / 2.0)
 initial_pose = jnp.array(
     [
-        [1.0, 0.0, 0.0, -0.4],
+        [1.0, 0.0, 0.0, 0.33],
         [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.6],
+        [0.0, 0.0, 1.0, 0.66],
         [0.0, 0.0, 0.0, 1.0],
     ]
 )
