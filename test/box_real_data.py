@@ -212,5 +212,3 @@ images[0].save(
     duration=100,
     loop=0,
 )
-
-from IPython import embed; embed()

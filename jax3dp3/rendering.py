@@ -10,6 +10,7 @@ from .utils import apply_transform
 # cx_cy : principal point
 # output: (h,w,3) coordinate image
 # @functools.partial(jax.jit, static_argnames=["h","w"])
+
 def render_cloud_at_pose(input_cloud, pose, h, w, fx_fy, cx_cy, pixel_smudge):
     transformed_cloud = apply_transform(input_cloud, pose)
     point_cloud = jnp.vstack([-1.0 * jnp.ones((1, 3)), transformed_cloud])
@@ -56,7 +57,6 @@ def render_planes(pose, shape, h,w, fx_fy, cx_cy):
     )
 
     return points_final
-
 
 def render_sphere(pose, shape, h,w, fx_fy, cx_cy):
     radius = shape

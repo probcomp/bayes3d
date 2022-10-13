@@ -56,8 +56,8 @@ coord_images = [
 ]
 gt_images = np.stack(coord_images)
 print('gt_images.shape ',gt_images.shape)
-gt_images = gt_images[157:170,:,:,:]
-rgb_images = rgb_images[157:170,:,:,:]
+gt_images = gt_images[160:190,:,:,:]
+rgb_images = rgb_images[160:190,:,:,:]
 
 make_gif(gt_images, 3.0, "imgs/rgb_real.gif")
 
@@ -75,7 +75,7 @@ outlier_prob = 0.2
 
 initial_pose = jnp.array(
     [
-        [1.0, 0.0, 0.0, 0.15],
+        [1.0, 0.0, 0.0, 0.0],
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.6],
         [0.0, 0.0, 0.0, 1.0],
@@ -83,10 +83,10 @@ initial_pose = jnp.array(
 )
 gt_images = jnp.array(gt_images)
 
-
+radius = 0.1
 key = jax.random.PRNGKey(3)
 def scorer(key, pose, gt_image):
-    rendered_image = render_sphere(pose, 0.1, h, w, fx_fy, cx_cy)
+    rendered_image = render_sphere(pose, radius, h, w, fx_fy, cx_cy)
     weight = neural_descriptor_likelihood(gt_image, rendered_image, r, outlier_prob)
     return weight
 
@@ -120,9 +120,8 @@ print("grid ", rotation_deltas.shape)
 key, *sub_keys = jax.random.split(key, rotation_deltas.shape[0] + 1)
 sub_keys_orientation = jnp.array(sub_keys)
 
-render_planes_jit = jax.jit(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy))
-render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)))
-
+render_planes_jit = jax.jit(lambda p:  render_sphere(p, radius, h, w, fx_fy, cx_cy))
+render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_sphere(p, radius, h, w, fx_fy, cx_cy)))
 
 def _inner(x, gt_image):
     for _ in range(1):
@@ -140,7 +139,6 @@ def _inner(x, gt_image):
 def inference(init_pos, gt_images):
     return jax.lax.scan(_inner, init_pos, gt_images)
 
-from IPython import embed; embed()
 
 
 inference_jit = jax.jit(inference)
