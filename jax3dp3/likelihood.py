@@ -9,10 +9,10 @@ def neural_descriptor_likelihood(
     r,
     outlier_prob
 ):
-    obs_mask = obs_xyz[:,:,2] > 0.001
-    rendered_mask = rendered_xyz[:,:,2] > 0.001
+    obs_mask = obs_xyz[:,:,2] > 0.0
+    rendered_mask = rendered_xyz[:,:,2] > 0.0
     num_latent_points = rendered_mask.sum()
-    rendered_xyz_patches = extract_2d_patches(rendered_xyz, (4,4))
+    rendered_xyz_patches = extract_2d_patches(rendered_xyz, (10,10))
     log_mixture_prob = log_likelihood_for_pixel(
         obs_xyz,
         rendered_xyz_patches,

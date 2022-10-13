@@ -39,7 +39,7 @@ def render_planes(pose, shape, h,w, fx_fy, cx_cy):
         plane_poses[:,:3,3],
         plane_poses[:,:3,2]
     )
-    d = numerators / denoms
+    d = numerators / (denoms + 1e-10)
     points_temp = jnp.einsum("...ij,...kj", d[:,:,:,None], pixel_coords_dir[:,:,:,None])
     points = jnp.concatenate([points_temp, jnp.ones((*points_temp.shape[:3],1,))],axis=-1) # (H,W,N,4)
     inv_plane_poses = jnp.linalg.inv(plane_poses)
@@ -56,3 +56,25 @@ def render_planes(pose, shape, h,w, fx_fy, cx_cy):
     )
 
     return points_final
+
+
+def render_sphere(pose, shape, h,w, fx_fy, cx_cy):
+    radius = shape
+    center = pose[:3,-1]
+    center_norm_square = jnp.linalg.norm(center)**2
+
+    r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
+    pixel_coords = jnp.stack([r,c],axis=-1)
+    pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
+    u = pixel_coords_dir / jnp.linalg.norm(pixel_coords_dir,axis=-1, keepdims=True)
+
+    u_dot_c = jnp.einsum("ijk,k->ij", u ,center)
+
+    nabla = u_dot_c**2 - (center_norm_square - radius**2)
+    valid = nabla > 0
+
+    d = valid * (-u_dot_c - jnp.sqrt(nabla))
+    points = jnp.einsum("...i,...ki", d[:,:,None], pixel_coords_dir[:,:,:,None])
+    points_homogeneous = jnp.concatenate([points, jnp.ones((h,w,1))],axis=-1)
+
+    return points_homogeneous
