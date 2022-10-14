@@ -149,9 +149,9 @@ end = time.time()
 print ("Time elapsed:", end - start)
 
 
-cm = plt.get_cmap('turbo')
+cm = plt.get_cmap('jet')
 
-max_depth = 3.0
+max_depth = 1.5
 images = []
 middle_width = 50
 for i in range(gt_images.shape[0]):
