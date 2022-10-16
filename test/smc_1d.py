@@ -77,10 +77,10 @@ def run_inference(gt_images, num_particles):
     return jax.lax.scan(particle_filtering_step, (particles, weights), gt_images)
 
 run_inference_jit = jax.jit(run_inference, static_argnums=1)
-run_inference_jit(ground_truth_images, 300)
+run_inference_jit(ground_truth_images, 100)
 
 start = time.time()
-_,x  = run_inference_jit(ground_truth_images, 300)
+_,x  = run_inference_jit(ground_truth_images, 100)
 end = time.time()
 print ("Time elapsed:", end - start)
 print ("FPS:", ground_truth_images.shape[0] / (end - start))
