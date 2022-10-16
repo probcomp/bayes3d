@@ -95,7 +95,7 @@ sub_keys_orientation = jnp.array(sub_keys)
 
 
 def _inner(x, gt_image):
-    for _ in range(2):
+    for _ in range(1):
         proposals = jnp.einsum("ij,ajk->aik", x, pose_deltas)
         weights_new = scorer_parallel(sub_keys_translation, proposals, gt_image)
         x = proposals[jnp.argmax(weights_new)]
@@ -119,6 +119,7 @@ start = time.time()
 _, inferred_poses = inference_jit(gt_poses[0], gt_images);
 end = time.time()
 print ("Time elapsed:", end - start)
+print ("FPS:", gt_poses.shape[0] / (end - start))
 
 cm = plt.get_cmap('turbo')
 
