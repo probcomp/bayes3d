@@ -1,17 +1,16 @@
 # Jax3DP3
 
-Requires python version greater than 3.7
-
+Setup virtualenv and install dependencies:
 ```
-python3.10 -m venv venv
+python3.10 -m venv venv # Replace with any python version >= 3.7
 source venv/bin/activate
-pip install -r requirements.txt
-```
-
-Select jax install based on cuda and cudnn versions:
-```
 pip install --upgrade pip
+pip install -r requirements.txt
+python setup.py develop
+```
 
+Install `jax` and `jaxlib`
+```
 # Installs the wheel compatible with Cuda >= 11.4 and cudnn >= 8.2
 pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
@@ -19,15 +18,14 @@ pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases
 pip install "jax[cuda11_cudnn805]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
 
-Use these commands to figure out versions:
+Use these commands to identify Cuda and CuDNN versions:
 ```
 nvcc --version
 cat /usr/local/cuda/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
 ```
 
-Run:
+To test successful setup run:
 ```
-python test.py
+python test/test.py
 ```
-
-If it produces `out.gif` then installation is successful.
+and view `out.gif`
