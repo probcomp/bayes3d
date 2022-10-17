@@ -32,7 +32,4 @@ shape = 0.3
 
 gt_image = render_sphere(pose, shape, h,w, fx_fy, cx_cy)
 print('gt_image.shape ',gt_image.shape)
-save_depth_image(gt_image[:,:,2], 10.0, "imgs/depth.png")
-
-
-from IPython import embed; embed()
+save_depth_image(gt_image[:,:,2], 10.0, "test_imgs/depth.png")
