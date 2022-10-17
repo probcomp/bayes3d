@@ -5,3 +5,4 @@ venv/*
 *.code-workspace
 *.pyc
 *.npz
+*.egg-info/*
