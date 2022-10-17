@@ -26,7 +26,6 @@ h, w, fx_fy, cx_cy = (
 )
 r = 0.1
 outlier_prob = 0.01
-pixel_smudge = 0
 
 num_frames = 50
 

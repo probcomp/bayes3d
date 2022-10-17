@@ -40,6 +40,10 @@ def extract_2d_patches(data: jnp.ndarray, filter_shape: Tuple[int, int]) -> jnp.
     )
     return extracted_patches
 
+def transform_from_rot_and_pos(rot, t):
+    return jnp.vstack(
+        [jnp.hstack([rot, t.reshape(3,1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
+    )
 
 # move point cloud to a specified pose
 # coords: (N,3) point cloud
