@@ -1,52 +1,68 @@
+import jax.numpy as jnp
+from jax3dp3.utils import extract_2d_patches
+from jax3dp3.utils import (
+    quaternion_to_rotation_matrix,
+    transform_from_rot_and_pos
+)
+import functools
 
 
-
-# @functools.partial(jax.jit, static_argnames=["r", "outlier_prob"])
-def get_closest_points(
+def get_nearest_neighbor(
     obs_xyz: jnp.ndarray,
     rendered_xyz: jnp.ndarray,
 ):
-    obs_mask = obs_xyz[:,:,2] > 0.0
-    rendered_mask = rendered_xyz[:,:,2] > 0.0
-
-    num_latent_points = rendered_mask.sum()
-    rendered_xyz_patches = extract_2d_patches(rendered_xyz, (4,4))
-    log_mixture_prob = log_likelihood_for_pixel(
+    rendered_xyz_patches = extract_2d_patches(rendered_xyz, (10,10))
+    matches = find_closest_point_at_pixel(
         obs_xyz,
         rendered_xyz_patches,
-        r,
-        outlier_prob,
-        num_latent_points
     )
-    return jnp.sum(jnp.where(obs_mask, log_mixture_prob, 0.0))
-
+    return matches
 
 @functools.partial(
     jnp.vectorize,
-    signature='(m),(h,w,m)->()',
-    excluded=(2, 3, 4),
+    signature='(m),(h,w,m)->(m)',
 )
-def log_likelihood_for_pixel(
+def find_closest_point_at_pixel(
     data_xyz: jnp.ndarray,
     model_xyz: jnp.ndarray,
-    r: float,
-    outlier_prob: float,
-    num_latent_points: float,
 ):
-    """    Args:
-        data_xyz (jnp.ndarray): (3,)
-            3d coordinate of observed point
-        model_xyz : (filter_height, filter_width, 3),
-        r : float, sphere radius
-        outlier_prob: float
-        num_latent_points: int
-    """
     distance = jnp.linalg.norm(data_xyz - model_xyz, axis=-1)
-    best_point = 
-    
-    return jnp.log(jnp.sum(outlier_prob + jnp.where(
-        distance <= r,
-        1 / (4 * ((1 - outlier_prob)/num_latent_points) * jnp.pi * r**3) / (3 ),
-        0.0,
-    )))
-    return a
+    best_point = model_xyz[jnp.unravel_index(jnp.argmin(distance), distance.shape)]
+    return best_point
+
+def find_least_squares_transform_between_clouds(c1, c2, mask):
+    centroid1 = jnp.sum(c1 * mask, axis=0) / jnp.sum(mask)
+    centroid2 = jnp.sum(c2 * mask, axis=0) / jnp.sum(mask)
+    c1_centered = c1 - centroid1
+    c2_centered = c2 - centroid2
+    H = jnp.transpose(c1_centered * mask).dot(c2_centered * mask)
+
+    U,_,V = jnp.linalg.svd(H)
+    rot = (jnp.transpose(V).dot(jnp.transpose(U)))
+
+    modifier = jnp.array([
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, -1.0],
+    ])
+    V_mod = modifier.dot(V)
+    rot2 = (jnp.transpose(V_mod).dot(jnp.transpose(U)))
+
+    rot_final = (jnp.linalg.det(rot) < 0) * rot2 + (jnp.linalg.det(rot) > 0) * rot
+
+    T = (centroid2 - rot_final.dot(centroid1))
+    transform =  transform_from_rot_and_pos(rot_final, T)
+    return transform
+
+def icp(init_pose, render_func, obs_img, outer_iterations, inner_iterations):
+    for _ in range(outer_iterations):
+        rendered_img = render_func(init_pose)
+        for _ in range(inner_iterations):
+            neighbors = get_nearest_neighbor(obs_img, rendered_img)
+            mask = (neighbors[:,:,2] > 0)  * (obs_img[:,:,2] > 0)
+            c1 = neighbors[:,:,:3].reshape(-1,3)
+            c2 = obs_img[:,:,:3].reshape(-1,3)
+
+            transform = find_least_squares_transform_between_clouds(c1, c2, mask.reshape(-1,1))
+            init_pose = transform.dot(init_pose)
+    return init_pose

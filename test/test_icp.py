@@ -17,122 +17,84 @@ import matplotlib.pyplot as plt
 import cv2
 from jax3dp3.shape import get_cube_shape
 from jax3dp3.viz.img import save_depth_image
+from jax3dp3.icp import get_nearest_neighbor, find_least_squares_transform_between_clouds, icp
 import jax.numpy as jnp
-import functools
-from jax3dp3.utils import extract_2d_patches
+
 
 h, w, fx_fy, cx_cy = (
-    300,
-    300,
+    120,
+    160,
     jnp.array([200.0, 200.0]),
-    jnp.array([150.0, 150.0]),
+    jnp.array([80.0, 60.0]),
 )
 
 pose_1 = jnp.array([
-    [1.0, 0.0, 0.0, -0.8],   
-    [0.0, 1.0, 0.0, -1.0],   
+    [1.0, 0.0, 0.0, -0.5],   
+
+    [0.0, 1.0, 0.0, -0.3],   
     [0.0, 0.0, 1.0, 2.0],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
-rot = R.from_euler('zyx', [10.0, -4.0, -12.0]).as_matrix()
+rot = R.from_euler('zyx', [1.0, -4.0, -12.0]).as_matrix()
 pose_1 = pose_1.at[:3,:3].set(jnp.array(rot))
 
-pose_2 = jnp.array([
-    [1.0, 0.0, 0.0, -0.82],   
-    [0.0, 1.0, 0.0, -1.02],   
-    [0.0, 0.0, 1.0, 2.02],   
-    [0.0, 0.0, 0.0, 1.0],   
-    ]
-)
-rot = R.from_euler('zyx', [4.0, 2.0, 12.0]).as_matrix()
-pose_2 = pose_2.at[:3,:3].set(jnp.array(rot))
-
-shape = get_cube_shape(0.5)
-
-render_planes_jit = jax.jit(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy))
-render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)))
-
-img_1 = render_planes_jit(pose_1)
-img_2 = render_planes_jit(pose_2)
-save_depth_image(img_1[:,:,2],5.0, "img_1.png")
-save_depth_image(img_2[:,:,2],5.0, "img_2.png")
-
-
-def get_nearest_neighbor(
-    obs_xyz: jnp.ndarray,
-    rendered_xyz: jnp.ndarray,
-):
-    rendered_xyz_patches = extract_2d_patches(rendered_xyz, (4,4))
-    matches = find_closest_point_at_pixel(
-        obs_xyz,
-        rendered_xyz_patches,
-    )
-    return matches
-
-@functools.partial(
-    jnp.vectorize,
-    signature='(m),(h,w,m)->(m)',
-)
-def find_closest_point_at_pixel(
-    data_xyz: jnp.ndarray,
-    model_xyz: jnp.ndarray,
-):
-    distance = jnp.linalg.norm(data_xyz - model_xyz, axis=-1)
-    best_point = model_xyz[jnp.unravel_index(jnp.argmin(distance), distance.shape)]
-    return best_point
-
-def find_least_squares_transform_between_clouds(c1, c2):
-    centroid1 = jnp.mean(c1, axis=0)
-    centroid2 = jnp.mean(c2, axis=0)
-    print(centroid1)
-    print(centroid2)
-    c1_centered = c1 - centroid1
-    c2_centered = c2 - centroid2
-    print(jnp.mean(c1_centered, axis=0))
-    print(jnp.mean(c2_centered, axis=0))
-    H = jnp.transpose(c1_centered).dot(c2_centered)
-
-    print(H.shape)
-    U,_,V = jnp.linalg.svd(H)
-    rot = (jnp.transpose(V).dot(jnp.transpose(U)))
-    if jnp.linalg.det(rot) < 0:
-        print("det(R) < R, reflection detected!, correcting for it ...")
-        modifier = jnp.array([
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, -1.0],
-        ])
-        V_mod = modifier.dot(V)
-        rot = (jnp.transpose(V).dot(jnp.transpose(U)))
-
-    T = (centroid2 - rot.dot(centroid1))
-    transform =  transform_from_rot_and_pos(rot,T)
-    return transform
-
-cap  = 3000
-neighbors = get_nearest_neighbor(img_1, img_2)
-ii,jj = jnp.where((neighbors[:,:,2] > 0)  * (img_1[:,:,2] > 0))
-
-c1 = neighbors[ii[:cap], jj[:cap]][:,:3]
-c2 = img_1[ii[:cap], jj[:cap]][:,:3]
-
-
-key = jax.random.PRNGKey(3)
-c1 = jax.random.normal(key, shape=(100,3))*100.0
-rot = R.from_euler('zyx', [10.0, -20.1, -2.0], degrees=True).as_matrix()
+rot = R.from_euler('zyx', [15.0, -1.1, -9.0], degrees=True).as_matrix()
 delta_pose =     jnp.array([
-    [1.0, 0.0, 0.0, 0.09],   
+    [1.0, 0.0, 0.0, 0.23],   
     [0.0, 1.0, 0.0, 0.05],   
     [0.0, 0.0, 1.0, 0.02],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
 delta_pose = delta_pose.at[:3,:3].set(jnp.array(rot))
-c2 = apply_transform(c1, delta_pose)
+gt_pose = delta_pose.dot(pose_1)
 
-transform = find_least_squares_transform_between_clouds(c1, c2)
+shape = get_cube_shape(0.5)
 
-print(error(c2, apply_transform(c1, transform)))
+render_planes_lambda = lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)
+render_planes_jit = jax.jit(render_planes_lambda)
+render_planes_parallel_jit = jax.jit(jax.vmap(render_planes_lambda))
+
+rendered_img = render_planes_jit(pose_1)
+obs_img = render_planes_jit(gt_pose)
+save_depth_image(rendered_img[:,:,2], 5.0, "img_1.png")
+save_depth_image(obs_img[:,:,2], 5.0, "img_2.png")
+
+
+def error(c1,c2):
+    return jnp.sum(jnp.abs(c1-c2))
+
+
+new_pose = icp(pose_1, render_planes_lambda, obs_img, 20, 1)
+print(pose_1)
+print(new_pose)
+print(gt_pose)
+
+icp_lambda = lambda p: icp(p, render_planes_lambda, obs_img, 20, 1)
+icp_lambda_jit = jax.jit(icp_lambda)
+
+new_pose = icp_lambda_jit(pose_1)
+
+
+start = time.time()
+new_pose = icp_lambda_jit(pose_1)
+end = time.time()
+print ("Time elapsed:", end - start)
+
+
+save_depth_image(
+    jnp.hstack([render_planes_jit(pose_1)[:,:,2],
+    render_planes_jit(new_pose)[:,:,2] ,
+    obs_img[:,:,2]]),
+    5.0,
+    "img_1_inferred.png"
+)
+
+
+# icp_jit = jax.jit(icp)
+# new_pose = icp_jit(pose_1)
+# print(new_pose)
+
 
 from IPython import embed; embed()
