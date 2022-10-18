@@ -4,6 +4,7 @@ from jax3dp3.utils import (
     quaternion_to_rotation_matrix,
     transform_from_rot_and_pos
 )
+import jax
 import functools
 
 
@@ -55,14 +56,16 @@ def find_least_squares_transform_between_clouds(c1, c2, mask):
     return transform
 
 def icp(init_pose, render_func, obs_img, outer_iterations, inner_iterations):
-    for _ in range(outer_iterations):
-        rendered_img = render_func(init_pose)
-        for _ in range(inner_iterations):
+    def _icp_step(j, pose_):
+        rendered_img = render_func(pose_)
+        def _icp_step_inner(i, pose):
             neighbors = get_nearest_neighbor(obs_img, rendered_img)
             mask = (neighbors[:,:,2] > 0)  * (obs_img[:,:,2] > 0)
             c1 = neighbors[:,:,:3].reshape(-1,3)
             c2 = obs_img[:,:,:3].reshape(-1,3)
 
             transform = find_least_squares_transform_between_clouds(c1, c2, mask.reshape(-1,1))
-            init_pose = transform.dot(init_pose)
-    return init_pose
+            pose = transform.dot(pose)
+            return pose
+        return jax.lax.fori_loop(0, inner_iterations, _icp_step_inner, pose_)
+    return jax.lax.fori_loop(0, outer_iterations, _icp_step, init_pose)

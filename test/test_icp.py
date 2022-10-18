@@ -39,7 +39,7 @@ pose_1 = jnp.array([
 rot = R.from_euler('zyx', [1.0, -4.0, -12.0]).as_matrix()
 pose_1 = pose_1.at[:3,:3].set(jnp.array(rot))
 
-rot = R.from_euler('zyx', [15.0, -1.1, -9.0], degrees=True).as_matrix()
+rot = R.from_euler('zyx', [5.0, -1.1, -4.0], degrees=True).as_matrix()
 delta_pose =     jnp.array([
     [1.0, 0.0, 0.0, 0.23],   
     [0.0, 1.0, 0.0, 0.05],   
@@ -65,7 +65,6 @@ save_depth_image(obs_img[:,:,2], 5.0, "img_2.png")
 def error(c1,c2):
     return jnp.sum(jnp.abs(c1-c2))
 
-
 new_pose = icp(pose_1, render_planes_lambda, obs_img, 20, 1)
 print(pose_1)
 print(new_pose)
@@ -75,7 +74,6 @@ icp_lambda = lambda p: icp(p, render_planes_lambda, obs_img, 20, 1)
 icp_lambda_jit = jax.jit(icp_lambda)
 
 new_pose = icp_lambda_jit(pose_1)
-
 
 start = time.time()
 new_pose = icp_lambda_jit(pose_1)
@@ -91,10 +89,16 @@ save_depth_image(
     "img_1_inferred.png"
 )
 
+icp_lambda_parallel = jax.vmap(icp_lambda)
+icp_lambda_parallel_jit = jax.jit(icp_lambda_parallel)
+many_poses = jnp.stack([pose_1 for _ in range(200)])
 
-# icp_jit = jax.jit(icp)
-# new_pose = icp_jit(pose_1)
-# print(new_pose)
+new_poses = icp_lambda_parallel_jit(many_poses)
+
+start = time.time()
+new_poses = icp_lambda_parallel_jit(many_poses)
+end = time.time()
+print ("Time elapsed:", end - start)
 
 
 from IPython import embed; embed()
