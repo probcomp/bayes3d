@@ -1,7 +1,7 @@
 from tensorflow_probability.substrates import jax as tfp
 import jax
 import jax.numpy as jnp
-from jax3dp3.utils import (
+from .transforms_3d import (
     quaternion_to_rotation_matrix,
 )
 tfd = tfp.distributions
