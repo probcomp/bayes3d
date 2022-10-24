@@ -101,3 +101,5 @@ def depth_to_coords_in_camera(
     )
     coords_on_image = np.moveaxis(vu, 0, -1)
     return coords_in_camera, coords_on_image
+
+

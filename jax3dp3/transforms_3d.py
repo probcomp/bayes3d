@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 
 
@@ -81,3 +82,47 @@ def quaternion_to_rotation_matrix(Q):
                            [r20, r21, r22]])
                             
     return rot_matrix
+
+
+@jax.jit
+def angle_axis_helper_edgecase(newZ):
+    zUnit = jnp.array([1.0, 0.0, 0.0])
+    axis = jnp.array([0.0, 1.0, 0.0])
+    geodesicAngle = jax.lax.cond(jnp.allclose(newZ, zUnit, atol=1e-3), lambda:0.0, lambda:jnp.pi)
+    return axis, geodesicAngle
+
+
+@jax.jit
+def angle_axis_helper(newZ): 
+    zUnit = jnp.array([1.0, 0.0, 0.0])
+    axis = jnp.cross(zUnit, newZ)
+    theta = jax.lax.asin(jax.lax.clamp(-1.0, jnp.linalg.norm(axis), 1.0))
+    geodesicAngle = jax.lax.cond(jnp.dot(zUnit, newZ) > 0, lambda:theta, lambda:jnp.pi - theta)  
+    return axis, geodesicAngle
+
+
+@jax.jit
+def geodesicHopf_select_axis(newZ, planarAngle):
+    # newZ should be a normalized vector
+    # returns a 4x4 quaternion
+    
+    zUnit = jnp.array([1.0, 0.0, 0.0])
+
+    # todo: implement cases where newZ is approx. -zUnit or approx. zUnit
+    axis, geodesicAngle = jax.lax.cond(jnp.allclose(jnp.abs(newZ), jnp.array([1,0,0]), atol=1e-3), angle_axis_helper_edgecase, angle_axis_helper, newZ)
+
+    return (transform_from_axis_angle(axis, geodesicAngle) @ transform_from_axis_angle(zUnit, planarAngle))
+
+
+def fibonacci_sphere(samples):
+    phi = jnp.pi * (3 - jnp.sqrt(5))  # golden angle
+    def fib_point(i):
+        y = 1 - (i / (samples - 1)) * 2
+        radius = jnp.sqrt(1 - y * y)
+        theta = phi * i
+        x = jnp.cos(theta) * radius
+        z = jnp.sin(theta) * radius
+        return jnp.array([x, y, z])
+        
+    fib_sphere = jax.jit(jax.vmap(fib_point, in_axes=(0)))
+    return fib_sphere(jnp.arange(samples))
