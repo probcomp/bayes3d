@@ -17,7 +17,6 @@ def angle_axis_helper(newZ):
     return axis, geodesicAngle
 
 
-@jax.jit
 def geodesicHopf_select_axis(newZ, planarAngle):
     # newZ should be a normalized vector
     # returns a 4x4 quaternion
@@ -40,8 +39,9 @@ def fibonacci_sphere(samples):
         z = jnp.sin(theta) * radius
         return jnp.array([x, y, z])
         
-    fib_sphere = jax.jit(jax.vmap(fib_point, in_axes=(0)))
-    return fib_sphere(jnp.arange(samples))
+    fib_sphere = jax.vmap(fib_point, in_axes=(0))
+    points = jnp.arange(samples)
+    return fib_sphere(points)
 
 
 def get_rotation_proposals(sample, stepsize):
