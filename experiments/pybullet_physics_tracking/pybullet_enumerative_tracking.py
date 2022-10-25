@@ -7,9 +7,9 @@ from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.likelihood import neural_descriptor_likelihood
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
-    quaternion_to_rotation_matrix,
     depth_to_coords_in_camera
 )
+from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
 from jax3dp3.distributions import gaussian_vmf
 from jax3dp3.shape import get_cube_shape
 import time

@@ -7,3 +7,5 @@ Pillow
 opencv-python
 tensorflow-probability
 pybullet
+open3d
+

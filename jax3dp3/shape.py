@@ -1,40 +1,40 @@
 import jax.numpy as jnp
 
-def get_rectangular_prism_shape(s_x,s_y,s_z):
+def get_rectangular_prism_shape(dimensions):
     cube_plane_poses = jnp.array(
         [
             [
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, s_z],
+                [0.0, 0.0, 1.0, dimensions[2]],
                 [0.0, 0.0, 0.0, 1.0],
             ],
             [
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, -s_z],
+                [0.0, 0.0, 1.0, -dimensions[2]],
                 [0.0, 0.0, 0.0, 1.0],
             ],
             [
                 [1.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, -1.0, s_y],
+                [0.0, 0.0, -1.0, dimensions[1]],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
             [
                 [1.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, -1.0, -s_y],
+                [0.0, 0.0, -1.0, -dimensions[1]],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
             [
-                [0.0, 0.0, 1.0, s_x],
+                [0.0, 0.0, 1.0, dimensions[0]],
                 [0.0, 1.0, 0.0, 0.0],
                 [-1.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
             [
-                [0.0, 0.0, 1.0, -s_x],
+                [0.0, 0.0, 1.0, -dimensions[0]],
                 [0.0, 1.0, 0.0, 0.0],
                 [-1.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
@@ -43,7 +43,7 @@ def get_rectangular_prism_shape(s_x,s_y,s_z):
     )
 
     plane_dimensions = jnp.array(
-        [[s_x, s_y], [s_x, s_y], [s_x, s_z], [s_x, s_z], [s_z, s_y], [s_z, s_y]]
+        [[dimensions[0], dimensions[1]], [dimensions[0], dimensions[1]], [dimensions[0], dimensions[2]], [dimensions[0], dimensions[2]], [dimensions[2], dimensions[1]], [dimensions[2], dimensions[1]]]
     )
     return cube_plane_poses, plane_dimensions
 
