@@ -128,16 +128,12 @@ def run_inference(initial_pose, ground_truth_images):
 run_inference_jit = jax.jit(run_inference)
 _,x = run_inference_jit(first_pose, ground_truth_images)
 
-from IPython import embed; embed()
-
 
 start = time.time()
 _,x = run_inference_jit(first_pose, ground_truth_images)
 end = time.time()
 print ("Time elapsed:", end - start)
 print ("FPS:", ground_truth_images.shape[0] / (end - start))
-
-
 
 
 max_depth = 30.0
