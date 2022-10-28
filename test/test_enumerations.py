@@ -1,4 +1,3 @@
-
 import sys
 import os
 sys.path.append('.')
@@ -11,6 +10,7 @@ from jax3dp3.rendering import render_planes
 from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.enumerations import get_rotation_proposals
 from jax3dp3.shape import get_cube_shape, get_corner_shape
+from jax3dp3.viz.img import save_depth_image
 import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
@@ -28,10 +28,10 @@ OBJ_DEFAULT_POSE = TEMPLATE_DEFAULT_POSE = jnp.array([
 ) 
 
 h, w, fx_fy, cx_cy = (
-    300,
-    300,
-    jnp.array([200.0, 200.0]),
-    jnp.array([150.0, 150.0]),
+    100,
+    100,
+    jnp.array([50.0, 50.0]),
+    jnp.array([50.0, 50.0]),
 )
 
 r = 0.1
@@ -97,7 +97,11 @@ test_gt_images = []
 test_frame_idx = 10
 
 observed = gt_images[test_frame_idx, :, :, :]
-test_gt_images.append(observed); test_gt_images = jnp.stack(test_gt_images)
+
+save_depth_image(observed[:,:,2], 5.0, "gt_img.png")
+
+test_gt_images.append(observed)
+test_gt_images = jnp.stack(test_gt_images)
 observed_viz = grayscale(observed)
 observed_depth = observed[:, :, 2]
 # Initiate ORB detector
@@ -107,12 +111,14 @@ kp, des = orb.detectAndCompute(observed_viz,None)
 observed_depth_kp = cv2.drawKeypoints(observed_viz[:, :, 2], kp, None, color=(0,255,0), flags=0)  # just for viz
 # plt.imshow(observed_depth_kp), plt.show()
 
+if len(kp) == 0:
+    gx, gy, gz = -1.0, -1.0, 2.0
+else:
+    sample_keypoint = kp[0].pt  # take a sample keypoint to location match
+    t_col, t_row = sample_keypoint
+    t_col, t_row = int(t_col), int(t_row); print(t_col, t_row)
+    gx, gy, gz = observed[t_row, t_col, :3]
 
-sample_keypoint = kp[4].pt  # take a sample keypoint to location match
-t_col, t_row = sample_keypoint
-t_col, t_row = int(t_col), int(t_row); print(t_col, t_row)
-
-gx, gy, gz = observed[t_row, t_col, :3]
 translation_proposal = jnp.array([
     [0.0, 0.0, 0.0, gx],   
     [0.0, 0.0, 0.0, gy],   
@@ -120,15 +126,15 @@ translation_proposal = jnp.array([
     [0.0, 0.0, 0.0, 0.0],   
     ]
 )  # instead of jointly inferring over translation/rotation, we will fix the object location to [gx,gy,gz]
-
+print("translation proposal=", translation_proposal)
 
 
 ### Enumerative inference over rotation proposals
-rotation_proposals = get_rotation_proposals(300, 0.25)
-print("rotation proposals:", rotation_proposals.shape)
+rotation_proposals = get_rotation_proposals(100, 0.25)
+print("enumerating over ", rotation_proposals.shape[0], " rotations")
 
 
-NUM_BATCHES = rotation_proposals.shape[0] // 300   # anything greater than 300 leads to memory allocation err 
+NUM_BATCHES = rotation_proposals.shape[0] // 100   # anything greater than 300 leads to memory allocation err 
 rotation_proposals_batches = jnp.array(jnp.split(rotation_proposals, NUM_BATCHES))
 
 def inference_frame(gt_image):  # scan over batches of rotation proposals for single image
@@ -139,29 +145,34 @@ def inference_frame(gt_image):  # scan over batches of rotation proposals for si
         x, x_weight = proposals[jnp.argmax(weights_new)], jnp.max(weights_new)
 
         # prev_x, prev_weight = carry
-        new_x, new_weight = jax.lax.cond(carry[-1] > x_weight, lambda: carry, lambda: (x, x_weight))
+        new_x, new_weight = jax.lax.cond(carry[-1] > jnp.max(weights_new), lambda: carry, lambda: (x, x_weight))
 
         return (new_x, new_weight), None  # return highest weight pose proposal encountered so far
     best_prop, _ = jax.lax.scan(enum_infer_batch_scan, (jnp.empty((4,4)), jnp.NINF), rotation_proposals_batches)
-    return best_prop[0]
+    return best_prop
 
 inference_frames = jax.vmap(inference_frame, in_axes=(0)) # vmap over images
 inference_frames_jit = jax.jit(inference_frames)
 
 
-
 ### Visualize max likelihood proposal
 _ = inference_frames_jit(jnp.empty(test_gt_images.shape))  # a (num_images x 4 x 4) arr of best pose estim for each image frame
 start = time.time()
-all_best_poses = inference_frames_jit(test_gt_images)  # time
+all_best_poses, _ = inference_frames_jit(test_gt_images)  # time
 end = time.time()
 elapsed = end - start
 print("Time elapsed:", elapsed)
 print("FPS:", len(test_gt_images) / elapsed)
 print("best poses:", all_best_poses)
 
-predicted_location = render_planes_jit(all_best_poses[0])
-plt.imshow(grayscale(predicted_location[:, :, 2])); plt.show()  # visualize shape
-
+# predicted_location = render_planes_jit(all_best_poses[0])
+# plt.imshow(grayscale(predicted_location[:, :, 2])); plt.show()  # visualize shape
+best_image = render_planes_jit(all_best_poses[0])
+save_depth_image(best_image[:,:,2], 5.0, "img.png")
 
 ### TODO: once pose inference tuned reasonably, add a final correction step based on icp...
+
+
+
+
+from IPython import embed; embed()
