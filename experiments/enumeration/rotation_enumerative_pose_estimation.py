@@ -59,8 +59,8 @@ save_depth_image(gt_image[:,:,2], 5.0, "gt_img.png")
 
 
 
-num_sphere_gridpoints = 75
-num_planar_angle_gridpoints = 36
+num_sphere_gridpoints = 100
+num_planar_angle_gridpoints = 24
 unit_sphere_directions = fibonacci_sphere(num_sphere_gridpoints)
 planar_rotations = jnp.linspace(0, 2*jnp.pi, num_planar_angle_gridpoints+1)[:-1]
 geodesicHopf_select_axis_vmap = jax.vmap(jax.vmap(geodesicHopf_select_axis, in_axes=(0,None)), in_axes=(None,0))
@@ -84,10 +84,11 @@ def find_best_pose(initial_pose, gt_image):
 find_best_pose_jit = jax.jit(find_best_pose)
 
 
-NUM_BATCHES = rotation_enumerations.shape[0] // 300   # anything greater than 300 likely leads to memory allocation err 
-rotation_enumerations_batches = jnp.array(jnp.split(rotation_enumerations, NUM_BATCHES))
+NUM_BATCHES = rotation_enumerations.shape[0] // 300   # anything greater than 300 likely leads to memory allocation err
+assert rotation_enumerations.shape[0] % NUM_BATCHES == 0  # needs to be even split; see num_sphere_gridpoints, num_planar_angle_gridpoints
 print(f"{NUM_BATCHES} batches")
-def find_best_pose_over_batches(initial_pose, gt_image): # scan over batches of rotation proposals for single image
+def find_best_pose_over_batches(initial_pose, gt_image, num_batches): # scan over batches of rotation proposals for single image
+    rotation_enumerations_batches = jnp.array(jnp.split(rotation_enumerations, NUM_BATCHES))
     def find_best_pose_in_batch(carry, rotation_enumerations_batch):
         # score over the selected rotation proposals
         proposals = jnp.einsum("ij,ajk->aik", initial_pose, rotation_enumerations_batch)  
@@ -102,9 +103,9 @@ def find_best_pose_over_batches(initial_pose, gt_image): # scan over batches of 
 find_best_pose_over_batches_jit = jax.jit(find_best_pose_over_batches)
 
 
-_ = find_best_pose_over_batches_jit(original_translation,gt_image)  # 1st compile
+_ = find_best_pose_over_batches_jit(original_translation,gt_image, NUM_BATCHES)  # 1st compile
 start = time.time()
-best_pose = find_best_pose_over_batches_jit(original_translation,gt_image)
+best_pose = find_best_pose_over_batches_jit(original_translation,gt_image, NUM_BATCHES)
 end = time.time()
 print ("Time elapsed:", end - start)
 best_image = render_from_pose(best_pose, shape)
