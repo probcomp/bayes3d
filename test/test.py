@@ -63,10 +63,10 @@ print((gt_images[0,:,:,-1] > 0 ).sum())
 
 key = jax.random.PRNGKey(3)
 scorer = make_scoring_function(shape, h, w, fx_fy, cx_cy ,r, outlier_prob)
-score = scorer(key, gt_poses[0,:,:], gt_images[0,:,:,:])
+score = scorer(gt_poses[0,:,:], gt_images[0,:,:,:])
 print("score", score)
 
-scorer_parallel = jax.vmap(scorer, in_axes = (0, 0, None))
+scorer_parallel = jax.vmap(scorer, in_axes = (0, None))
 
 f_jit = jax.jit(jax.vmap(lambda t:     jnp.vstack(
         [jnp.hstack([jnp.eye(3), t.reshape(3,-1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
@@ -96,11 +96,11 @@ sub_keys_orientation = jnp.array(sub_keys)
 def _inner(x, gt_image):
     for _ in range(1):
         proposals = jnp.einsum("ij,ajk->aik", x, pose_deltas)
-        weights_new = scorer_parallel(sub_keys_translation, proposals, gt_image)
+        weights_new = scorer_parallel(proposals, gt_image)
         x = proposals[jnp.argmax(weights_new)]
 
         proposals = jnp.einsum("ij,ajk->aik", x, rotation_deltas)
-        weights_new = scorer_parallel(sub_keys_orientation, proposals, gt_image)
+        weights_new = scorer_parallel(proposals, gt_image)
         x = proposals[jnp.argmax(weights_new)]
 
     return x, x
