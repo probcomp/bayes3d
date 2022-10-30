@@ -17,20 +17,38 @@ backward = jax.jit(quaternion_to_rotation_matrix)
 backward(forward(random_rot))
 
 var = 0.1
-conc = 100.0
+concentration = 100.0
 
 key = jax.random.PRNGKey(3)
 key2 = jax.random.PRNGKey(4)
-a = gaussian_vmf(key, var, conc)
-b = gaussian_vmf(key2, var, conc)
+a = gaussian_vmf(key, var, concentration)
+b = gaussian_vmf(key2, var, concentration)
 
-gaussian_vmf_logpdf(a,b,var,conc)
+gaussian_vmf_logpdf(a,b,var,concentration)
 
 f = jax.jit(gaussian_vmf_logpdf)
-f(a,b,var,conc)
+f(a,b,var,concentration)
 
-for conc in jnp.linspace(10.0, 1000.0, 10):
-    print('conc:');print(conc)
-    print('f(a,b,var,conc):');print(f(a,a,var,conc))
+for concentration in jnp.linspace(10.0, 1000.0, 10):
+    print('concentration:');print(concentration)
+    print('f(a,b,var,concentration):');print(f(a,a,var,concentration))
+
+
+
+
+
+num_mixture_components = 5
+log_weights = jnp.log(jnp.ones(5) / num_mixture_components)
+pose_means = jnp.stack([a for _ in range(5)])
+
+p = gaussian_vmf_mixture_sample(key, pose_means, log_weights, var, concentration)
+gaussian_vmf_mixture_logpdf(key, p, pose_means, log_weights, var, concentration)
+
+f = jax.jit(gaussian_vmf_mixture_sample)
+f(key, pose_means, log_weights, var, concentration)
+
+f = jax.jit(gaussian_vmf_mixture_logpdf)
+f(key, p, pose_means, log_weights, var, concentration)
+
 
 from IPython import embed; embed()
