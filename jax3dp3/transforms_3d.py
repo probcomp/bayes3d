@@ -82,3 +82,76 @@ def quaternion_to_rotation_matrix(Q):
                            [r20, r21, r22]])
                             
     return rot_matrix
+
+def rotation_matrix_to_quaternion(matrix):
+
+    def case0(m):
+        t = 1 + m[0, 0] - m[1, 1] - m[2, 2]
+        q = jnp.array(
+            [
+                m[2, 1] - m[1, 2],
+                t,
+                m[1, 0] + m[0, 1],
+                m[0, 2] + m[2, 0],
+            ]
+        )
+        return t, q
+
+    def case1(m):
+        t = 1 - m[0, 0] + m[1, 1] - m[2, 2]
+        q = jnp.array(
+            [
+                m[0, 2] - m[2, 0],
+                m[1, 0] + m[0, 1],
+                t,
+                m[2, 1] + m[1, 2],
+            ]
+        )
+        return t, q
+
+    def case2(m):
+        t = 1 - m[0, 0] - m[1, 1] + m[2, 2]
+        q = jnp.array(
+            [
+                m[1, 0] - m[0, 1],
+                m[0, 2] + m[2, 0],
+                m[2, 1] + m[1, 2],
+                t,
+            ]
+        )
+        return t, q
+
+    def case3(m):
+        t = 1 + m[0, 0] + m[1, 1] + m[2, 2]
+        q = jnp.array(
+            [
+                t,
+                m[2, 1] - m[1, 2],
+                m[0, 2] - m[2, 0],
+                m[1, 0] - m[0, 1],
+            ]
+        )
+        return t, q
+
+    # Compute four cases, then pick the most precise one.
+    # Probably worth revisiting this!
+    case0_t, case0_q = case0(matrix)
+    case1_t, case1_q = case1(matrix)
+    case2_t, case2_q = case2(matrix)
+    case3_t, case3_q = case3(matrix)
+
+    cond0 = matrix[2, 2] < 0
+    cond1 = matrix[0, 0] > matrix[1, 1]
+    cond2 = matrix[0, 0] < -matrix[1, 1]
+
+    t = jnp.where(
+        cond0,
+        jnp.where(cond1, case0_t, case1_t),
+        jnp.where(cond2, case2_t, case3_t),
+    )
+    q = jnp.where(
+        cond0,
+        jnp.where(cond1, case0_q, case1_q),
+        jnp.where(cond2, case2_q, case3_q),
+    )
+    return q * 0.5 / jnp.sqrt(t)
