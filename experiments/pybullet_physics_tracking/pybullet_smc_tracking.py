@@ -1,7 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-from jax3dp3.model import make_scoring_function
 from jax3dp3.rendering import render_planes
 from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.likelihood import neural_descriptor_likelihood

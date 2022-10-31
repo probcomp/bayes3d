@@ -1,7 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-from jax3dp3.model import make_scoring_function
 from jax3dp3.rendering import render_planes
 from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.likelihood import neural_descriptor_likelihood
@@ -89,7 +88,7 @@ print("grid ", pose_deltas.shape)
 key, *sub_keys = jax.random.split(key, pose_deltas.shape[0] + 1)
 sub_keys_translation = jnp.array(sub_keys)
 
-key, *sub_keys = jax.random.split(key, 300)
+key, *sub_keys = jax.random.split(key, 100)
 sub_keys = jnp.array(sub_keys)
 def f(key):
     v = VonMisesFisher(
