@@ -5,7 +5,7 @@ from jax3dp3.model import make_scoring_function
 from jax3dp3.rendering import render_planes
 from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.viz.img import save_depth_image
-from jax3dp3.likelihood import neural_descriptor_likelihood
+from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
     quaternion_to_rotation_matrix,

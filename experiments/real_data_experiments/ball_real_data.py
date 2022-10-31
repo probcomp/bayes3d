@@ -4,7 +4,7 @@ import jax
 from jax3dp3.model import make_scoring_function
 from jax3dp3.rendering import render_planes, render_sphere
 from jax3dp3.distributions import VonMisesFisher
-from jax3dp3.likelihood import neural_descriptor_likelihood
+from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.rendering import render_planes
 from jax3dp3.viz.gif import make_gif
 from jax3dp3.utils import (
@@ -80,7 +80,7 @@ radius = 0.06
 key = jax.random.PRNGKey(3)
 def scorer(key, pose, gt_image):
     rendered_image = render_sphere(pose, radius, h, w, fx_fy, cx_cy)
-    weight = neural_descriptor_likelihood(gt_image, rendered_image, r, outlier_prob)
+    weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
     return weight
 
 

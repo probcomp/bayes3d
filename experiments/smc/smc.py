@@ -5,7 +5,7 @@ from jax3dp3.model import make_scoring_function
 from jax3dp3.rendering import render_planes
 from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.viz.gif import make_gif
-from jax3dp3.likelihood import neural_descriptor_likelihood
+from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
     quaternion_to_rotation_matrix,
@@ -48,7 +48,7 @@ make_gif(ground_truth_images, 5.0, "aismc_data.gif")
 
 def likelihood(x, obs):
     rendered_image = render_from_x(x)
-    weight = neural_descriptor_likelihood(obs, rendered_image, r, outlier_prob)
+    weight = threedp3_likelihood(obs, rendered_image, r, outlier_prob)
     return weight
 likelihood_parallel = jax.vmap(likelihood, in_axes = (0, None))
 likelihood_parallel_jit = jax.jit(likelihood_parallel)

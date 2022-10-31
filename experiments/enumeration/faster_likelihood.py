@@ -7,9 +7,9 @@ import jax.numpy as jnp
 import jax
 from jax3dp3.model import make_scoring_function
 from jax3dp3.rendering import render_planes
-from jax3dp3.distributions import VonMisesFisher
+from jax3dp3.distributions import gaussian_vmf
 from jax3dp3.viz.gif import make_gif 
-from jax3dp3.likelihood import neural_descriptor_likelihood, counts_per_pixel, neural_descriptor_likelihood_alternate, counts_per_pixel_alternate
+from jax3dp3.likelihood import threedp3_likelihood, threedp3_likelihood_alternate
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
     depth_to_coords_in_camera
@@ -44,11 +44,12 @@ render_from_pose_jit = jax.jit(render_from_pose)
 render_from_pose_parallel = jax.vmap(render_from_pose, in_axes=(0,None))
 render_from_pose_parallel_jit = jax.jit(render_from_pose_parallel)
 
-gt_pose = jnp.array([
-    [1.0, 0.0, 0.0, -0.0],   
-    [0.0, 1.0, 0.0, -0.0],   
-    [0.0, 0.0, 1.0, 2.0],   
-    [0.0, 0.0, 0.0, 1.0],   
+gt_pose = jnp.array(
+    [
+        [1.0, 0.0, 0.0, -0.0],   
+        [0.0, 1.0, 0.0, -0.0],   
+        [0.0, 0.0, 1.0, 2.0],   
+        [0.0, 0.0, 0.0, 1.0],   
     ]
 )
 rot = R.from_euler('zyx', [0.1, -0.3, -0.6], degrees=False).as_matrix()
@@ -65,12 +66,56 @@ rendered_pose = jnp.array([
 )
 rendered_image = render_from_pose(rendered_pose, shape)
 
-
 obs_xyz = gt_image
 rendered_xyz = rendered_image
 
-print(neural_descriptor_likelihood(obs_xyz, rendered_xyz, r, outlier_prob))
-print(neural_descriptor_likelihood_alternate(obs_xyz, rendered_xyz, r, outlier_prob))
+obs_mask = obs_xyz[:,:,2] > 0.0
+rendered_mask = rendered_xyz[:,:,2] > 0.0
 
+def scorer(pose, gt_image):
+    rendered_image = render_from_pose(pose, shape)
+    weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
+    return weight
+
+def scorer_alternate(pose, gt_image):
+    rendered_image = render_from_pose(pose, shape)
+    weight = threedp3_likelihood_alternate(gt_image, rendered_image, r, outlier_prob)
+    return weight
+
+print(threedp3_likelihood_alternate(obs_xyz, rendered_xyz, r, outlier_prob))
+
+f = jax.jit(threedp3_likelihood_alternate)
+f(obs_xyz, rendered_xyz, r, outlier_prob)
+
+print(threedp3_likelihood(obs_xyz, rendered_xyz, r, outlier_prob))
+
+
+def scorer(pose, gt_image):
+    rendered_image = render_from_pose(pose, shape)
+    weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
+    return weight
+scorer_parallel = jax.jit(jax.vmap(scorer, in_axes = (0, None)))
+
+def scorer_alternate(pose, gt_image):
+    rendered_image = render_from_pose(pose, shape)
+    weight = threedp3_likelihood_alternate(gt_image, rendered_image, r, outlier_prob)
+    return weight
+scorer_parallel_alternate = jax.jit(jax.vmap(scorer_alternate, in_axes = (0, None)))
 
 from IPython import embed; embed()
+
+N = 6000
+all_poses = jnp.stack([rendered_pose for _ in range(N)])
+
+scores = scorer_parallel(all_poses, gt_image)
+scores = scorer_parallel_alternate(all_poses, gt_image)
+
+start = time.time()
+scores = scorer_parallel(all_poses, gt_image)
+end = time.time()
+print ("Time elapsed:", end - start)
+
+start = time.time()
+scores = scorer_parallel_alternate(all_poses, gt_image)
+end = time.time()
+print ("Time elapsed:", end - start)

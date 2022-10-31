@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import jax
 from jax3dp3.rendering import render_planes
 from jax3dp3.distributions import VonMisesFisher
-from jax3dp3.likelihood import neural_descriptor_likelihood
+from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
     depth_to_coords_in_camera
@@ -75,7 +75,7 @@ render_planes_parallel_jit = jax.jit(jax.vmap(lambda x: render_from_pose(x)))
 key = jax.random.PRNGKey(3)
 def scorer(key, pose, gt_image):
     rendered_image = render_from_pose(pose)
-    weight = neural_descriptor_likelihood(gt_image, rendered_image, r, outlier_prob)
+    weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
     return weight
 scorer_parallel = jax.vmap(scorer, in_axes = (0, 0, None))
 
