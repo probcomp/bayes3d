@@ -85,12 +85,27 @@ best_pose = find_best_pose_jit(original_translation,gt_image)
 end = time.time()
 print ("Time elapsed:", end - start)
 
+
+start = time.time()
+best_pose = find_best_pose_jit(original_translation,gt_image)
+end = time.time()
+print ("Time elapsed:", end - start)
+
+
+start = time.time()
+best_pose = find_best_pose_jit(original_translation,gt_image)
+end = time.time()
+print ("Time elapsed:", end - start)
+
+
+start = time.time()
+best_pose = find_best_pose_jit(original_translation,gt_image)
+end = time.time()
+print ("Time elapsed:", end - start)
+
 best_image = render_from_pose(best_pose, shape)
 save_depth_image(best_image[:,:,2], 5.0, "img.png")
 print('gt_pose:');print(gt_pose)
 print('best_pose:');print(best_pose)
-
-
-
 
 from IPython import embed; embed()

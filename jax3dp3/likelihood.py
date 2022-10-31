@@ -71,7 +71,7 @@ def threedp3_likelihood(
     obs_mask = obs_xyz[:,:,2] > 0.0
     rendered_mask = rendered_xyz[:,:,2] > 0.0
     rendered_xyz_padded = jax.lax.pad(rendered_xyz,  0.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
-    jj, ii = jnp.meshgrid(jnp.arange(obs_xyz.shape[0]), jnp.arange(obs_xyz.shape[1]))
+    jj, ii = jnp.meshgrid(jnp.arange(obs_xyz.shape[1]), jnp.arange(obs_xyz.shape[0]))
     indices = jnp.stack([ii,jj],axis=-1)
     counts = count_ii_jj(indices, obs_xyz, rendered_xyz_padded, r, filter_size)
     num_latent_points = rendered_mask.sum()

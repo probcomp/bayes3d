@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import cv2
 
 h, w, fx_fy, cx_cy = (
-    100,
+    200,
     100,
     jnp.array([50.0, 50.0]),
     jnp.array([50.0, 50.0]),
@@ -82,6 +82,7 @@ def scorer_alternate(pose, gt_image):
     weight = threedp3_likelihood_alternate(gt_image, rendered_image, r, outlier_prob)
     return weight
 
+
 print(threedp3_likelihood_alternate(obs_xyz, rendered_xyz, r, outlier_prob))
 
 f = jax.jit(threedp3_likelihood_alternate)
@@ -102,20 +103,22 @@ def scorer_alternate(pose, gt_image):
     return weight
 scorer_parallel_alternate = jax.jit(jax.vmap(scorer_alternate, in_axes = (0, None)))
 
-from IPython import embed; embed()
 
-N = 6000
+N = 7000
 all_poses = jnp.stack([rendered_pose for _ in range(N)])
 
 scores = scorer_parallel(all_poses, gt_image)
-scores = scorer_parallel_alternate(all_poses, gt_image)
 
 start = time.time()
 scores = scorer_parallel(all_poses, gt_image)
+print(scores.shape)
 end = time.time()
 print ("Time elapsed:", end - start)
 
-start = time.time()
-scores = scorer_parallel_alternate(all_poses, gt_image)
-end = time.time()
-print ("Time elapsed:", end - start)
+
+# scores = scorer_parallel_alternate(all_poses, gt_image)
+
+# start = time.time()
+# scores = scorer_parallel_alternate(all_poses, gt_image)
+# end = time.time()
+# print ("Time elapsed:", end - start)
