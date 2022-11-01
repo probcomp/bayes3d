@@ -2,13 +2,12 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 from jax3dp3.rendering import render_planes
-from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
-    quaternion_to_rotation_matrix,
     depth_to_coords_in_camera
 )
+from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
 from jax3dp3.distributions import gaussian_vmf
 from jax3dp3.shape import get_cube_shape
 import time
