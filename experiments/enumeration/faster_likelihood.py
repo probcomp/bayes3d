@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import cv2
 
 h, w, fx_fy, cx_cy = (
-    200,
+    101,
     100,
     jnp.array([50.0, 50.0]),
     jnp.array([50.0, 50.0]),
@@ -76,25 +76,6 @@ def scorer(pose, gt_image):
     rendered_image = render_from_pose(pose, shape)
     weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
     return weight
-
-def scorer_alternate(pose, gt_image):
-    rendered_image = render_from_pose(pose, shape)
-    weight = threedp3_likelihood_alternate(gt_image, rendered_image, r, outlier_prob)
-    return weight
-
-
-print(threedp3_likelihood_alternate(obs_xyz, rendered_xyz, r, outlier_prob))
-
-f = jax.jit(threedp3_likelihood_alternate)
-f(obs_xyz, rendered_xyz, r, outlier_prob)
-
-print(threedp3_likelihood(obs_xyz, rendered_xyz, r, outlier_prob))
-
-
-def scorer(pose, gt_image):
-    rendered_image = render_from_pose(pose, shape)
-    weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
-    return weight
 scorer_parallel = jax.jit(jax.vmap(scorer, in_axes = (0, None)))
 
 def scorer_alternate(pose, gt_image):
@@ -103,8 +84,7 @@ def scorer_alternate(pose, gt_image):
     return weight
 scorer_parallel_alternate = jax.jit(jax.vmap(scorer_alternate, in_axes = (0, None)))
 
-
-N = 7000
+N = 20000
 all_poses = jnp.stack([rendered_pose for _ in range(N)])
 
 scores = scorer_parallel(all_poses, gt_image)
