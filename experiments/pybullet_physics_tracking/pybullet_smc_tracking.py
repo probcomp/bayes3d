@@ -2,13 +2,12 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 from jax3dp3.rendering import render_planes
-from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
-    quaternion_to_rotation_matrix,
     depth_to_coords_in_camera
 )
+from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
 from jax3dp3.distributions import gaussian_vmf
 from jax3dp3.shape import get_cube_shape
 import time
@@ -53,8 +52,8 @@ cx_cy = jnp.array([cx,cy])
 ground_truth_images = jnp.array(ground_truth_images)
 
 
-r = 0.1
-outlier_prob = 0.1
+r = 0.05
+outlier_prob = 0.05
 first_pose = jnp.array(
     [
         [1.0, 0.0, 0.0, -5.00],
@@ -81,12 +80,12 @@ likelihood_parallel_jit = jax.jit(likelihood_parallel)
 categorical_vmap = jax.vmap(jax.random.categorical, in_axes=(None, 0))
 logsumexp_vmap = jax.vmap(logsumexp)
 
-DRIFT_VAR = 0.2
+DRIFT_VAR = 0.3
 
 def run_inference(initial_particles, ground_truth_images):
     def particle_filtering_step(data, gt_image):
         particles, weights, keys = data
-        drift_poses = jax.vmap(gaussian_vmf, in_axes=(0, None, None))(keys, DRIFT_VAR, 100.0)
+        drift_poses = jax.vmap(gaussian_vmf, in_axes=(0, None, None))(keys, DRIFT_VAR, 10.0)
         particles = jnp.einsum("...ij,...jk->...ik", particles, drift_poses)
         weights = weights + likelihood_parallel(particles, gt_image)
         parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
