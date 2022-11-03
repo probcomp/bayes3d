@@ -1,7 +1,6 @@
 import jax.numpy as jnp
 from jax3dp3.utils import extract_2d_patches
-from jax3dp3.utils import (
-    quaternion_to_rotation_matrix,
+from jax3dp3.transforms_3d import (
     transform_from_rot_and_pos
 )
 import jax
@@ -55,7 +54,7 @@ def find_least_squares_transform_between_clouds(c1, c2, mask):
     transform =  transform_from_rot_and_pos(rot_final, T)
     return transform
 
-def icp(init_pose, render_func, obs_img, outer_iterations, inner_iterations):
+def icp(render_func, init_pose, obs_img, outer_iterations, inner_iterations):
     def _icp_step(j, pose_):
         rendered_img = render_func(pose_)
         def _icp_step_inner(i, pose):

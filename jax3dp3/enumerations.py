@@ -44,8 +44,9 @@ def fibonacci_sphere(samples):
     return fib_sphere(points)
 
 
-def get_rotation_proposals(sample, stepsize):
+def get_rotation_proposals(sample, rot_sample):
     unit_sphere_directions = fibonacci_sphere(sample)
     geodesicHopf_select_axis_vmap = jax.vmap(jax.vmap(geodesicHopf_select_axis, in_axes=(0,None)), in_axes=(None,0))
+    stepsize = 2*jnp.pi / rot_sample
     rotation_proposals = geodesicHopf_select_axis_vmap(unit_sphere_directions, jnp.arange(0, 2*jnp.pi, stepsize)).reshape(-1, 4, 4)
     return rotation_proposals
