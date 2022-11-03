@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from jax3dp3.viz.img import save_depth_image
 from jax3dp3.utils import depth_to_coords_in_camera
-
+from jax3dp3.transforms_3d import transform_from_pos
 from jax3dp3.shape import (
     get_rectangular_prism_shape,
     get_cube_shape,
@@ -13,6 +13,9 @@ from jax3dp3.shape import (
 
 import jax.numpy as jnp
 
+import jax
+from scipy.spatial.transform import Rotation as R
+from jax3dp3.rendering import render_planes
 
 # Initialize metadata
 
@@ -46,6 +49,9 @@ for i in range(num_frames):
     
 rgb_images_pil[0].save("rgb.png")
 save_depth_image(depth_images[0], 30.0, "depth.png")
+
+
+
 
 
 # Get masked objects based on the depth images
@@ -84,6 +90,47 @@ _, labels, centers = cv2.kmeans(coord_image_flat, k, None, criteria, 10, cv2.KME
 
 _a = labels.reshape(300, 300)
 _img = np.stack((_a, _a, _a), axis=-1)
+
+
+save_depth_image(_a, 5.0, "seg_map.png")
+obj_id = 1
+obj_mask = (_a == obj_id)
+
+masked_coord_image = coord_image * obj_mask[:,:,None]
+
+
+save_depth_image(masked_coord_image[:,:,2], 5.0, "seg_map_single_entity.png")
+
+object_points = masked_coord_image[obj_mask]
+maxs = np.max(object_points,axis=0)
+mins = np.min(object_points,axis=0)
+dims = (maxs - mins)/2
+center_of_box = (maxs+mins)/2
+
+initial_inferred_pose = transform_from_pos(center_of_box)
+
+cup_shape = get_rectangular_prism_shape(dims)
+
+render_planes_jit = jax.jit(lambda p: render_planes(p, cup_shape, height, width, fx_fy,cx_cy))
+
+reconstruction_image = render_planes_jit(initial_inferred_pose)
+
+save_depth_image(reconstruction_image[:,:,2], 5.0, "reconstruction_image.png")
+
+
+
+from IPython import embed; embed()
+
+
+
+
+
+
+
+
+
+
+from IPython import embed; embed()
 
 for i in range(k):
     _img[_a == i] = np.array([250, 250, 250])
