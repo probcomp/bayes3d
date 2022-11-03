@@ -96,8 +96,6 @@ def get_cube_shape(side_length):
     )
     return cube_plane_poses, plane_dimensions
 
-
-
 def get_corner_shape(side_length, idx=[1,3,5]):
     half_width = side_length / 2.0
     cube_plane_poses = jnp.array(
@@ -145,3 +143,4 @@ def get_corner_shape(side_length, idx=[1,3,5]):
         [[half_width, half_width], [half_width, half_width], [half_width, half_width]]
     )
     return cube_plane_poses, plane_dimensions
+
