@@ -34,7 +34,7 @@ cx_cy = jnp.array([cx, cy])
 
 # Load and pre-process rgb and depth images
 
-rgb_images, depth_images = [], []
+rgb_images, depth_images, seg_maps = [], [], [] 
 rgb_images_pil = []
 for i in range(num_frames):
     rgb_path = os.path.join(data_path, f"frames/frame_{i}.jpeg")
@@ -45,8 +45,10 @@ for i in range(num_frames):
     depth_path = os.path.join(data_path, f"depths/frame_{i}.npy")
     depth_npy = np.load(depth_path)
     depth_images.append(depth_npy)
-    
-    
+
+    seg_map = np.load(os.path.join(data_path, f"segmented/frame_{i}.npy"))
+    seg_maps.append(seg_map)
+
 rgb_images_pil[0].save("rgb.png")
 save_depth_image(depth_images[0], 30.0, "depth.png")
 
@@ -65,6 +67,7 @@ K = jnp.array([
     [0.0, 0.0, 1.0],
 ])
 coord_image,_ = depth_to_coords_in_camera(depth_images[img_idx], K)
+segmentation_image = seg_maps[img_idx]
 print(coord_image.shape)
 # -.5 < x < 1
 # -.5 < y < .5
@@ -91,13 +94,18 @@ _, labels, centers = cv2.kmeans(coord_image_flat, k, None, criteria, 10, cv2.KME
 _a = labels.reshape(300, 300)
 _img = np.stack((_a, _a, _a), axis=-1)
 
+se
 
 save_depth_image(_a, 5.0, "seg_map.png")
 obj_id = 1
 obj_mask = (_a == obj_id)
 
 masked_coord_image = coord_image * obj_mask[:,:,None]
+masked_segmentation_image = segmentation_image * obj_mask[:,:,None]
 
+# masks_going_forward = [
+#     seg
+# ]
 
 save_depth_image(masked_coord_image[:,:,2], 5.0, "seg_map_single_entity.png")
 
