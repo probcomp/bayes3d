@@ -115,9 +115,8 @@ batch_split = lambda proposals, num_batches: jnp.array(jnp.split(proposals, num_
 
 
 
-inference_frame = partial(enumerative_inference_single_frame, scorer_parallel)
-inference_frame_jit = jax.jit(inference_frame)
-_ = inference_frame_jit(jnp.empty(observed.shape), jnp.empty((1,1,4,4))) 
+inference_frames = jax.vmap(enumerative_inference_single_frame, in_axes=(None, 0, None)) # vmap over images
+inference_frames_jit = jax.jit(partial(inference_frames, scorer_parallel))
 
 # -----------------------------------------------------------------------
 # start at center w/o rotation
@@ -149,7 +148,7 @@ for stage in range(C2F_ITERS):
     grid = make_centered_grid_enumeration_3d_points(search_r, search_r, search_r, tr_half_steps, tr_half_steps, tr_half_steps)
     translation_proposals = jnp.einsum("ij,ajk->aik", current_pose_center, f_jit(grid))
     rotation_proposals = get_rotation_proposals(fib_numsteps, rot_numsteps)  
-    
+
     print(f"Current pose center: {current_pose_center}")
     print(f"Search radius: {search_r} ; Stepsize:{search_r/tr_half_steps}; Num steps {tr_half_steps}")
     print("enumerating over ", rotation_proposals.shape[0], " rotations")
@@ -159,33 +158,33 @@ for stage in range(C2F_ITERS):
     rotation_proposals_batches = batch_split(rotation_proposals, NUM_ROTATE_BATCHES)
 
     elapsed = 0
-    _ = inference_frame_jit(observed, translation_proposals_batches)  # time
+    _ = inference_frames_jit(test_gt_images, translation_proposals_batches)  
     # 1) best translation
     start = time.time()
-    best_translation_proposal, _ = inference_frame_jit(observed, translation_proposals_batches)  # time
+    best_translation_proposal, _ = inference_frames_jit(test_gt_images, translation_proposals_batches)  
     end = time.time()
     elapsed += (end-start)
 
     # 2) best pose at translation
-    pose_proposals_batches = jnp.einsum('ij,abjk->abik', best_translation_proposal, rotation_proposals_batches)
+    pose_proposals_batches = jnp.einsum('ij,abjk->abik', best_translation_proposal[0], rotation_proposals_batches)
     start = time.time()
-    best_pose_proposal, _ = inference_frame_jit(observed, pose_proposals_batches)
+    best_pose_proposal, _ = inference_frames_jit(test_gt_images, pose_proposals_batches)
     end = time.time()
     elapsed += (end-start)
 
 
     print("Time elapsed:", elapsed)
     print("FPS:", len(test_gt_images) / elapsed)
-
-    best_image = render_planes_lambda(best_pose_proposal)
+    print("Best pose=", best_pose_proposal)
+    best_image = render_planes_lambda(best_pose_proposal[0])
     save_depth_image(best_image[:,:,2], 5.0, f"{stage}_joint_img.png")
 
 
     # narrow search space depending on best pose proposal
-    search_r /= tr_half_steps
-    tr_half_steps = max(2, int(tr_half_steps * 0.5))
+    search_r /= tr_half_steps  # new search space
+    tr_half_steps = max(2, int(tr_half_steps * 0.5)) # reduce number of steps in the smaller space
     fib_numsteps, rot_numsteps = fib_numsteps*2, rot_numsteps*2
-    current_pose_center = f(jnp.array([best_pose_proposal[:3, -1]]))[0]
+    current_pose_center = f(jnp.array([best_pose_proposal[0, :3, -1]]))[0]
 
 from IPython import embed; embed()
 
