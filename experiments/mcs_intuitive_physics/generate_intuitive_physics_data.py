@@ -2,6 +2,7 @@ import machine_common_sense as mcs
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
+from jax3dp3.viz.img import save_depth_image,save_rgb_image
 
 controller = mcs.create_controller(config_file_or_dict='./config.ini')
 scene_data = mcs.load_scene_json_file("scene.json")
@@ -51,7 +52,14 @@ for o in data:
     depth_images.append(np.array(o.depth_map_list[0]))
 depth_images = np.array(depth_images)
 
-np.savez("data.npz", rgb_images=rgb_images, depth_images=depth_images, fx=fx, fy=fy, cx=cx, cy=cy) 
+seg_images = []
+for o in data:
+    seg_images.append(np.array(o.object_mask_list[0]))
+seg_images = np.array(seg_images)
+
+np.savez("data.npz", rgb_images=rgb_images, depth_images=depth_images, seg_images=seg_images, fx=fx, fy=fy, cx=cx, cy=cy,
+         width=seg_images.shape[2], height=seg_images.shape[1]
+        ) 
 
 max_depth = 30.0
 middle_width = 20
@@ -95,4 +103,3 @@ images[0].save(
 )
 
 from IPython import embed; embed()
-
