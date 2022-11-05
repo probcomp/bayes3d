@@ -17,3 +17,20 @@ def get_depth_image(image, max_depth):
         np.rint(cm(np.array(image) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
     )
     return img
+def save_rgb_image(image, max_val, filename):
+    img = Image.fromarray(
+        np.rint(
+            image / max_val * 255.0
+        ).astype(np.int8),
+        mode="RGB",
+    )
+    img.save(filename)
+
+def save_rgba_image(image, max_val, filename):
+    img = Image.fromarray(
+        np.rint(
+            image / max_val * 255.0
+        ).astype(np.int8),
+        mode="RGBA",
+    )
+    img.save(filename)

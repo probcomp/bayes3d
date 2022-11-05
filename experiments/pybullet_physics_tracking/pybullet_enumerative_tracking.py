@@ -9,7 +9,7 @@ from jax3dp3.utils import (
 )
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
 from jax3dp3.distributions import gaussian_vmf
-from jax3dp3.shape import get_cube_shape
+from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
@@ -57,14 +57,14 @@ r = 0.1
 outlier_prob = 0.1
 first_pose = jnp.array(
     [
-        [1.0, 0.0, 0.0, -5.00],
+        [1.0, 0.0, 0.0, -3.00],
         [0.0, 1.0, 0.0, -4.00],
         [0.0, 0.0, 1.0, 20.0],
         [0.0, 0.0, 0.0, 1.0],
     ]
 )
 
-shape = get_cube_shape(2.0)
+shape = get_rectangular_prism_shape(jnp.array([1.25, 2.9, 4.5]))
 
 render_from_pose = lambda pose: render_planes(pose,shape,h,w,fx_fy,cx_cy)
 render_from_pose_jit = jax.jit(render_from_pose)
