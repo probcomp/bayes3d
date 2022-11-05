@@ -34,3 +34,22 @@ def save_rgba_image(image, max_val, filename):
         mode="RGBA",
     )
     img.save(filename)
+    
+
+def save_rgb_image(image, max_val, filename):
+    img = Image.fromarray(
+        np.rint(
+            image / max_val * 255.0
+        ).astype(np.int8),
+        mode="RGB",
+    )
+    img.save(filename)
+
+def save_rgba_image(image, max_val, filename):
+    img = Image.fromarray(
+        np.rint(
+            image / max_val * 255.0
+        ).astype(np.int8),
+        mode="RGBA",
+    )
+    img.save(filename)

@@ -118,7 +118,7 @@ translation_proposal = jnp.array([
     [0.0, 0.0, 1.0, gz],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
-)  # instead of jointly inferring over translation/rotation, we will fix the object location to [gx,gy,gz]
+)  
 print("translation proposal=", translation_proposal)
 
 
@@ -126,51 +126,66 @@ f_jit = jax.jit(jax.vmap(lambda t:
         jnp.vstack(
         [jnp.hstack([jnp.eye(3), t.reshape(3,-1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]  # careful on whether it should be [0,0,0,1] when not joint
         )))
-translation_proposals = jnp.einsum("ij,ajk->aik", translation_proposal, f_jit(make_centered_grid_enumeration_3d_points(cube_length/3, cube_length/3, cube_length/3, 3, 3, 3)))
+translation_proposals = jnp.einsum("ij,ajk->aik", translation_proposal, f_jit(make_centered_grid_enumeration_3d_points(cube_length/3, cube_length/3, cube_length/3, 4, 4, 4)))
 
 
 ### Enumerative inference over rotation proposals
-rotation_proposals = get_rotation_proposals(5, 1)
+rotation_proposals = get_rotation_proposals(75, 20)
 print("enumerating over ", rotation_proposals.shape[0], " rotations")
 print("enumerating over ", translation_proposals.shape[0], " translations")
 joint_proposals = jnp.einsum("aij,bjk->abik", translation_proposals, rotation_proposals).reshape(-1, 4, 4)
 print("joint proposals size= ", joint_proposals.shape)
 
 
-NUM_BATCHES = joint_proposals.shape[0] // 100   # anything greater than 300 leads to memory allocation err
-print("Batching over ", NUM_BATCHES, " batches")
-joint_proposals_batches = jnp.array(jnp.split(joint_proposals, NUM_BATCHES))
+NUM_BATCHES_T = max(2, translation_proposals.shape[0] // 100)   # anything greater than 300 leads to memory allocation err
+NUM_BATCHES_R = max(2, rotation_proposals.shape[0] // 100)   # anything greater than 300 leads to memory allocation err
+translation_proposals_batches = jnp.array(jnp.split(translation_proposals, NUM_BATCHES_T))
+rotation_proposals_batches = jnp.array(jnp.split(rotation_proposals, NUM_BATCHES_R))
+
 
 inference_frames = jax.vmap(enumerative_inference_single_frame, in_axes=(None, 0, None)) # vmap over images
 inference_frames_jit = jax.jit(partial(inference_frames, scorer_parallel))
 
 
+# compile
+inference_frames_jit(jnp.empty(test_gt_images.shape), jnp.empty(translation_proposals_batches.shape))  # a (num_images x 4 x 4) arr of best pose estim for each image frame
+inference_frames_jit(jnp.empty(test_gt_images.shape), jnp.empty(rotation_proposals_batches.shape))  # time
 
-# ### Visualize max likelihood proposal
-_ = inference_frames_jit(jnp.empty(test_gt_images.shape), jnp.empty(joint_proposals_batches.shape))  # a (num_images x 4 x 4) arr of best pose estim for each image frame
+
+elapsed = 0
+# 1) best translation
 start = time.time()
-all_best_poses, _ = inference_frames_jit(test_gt_images, joint_proposals_batches)  # time
+best_translation_proposal, _ = inference_frames_jit(test_gt_images, translation_proposals_batches)  
 end = time.time()
-elapsed = end - start
+elapsed += (end-start)
+
+# 2) best pose at translation
+start = time.time()
+pose_proposals_batches = jnp.einsum('ij,abjk->abik', best_translation_proposal[0], rotation_proposals_batches)
+best_pose_proposal, _ = inference_frames_jit(test_gt_images, pose_proposals_batches)
+end = time.time()
+elapsed += (end-start)
+
 print("Time elapsed:", elapsed)
 print("FPS:", len(test_gt_images) / elapsed)
-print("best poses:", all_best_poses)
+print("best poses:", best_pose_proposal)
 
 
 # ### TODO: once pose inference tuned reasonably, add a final correction step based on icp...
 icp_jit = jax.jit(partial(icp, render_planes_jit))
-_ = icp_jit(all_best_poses[0], observed, 1, 1)
+_ = icp_jit(best_pose_proposal[0], observed, 1, 1)
 icp_start = time.time()
-new_pose = icp_jit(all_best_poses[0], observed, 20, 1)
+new_pose = icp_jit(best_pose_proposal[0], observed, 20, 1)
 icp_end = time.time()  
 icp_elapsed = icp_end - icp_start 
 print("Time elapsed for icp:", icp_elapsed, "; total inference time:", icp_elapsed + elapsed)
+print("Overall FPS=", len(test_gt_images)/(icp_elapsed + elapsed))
 icp_img = render_planes_jit(new_pose)
-save_depth_image(icp_img[:,:,2], 5.0, "icp_img.png")
+save_depth_image(icp_img[:,:,2], 5.0, "keypoint_icp_img.png")
 
 
-best_image = render_planes_jit(all_best_poses[0])
-save_depth_image(best_image[:,:,2], 5.0, "joint_img.png")
+best_image = render_planes_jit(best_pose_proposal[0])
+save_depth_image(best_image[:,:,2], 5.0, "keypoint_joint_img.png")
 
 
 from IPython import embed; embed()
