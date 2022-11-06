@@ -111,3 +111,36 @@ def render_sphere(pose, shape, h,w, fx_fy, cx_cy):
     points = jnp.einsum("...i,...ki", d[:,:,None], u[:,:,:,None])
     points_homogeneous = jnp.concatenate([points, jnp.ones((h,w,1))],axis=-1)
     return points_homogeneous
+
+def render_planes_vmapper(pose, shape, h,w, fx_fy, cx_cy):
+    shape_planes, shape_dimensions = shape
+    plane_poses = jnp.einsum("ij,ajk",pose, shape_planes)
+
+    r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
+    pixel_coords = jnp.stack([r,c],axis=-1)
+    pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
+
+    @functools.partial(
+        jnp.vectorize,
+        signature='(m)->(4)',
+        excluded=(1,2,),
+    )
+    def single_ray_rendering_vmap(ray, plane, shape_dimensions):
+        denom = ray.dot(plane[:3,2])
+        numerator = plane[:3,3].dot(plane[:3,3])
+        d = numerator / (denom + 1e-10)
+        points_temp = d * ray
+        inv_plane = jnp.linalg.inv(plane)
+        points = jnp.concatenate([points_temp, jnp.ones(1)], axis=-1)
+        point_in_plane_frame = inv_plane.dot(points)
+        valid = jnp.all(jnp.abs(point_in_plane_frame[:2]) < shape_dimensions,axis=-1) # (H,W,N)
+        return valid * points + 10000.0 * (1.0 - valid)
+
+
+    points = jax.vmap(single_ray_rendering_vmap, in_axes=(None, 0, 0),out_axes=-2)(pixel_coords_dir, plane_poses, shape_dimensions)
+
+    idxs = jnp.argmin(points[:,:,:,2],axis=-1)
+
+    points_final = points[jnp.arange(points.shape[0])[:, None], jnp.arange(points.shape[1])[None, :], idxs]
+    points_final_final = points_final * (points_final[:,:,2] < 10000.0)[:,:,None]
+    return points_final_final
