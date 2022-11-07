@@ -10,7 +10,7 @@ def threedp3_likelihood_alternate(
     r,
     outlier_prob
 ):
-    obs_mask = obs_xyz[:,:,2] > 0.0
+    obs_mask = obs_xyz[ :,:,2] > 0.0
     rendered_mask = rendered_xyz[:,:,2] > 0.0
     rendered_xyz_patches = extract_2d_patches(rendered_xyz, (5,5))
     counts = counts_per_pixel(

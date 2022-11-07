@@ -82,11 +82,14 @@ plt.clf()
 plt.imshow(rgb)
 plt.savefig("out.png")
 images = []
-for rgb in rgb_imgs:
+for (i,rgb) in enumerate(rgb_imgs):
+    img = Image.fromarray(
+        rgb.astype(np.int8), mode="RGBA"
+    )
+    dst = multi_panel([img], ["Frame {}".format(i)], 0, 100, 40)
+
     images.append(
-        Image.fromarray(
-            rgb.astype(np.int8), mode="RGBA"
-        )
+        dst
     )
 images[0].save(
     fp="rgb.gif",

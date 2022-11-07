@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 from jax3dp3.viz.img import save_depth_image,save_rgb_image
+from jax3dp3.viz.img import multi_panel
 
 controller = mcs.create_controller(config_file_or_dict='./config.ini')
 scene_data = mcs.load_scene_json_file("scene.json")
@@ -68,28 +69,18 @@ images = []
 original_width = depth_images.shape[2]
 original_height = depth_images.shape[1]
 for i in range(depth_images.shape[0]):
-    dst = Image.new(
-        "RGBA", (2 * original_width + 1*middle_width, original_height)
-    )
-
     rgb = rgb_images[i]
     rgb_img = Image.fromarray(
         rgb.astype(np.int8), mode="RGB"
     )
-    dst.paste(
-        rgb_img,
-        (0,0)
-    )
+    depth_img = Image.fromarray(
+        np.rint(
+            cm(np.array(depth_images[i, :, :]) / max_depth) * 255.0
+        ).astype(np.int8),
+        mode="RGBA",
+    ).resize((original_width,original_height))
 
-    dst.paste(
-        Image.fromarray(
-            np.rint(
-                cm(np.array(depth_images[i, :, :]) / max_depth) * 255.0
-            ).astype(np.int8),
-            mode="RGBA",
-        ).resize((original_width,original_height)),
-        (original_width + middle_width, 0),
-    )
+    dst = multi_panel([rgb_img, depth_img], ["Frame {}".format(i), "Frame {}".format(i)], 20, 100, 40)
     images.append(dst)
 
 
