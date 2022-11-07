@@ -41,7 +41,6 @@ def extract_2d_patches(data: jnp.ndarray, filter_shape: Tuple[int, int]) -> jnp.
     return extracted_patches
 
 def make_centered_grid_enumeration_3d_points(x,y,z,num_x,num_y,num_z):
-    gridding = jnp.linspace(-1.0, 1.0, 5)
     deltas = jnp.stack(jnp.meshgrid(
         jnp.linspace(-x,x,num_x),
         jnp.linspace(-y,y,num_y),

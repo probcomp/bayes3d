@@ -10,6 +10,8 @@ from jax3dp3.utils import (
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
 from jax3dp3.distributions import gaussian_vmf
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
+from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
+
 import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
@@ -17,7 +19,8 @@ import matplotlib.pyplot as plt
 import cv2
 from jax.scipy.special import logsumexp
 from jax3dp3.viz.gif import make_gif
-
+from jax3dp3.viz.img import multi_panel
+from jax3dp3.enumerations import make_grid_enumeration
 
 data = np.load("data.npz")
 depth_imgs = np.array(data["depth_imgs"]).copy()
@@ -53,7 +56,7 @@ ground_truth_images = jnp.array(ground_truth_images)
 
 
 r = 0.05
-outlier_prob = 0.05
+outlier_prob = 0.1
 first_pose = jnp.array(
     [
         [1.0, 0.0, 0.0, -3.00],
@@ -79,6 +82,16 @@ likelihood_parallel_jit = jax.jit(likelihood_parallel)
 
 categorical_vmap = jax.vmap(jax.random.categorical, in_axes=(None, 0))
 logsumexp_vmap = jax.vmap(logsumexp)
+
+
+enumeration_grid = make_grid_enumeration(-0.4, -0.4, -0.4, 0.4, 0.4, 0.4, 7, 7, 7, 30, 20)
+first_pose_proposals = jnp.einsum("ij,...jk->...ik", first_pose, enumeration_grid)
+first_pose_proposals_batched = jnp.array(jnp.split(first_pose_proposals, 40))
+print(first_pose_proposals_batched[0].shape)
+first_pose, _ = enumerative_inference_single_frame(likelihood_parallel, ground_truth_images[0], first_pose_proposals_batched)
+
+
+
 
 DRIFT_VAR = 0.4
 
@@ -123,67 +136,44 @@ print ("FPS:", ground_truth_images.shape[0] / (end - start))
 
 max_depth = 30.0
 middle_width = 20
+top_border = 100
 cm = plt.get_cmap("turbo")
-images = []
+all_images = []
 for i in range(ground_truth_images.shape[0]):
-    dst = Image.new(
-        "RGBA", (3 * original_width + 2*middle_width, original_height)
-    )
-
     rgb = rgb_imgs[i]
     rgb_img = Image.fromarray(
         rgb.astype(np.int8), mode="RGBA"
     )
-    dst.paste(
-        rgb_img,
-        (0,0)
-    )
 
-    dst.paste(
-        Image.new(
-            "RGBA", (middle_width, original_height), (255, 255, 255, 255)
-        ),
-        (original_width, 0),
-    )
-
-    dst.paste(
-        Image.fromarray(
-            np.rint(
-                cm(np.array(ground_truth_images[i, :, :, 2]) / max_depth) * 255.0
-            ).astype(np.int8),
-            mode="RGBA",
-        ).resize((original_width,original_height)),
-        (original_width + middle_width, 0),
-    )
-
-    dst.paste(
-        Image.new(
-            "RGBA", (middle_width, original_height), (255, 255, 255, 255)
-        ),
-        (2* original_width + middle_width, 0),
-    )
-
+    depth_img = Image.fromarray(
+        np.rint(
+            cm(np.array(ground_truth_images[i, :, :, 2]) / max_depth) * 255.0
+        ).astype(np.int8),
+        mode="RGBA",
+    ).resize((original_width,original_height))
 
     pose = x[i,-1,:,:]
     rendered_image = render_from_pose_jit(pose)
-    overlay_image_1 = Image.fromarray(
+    rendered_depth_img = Image.fromarray(
         (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
     ).resize((original_width,original_height))
-    overlay_image_1.putalpha(128)
-    rgb_img_copy = rgb_img.copy()
-    rgb_img_copy.putalpha(128)
 
-    dst.paste(
-        Image.alpha_composite(overlay_image_1, rgb_img_copy),
-        (2*original_width + 2*middle_width, 0),
-    )
-    images.append(dst)
+    i1 = rendered_depth_img.copy()
+    i2 = rgb_img.copy()
+    i1.putalpha(128)
+    i2.putalpha(128)
+    overlay_img = Image.alpha_composite(i1, i2)
+
+    images = [rgb_img, depth_img, rendered_depth_img, overlay_img]
+    labels = ["RGB Image", "Depth Image", "Inferred Depth", "Overlay"]
+    dst = multi_panel(images, labels, middle_width, top_border, 40)
+    all_images.append(dst)
 
 
-images[0].save(
+all_images[0].save(
     fp="out.gif",
     format="GIF",
-    append_images=images,
+    append_images=all_images,
     save_all=True,
     duration=100,
     loop=0,

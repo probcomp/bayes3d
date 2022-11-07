@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 import jax
-from jax3dp3.transforms_3d import transform_from_axis_angle
+from jax3dp3.transforms_3d import transform_from_axis_angle, transform_from_pos
 
 def angle_axis_helper_edgecase(newZ):
     zUnit = jnp.array([1.0, 0.0, 0.0])
@@ -50,3 +50,27 @@ def get_rotation_proposals(sample, rot_sample):
     stepsize = 2*jnp.pi / rot_sample
     rotation_proposals = geodesicHopf_select_axis_vmap(unit_sphere_directions, jnp.arange(0, 2*jnp.pi, stepsize)).reshape(-1, 4, 4)
     return rotation_proposals
+
+
+def make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_points):
+    unit_sphere_directions = fibonacci_sphere(fibonacci_sphere_points)
+    geodesicHopf_select_axis_vmap = jax.vmap(jax.vmap(geodesicHopf_select_axis, in_axes=(0,None)), in_axes=(None,0))
+    stepsize = 2*jnp.pi / num_planar_angle_points
+    rotation_proposals = geodesicHopf_select_axis_vmap(unit_sphere_directions, jnp.arange(0, 2*jnp.pi, stepsize)).reshape(-1, 4, 4)
+    return rotation_proposals
+
+def make_translation_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x,num_y,num_z):
+    deltas = jnp.stack(jnp.meshgrid(
+        jnp.linspace(min_x, max_x, num_x),
+        jnp.linspace(min_y, max_y, num_y),
+        jnp.linspace(min_z, max_z, num_z)
+    ),
+        axis=-1)
+    deltas = deltas.reshape(-1,3)
+    return jax.vmap(transform_from_pos)(deltas)
+
+def make_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x,num_y,num_z, fibonacci_sphere_points, num_planar_angle_points):
+    rotations = make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_points)
+    translations = make_translation_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x,num_y,num_z)
+    all_proposals = jnp.einsum("aij,bjk->abik", rotations, translations).reshape(-1, 4, 4)
+    return all_proposals
