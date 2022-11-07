@@ -14,7 +14,7 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 planeId = p.loadURDF("plane.urdf")
 
 
-cubeStartPos = [0, -3, 5]
+cubeStartPos = [0, -1, 5]
 cubeStartOrientation = p.getQuaternionFromEuler([np.pi/10,np.pi/3,np.pi/5])
 brick_coll = p.createCollisionShape(p.GEOM_MESH, fileName='/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/003_cracker_box/textured.obj', meshScale=[20.0, 20.0, 20.0])
 brick_vis = p.createVisualShape(p.GEOM_MESH, fileName='/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/003_cracker_box/textured.obj', meshScale=[20.0, 20.0, 20.0])
@@ -24,7 +24,7 @@ brick = p.createMultiBody(baseMass=0.0001,
                             baseOrientation=cubeStartOrientation)
 
 p.changeDynamics(planeId, -1, restitution=1.1)
-p.changeDynamics(brick, -1, restitution=1.5)
+p.changeDynamics(brick, -1, restitution=1.1)
 
 viewMatrix = p.computeViewMatrix(
     cameraEyePosition=np.array([20.0, 0.0, 1.0]),

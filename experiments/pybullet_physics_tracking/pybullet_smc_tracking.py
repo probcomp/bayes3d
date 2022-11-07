@@ -26,7 +26,7 @@ data = np.load("data.npz")
 depth_imgs = np.array(data["depth_imgs"]).copy()
 rgb_imgs = np.array(data["rgb_imgs"]).copy()
 
-scaling_factor = 0.25
+scaling_factor = 0.15
 
 fx = data["fx"] * scaling_factor
 fy = data["fy"] * scaling_factor
@@ -47,7 +47,7 @@ print(h,w,fx,fy,cx,cy)
 
 coord_images = [depth_to_coords_in_camera(cv2.resize(d.copy(), (w,h),interpolation=1), K.copy())[0] for d in depth_imgs]
 ground_truth_images = np.stack(coord_images)
-ground_truth_images[ground_truth_images[:,:,:,2] > 40.0] = 0.0
+ground_truth_images[ground_truth_images[:,:,:,2] > 30.0] = 0.0
 ground_truth_images[ground_truth_images[:,:,:,1] > 0.85,:] = 0.0
 ground_truth_images = np.concatenate([ground_truth_images, np.ones(ground_truth_images.shape[:3])[:,:,:,None] ], axis=-1)
 fx_fy = jnp.array([fx, fy])
@@ -55,8 +55,8 @@ cx_cy = jnp.array([cx,cy])
 ground_truth_images = jnp.array(ground_truth_images)
 
 
-r = 0.05
-outlier_prob = 0.1
+r = 0.1
+outlier_prob = 0.01
 first_pose = jnp.array(
     [
         [1.0, 0.0, 0.0, -3.00],
@@ -66,7 +66,7 @@ first_pose = jnp.array(
     ]
 )
 
-shape = get_rectangular_prism_shape(jnp.array([1.25, 2.9, 4.5]))
+shape = get_rectangular_prism_shape(jnp.array([1.15, 3.0, 4.5]))
 
 render_from_pose = lambda pose: render_planes(pose,shape,h,w,fx_fy,cx_cy)
 render_from_pose_jit = jax.jit(render_from_pose)
@@ -99,9 +99,15 @@ DRIFT_VAR = 0.4
 
 
 def run_inference(initial_particles, ground_truth_images):
+    variances = jnp.array([0.05, 0.3, 0.5])
+    concentrations = jnp.array([2000.0, 300.0, 100.0])
+    mixture_logits = jnp.log(jnp.ones(variances.shape) / variances.shape[0])
+
     def particle_filtering_step(data, gt_image):
         particles, weights, keys = data
-        drift_poses = jax.vmap(gaussian_vmf, in_axes=(0, None, None))(keys, DRIFT_VAR, 100.0)
+        proposal_type = jax.random.categorical(keys[0], mixture_logits, shape=(particles.shape[0],))
+
+        drift_poses = jax.vmap(gaussian_vmf, in_axes=(0, 0, 0))(keys, variances[proposal_type], concentrations[proposal_type])
         particles = jnp.einsum("...ij,...jk->...ik", particles, drift_poses)
         weights = weights + likelihood_parallel(particles, gt_image)
         parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
@@ -117,7 +123,7 @@ def run_inference(initial_particles, ground_truth_images):
 
 
 run_inference_jit = jax.jit(run_inference)
-num_particles = 7000
+num_particles = 10000
 particles = []
 for _ in range(num_particles):
     particles.append(first_pose)
