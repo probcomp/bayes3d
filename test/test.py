@@ -1,7 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-from jax3dp3.model import make_scoring_function
 from jax3dp3.rendering import render_planes
 from jax3dp3.distributions import gaussian_vmf
 from jax3dp3.utils import (
@@ -15,6 +14,7 @@ from PIL import Image
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 import cv2
+from jax3dp3.likelihood import threedp3_likelihood
 
 h, w, fx_fy, cx_cy = (
     300,
@@ -60,7 +60,11 @@ print("gt_images.shape", gt_images.shape)
 print((gt_images[0,:,:,-1] > 0 ).sum())
 
 key = jax.random.PRNGKey(3)
-scorer = make_scoring_function(shape, h, w, fx_fy, cx_cy ,r, outlier_prob)
+def scorer(x, obs):
+    rendered_image = render_planes(x, shape,h,w,fx_fy,cx_cy)
+    weight = threedp3_likelihood(obs, rendered_image, r, outlier_prob)
+    return weight
+
 score = scorer(gt_poses[0,:,:], gt_images[0,:,:,:])
 print("score", score)
 
