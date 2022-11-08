@@ -7,12 +7,12 @@ import jax.numpy as jnp
 import jax
 from jax3dp3.icp import icp
 from jax3dp3.model import make_scoring_function
-from jax3dp3.rendering import render_planes
-from jax3dp3.enumerations import get_rotation_proposals
+from jax3dp3.rendering import render_planes, render_cloud_at_pose
+from jax3dp3.enumerations import get_rotation_proposals, 
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
 from jax3dp3.shape import get_cube_shape, get_corner_shape
-from jax3dp3.utils import make_centered_grid_enumeration_3d_points
-from jax3dp3.viz.img import save_depth_image, get_depth_image
+from jax3dp3.utils import make_centered_grid_enumeration_3d_points, depth_to_coords_in_camera, sample_cloud_within_r
+from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
 from jax3dp3.viz.enum import enumeration_range_bbox_viz
 import time
 from PIL import Image
@@ -38,7 +38,9 @@ h, w, fx_fy, cx_cy = (
 
 outlier_prob = 0.01
 pixel_smudge = 0
-
+fx, fy = fx_fy
+cx, cy = cx_cy   
+K = jnp.array([[fx, 0, cx], [0, fy, cy], [0,0,1]])
 
 
 ### Generate GT images
@@ -78,6 +80,11 @@ render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_planes(p,shape,h,
 gt_images = render_planes_parallel_jit(gt_poses)
 
 
+## Viz properties
+middle_width = 20
+top_border = 30
+cm = plt.get_cmap("turbo")
+
 
 ### Define scoring functions
 r = cube_length * 2
@@ -112,6 +119,9 @@ f = (jax.vmap(lambda t:
     )))
 f_jit = jax.jit(f)
 batch_split = lambda proposals, num_batches: jnp.array(jnp.split(proposals, num_batches))
+
+
+
 
 ############
 # Single-frame coarse to fine
@@ -163,8 +173,10 @@ best_image = jnp.zeros((100,100,4))
 for stage in range(C2F_ITERS):
     if stage == 0:
         inference_frames_jit = inference_frames_coarse_jit
+        likelihood_r = r
     else:
         inference_frames_jit = inference_frames_fine_jit
+        likelihood_r = fine_r
 
     grid = make_centered_grid_enumeration_3d_points(search_r, search_r, search_r, tr_half_steps, tr_half_steps, tr_half_steps)
     translation_proposals = jnp.einsum("ij,ajk->aik", current_pose_center, f_jit(grid))
@@ -208,6 +220,33 @@ for stage in range(C2F_ITERS):
     print("Best pose=", best_pose_proposal)
     best_image = render_planes_lambda(best_pose_proposal[0])
     save_depth_image(best_image[:,:,2], 5.0, f"{stage}_joint_img_fast.png")
+    total_inf_time += elapsed
+
+    print("\n Viz ... \n")
+    all_images = []
+
+    gt_depth_img = get_depth_image(observed[:,:,2], 5.0)
+    pose_hypothesis_depth = render_planes_lambda(current_pose_center)[:, :, 2] #sample_likelihood this
+    cloud = depth_to_coords_in_camera(pose_hypothesis_depth, K)[0]
+    sampled_cloud_r = sample_cloud_within_r(cloud, r)  # new cloud
+    rendered_cloud_r = render_cloud_at_pose(sampled_cloud_r, jnp.eye(4), h, w, fx_fy, cx_cy, pixel_smudge)
+
+    hypothesis_img = get_depth_image(rendered_cloud_r[:, :, 2], 5.0)
+    for i in range(translation_proposals.shape[0]//2): #NUMBER OF TRANSLATION PROPOSALS TO VIZ):
+        transl_proposal_image = get_depth_image(render_planes_lambda(translation_proposals[2*i])[:, :, 2], 5.0)
+        images = [gt_depth_img, hypothesis_img, transl_proposal_image]
+        labels = ["GT Image", f"Likelihood evaluation\nr={likelihood_r}", f"Enumeration\ngridscale={search_r}"]
+        dst = multi_panel(images, labels, middle_width, top_border, 8)
+        all_images.append(dst)
+    
+    all_images[0].save(
+        fp=f"{stage}_out.gif",
+        format="GIF",
+        append_images=all_images,
+        save_all=True,
+        duration=50,
+        loop=0,
+    )
 
 
     # narrow search space depending on best pose proposal
@@ -216,8 +255,9 @@ for stage in range(C2F_ITERS):
     fib_numsteps, rot_numsteps = fib_numsteps*2, rot_numsteps*2
     current_pose_center = f(jnp.array([best_pose_proposal[0, :3, -1]]))[0]
 
-    total_inf_time += elapsed
+
     print("==================================")
+
 
 
 # once pose inference tuned reasonably, add a final correction step based on icp...
@@ -231,5 +271,76 @@ print("Time elapsed for icp:", icp_elapsed, "; total inference time:", icp_elaps
 print("Total FPS:", len(test_gt_images)/(icp_elapsed + total_inf_time))
 icp_img = render_planes_jit(new_pose)
 save_depth_image(icp_img[:,:,2], 5.0, f"{stage}_icp_img_fast.png")
+
+
+
+
+# #### Viz
+
+
+# max_depth = 30.0
+# middle_width = 20
+# top_border = 100
+# cm = plt.get_cmap("turbo")
+# all_images = []
+# for i in range(NUMBER OF TRANSLATION PROPOSALS TO VIZ):
+
+#     gt_img_viz = same image as always
+
+#     r_img_viz = sample(r) at current best pose
+
+#     enums_viz = render(at best pose)
+
+#     images = [gt_img_viz, r_img_viz, enums_viz]
+#     labels = ["GT Image", "Depth Image", "Enumeration"]
+#     dst = multi_panel(images, labels, middle_width, top_border, 40)
+#     all_images.append(dst)
+
+
+
+
+
+
+
+
+#     rgb = rgb_imgs[i]
+#     rgb_img = Image.fromarray(
+#         rgb.astype(np.int8), mode="RGBA"
+#     )
+
+#     depth_img = Image.fromarray(
+#         np.rint(
+#             cm(np.array(ground_truth_images[i, :, :, 2]) / max_depth) * 255.0
+#         ).astype(np.int8),
+#         mode="RGBA",
+#     ).resize((original_width,original_height))
+
+#     pose = x[i,-1,:,:]
+#     rendered_image = render_from_pose_jit(pose)
+#     rendered_depth_img = Image.fromarray(
+#         (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
+#     ).resize((original_width,original_height))
+
+#     i1 = rendered_depth_img.copy()
+#     i2 = rgb_img.copy()
+#     i1.putalpha(128)
+#     i2.putalpha(128)
+#     overlay_img = Image.alpha_composite(i1, i2)
+
+#     images = [rgb_img, depth_img, rendered_depth_img, overlay_img]
+#     labels = ["RGB Image", "Depth Image", "Inferred Depth", "Overlay"]
+#     dst = multi_panel(images, labels, middle_width, top_border, 40)
+#     all_images.append(dst)
+
+
+# all_images[0].save(
+#     fp="out.gif",
+#     format="GIF",
+#     append_images=all_images,
+#     save_all=True,
+#     duration=100,
+#     loop=0,
+# )
+
 
 from IPython import embed; embed()

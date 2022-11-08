@@ -24,4 +24,4 @@ def enumeration_range_bbox_viz(image, minx, maxx, miny, maxy, minz, maxz, fx_fy,
     anno_img.rectangle([(min_u, min_v), (max_u, max_v)], fill=None, outline='red', width=1)
     image.save(filename)
 
-    return 1
+    return image

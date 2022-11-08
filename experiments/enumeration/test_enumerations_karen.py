@@ -81,7 +81,6 @@ gt_images = render_planes_parallel_jit(gt_poses)
 
 
 ### Define scoring functions
-
 scorer = make_scoring_function(shape, h, w, fx_fy, cx_cy ,r, outlier_prob)
 scorer_parallel = jax.vmap(scorer, in_axes = (0, None))
 
@@ -175,7 +174,7 @@ print("best poses:", best_pose_proposal)
 icp_jit = jax.jit(partial(icp, render_planes_jit))
 _ = icp_jit(best_pose_proposal[0], observed, 1, 1)
 icp_start = time.time()
-new_pose = icp_jit(best_pose_proposal[0], observed, 20, 1)
+new_pose = icp_jit(best_pose_proposal[0], observed, 20, 2)
 icp_end = time.time()  
 icp_elapsed = icp_end - icp_start 
 print("Time elapsed for icp:", icp_elapsed, "; total inference time:", icp_elapsed + elapsed)

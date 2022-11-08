@@ -2,6 +2,7 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 import jax
+from functools import partial
 
 def extract_2d_patches(data: jnp.ndarray, filter_shape: Tuple[int, int]) -> jnp.ndarray:
     """For each pixel, extract 2D patches centered at that pixel.
@@ -102,3 +103,28 @@ def depth_to_coords_in_camera(
     return coords_in_camera, coords_on_image
 
 
+def sample_coordinate_within_r(r, key, coord):
+    x, y, z = coord
+
+    phi = jax.random.uniform(key, minval=0.0, maxval=2*jnp.pi)
+    
+    new_key, subkey1, subkey2 = jax.random.split(key, 3)
+
+    costheta = jax.random.uniform(subkey1, minval=-1.0, maxval=1.0)
+    u = jax.random.uniform(subkey2, minval=0.0, maxval=1.0)
+
+    theta = jnp.arccos(costheta)
+    radius = r * jnp.cbrt(u)
+
+    sx = radius * jnp.sin(theta)* jnp.cos(phi)
+    sy = radius * jnp.sin(theta) * jnp.sin(phi)
+    sz = radius * jnp.cos(theta)
+
+    return new_key, coord + jnp.array([sx, sy, sz]) 
+
+def sample_cloud_within_r(cloud, r):
+    cloud_copy = cloud.reshape(-1, 3)  # reshape to ensure correct scan dimensions
+    key = jax.random.PRNGKey(214)
+    sample_coordinate_partial = partial(sample_coordinate_within_r, r)
+
+    return jax.lax.scan(sample_coordinate_partial, key, cloud_copy)[-1]
