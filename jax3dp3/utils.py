@@ -2,7 +2,6 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 import jax
-from functools import partial
 
 def extract_2d_patches(data: jnp.ndarray, filter_shape: Tuple[int, int]) -> jnp.ndarray:
     """For each pixel, extract 2D patches centered at that pixel.

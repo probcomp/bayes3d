@@ -6,12 +6,13 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 from jax3dp3.icp import icp
+from jax3dp3.likelihood import sample_cloud_within_r
 from jax3dp3.model import make_scoring_function
 from jax3dp3.rendering import render_planes, render_cloud_at_pose
-from jax3dp3.enumerations import get_rotation_proposals, 
+from jax3dp3.enumerations import get_rotation_proposals
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
 from jax3dp3.shape import get_cube_shape, get_corner_shape
-from jax3dp3.utils import make_centered_grid_enumeration_3d_points, depth_to_coords_in_camera, sample_cloud_within_r
+from jax3dp3.utils import make_centered_grid_enumeration_3d_points, depth_to_coords_in_camera, rotation_matrix_to_euler_angles
 from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
 from jax3dp3.viz.enum import enumeration_range_bbox_viz
 import time
@@ -87,14 +88,17 @@ cm = plt.get_cmap("turbo")
 
 
 ### Define scoring functions
-r = cube_length * 2
+r = 0.5 #cube_length * 2
 coarse_scorer = make_scoring_function(shape, h, w, fx_fy, cx_cy ,r, outlier_prob)
 coarse_scorer_parallel = jax.vmap(coarse_scorer, in_axes = (0, None))
 
-fine_r = r/2
+fine_r = 0.25 #r/2
 fine_scorer = make_scoring_function(shape, h, w, fx_fy, cx_cy, fine_r, outlier_prob)
 fine_scorer_parallel = jax.vmap(fine_scorer, in_axes = (0, None))
 
+finest_r = 0.05
+finest_scorer = make_scoring_function(shape, h, w, fx_fy, cx_cy, fine_r, outlier_prob)
+finest_scorer_parallel = jax.vmap(finest_scorer, in_axes = (0, None))
 
 test_gt_images = []
 test_frame_idx = 10
@@ -132,14 +136,17 @@ batch_split = lambda proposals, num_batches: jnp.array(jnp.split(proposals, num_
 inference_frames = jax.vmap(enumerative_inference_single_frame, in_axes=(None, 0, None)) # vmap over images
 inference_frames_coarse_jit = jax.jit(partial(inference_frames, coarse_scorer_parallel))
 inference_frames_fine_jit = jax.jit(partial(inference_frames, fine_scorer_parallel))
+inference_frames_finest_jit = jax.jit(partial(inference_frames, finest_scorer_parallel))
+
 
 inference_frames_coarse_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 4, 4, 4)))  
 inference_frames_coarse_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 128, 4, 4))) 
 
 
-inference_frames_fine_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 2, 4, 4))) 
 inference_frames_fine_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 16, 4, 4))) 
-inference_frames_fine_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 64, 4, 4))) 
+
+inference_frames_finest_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 2, 4, 4)))  # TODO avoid hardcoding number of enums
+inference_frames_finest_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 64, 4, 4))) 
 
 
 # -----------------------------------------------------------------------
@@ -170,13 +177,27 @@ NUM_ROTATE_BATCHES = 4
 total_inf_time = 0
 
 best_image = jnp.zeros((100,100,4))
+gt_depth_img = get_depth_image(observed[:,:,2], 5.0)
+gt_rot_euler = rotation_matrix_to_euler_angles(gt_poses[test_frame_idx][:3, :3])
+gt_pose_x, gt_pose_y, gt_pose_z = gt_poses[test_frame_idx][:3, -1]
+gt_pose_x, gt_pose_y, gt_pose_z = int(gt_pose_x*100)/100, int(gt_pose_y*100)/100, int(gt_pose_z)*100/100
+best_rot_euler = rotation_matrix_to_euler_angles(current_pose_center[:3, :3])
+
+best_pose_x, best_pose_y, best_pose_z = current_pose_center[:3, -1]
+best_pose_x, best_pose_y, best_pose_z = int(best_pose_x*100)/100, int(best_pose_y*100)/100, int(best_pose_z)*100/100  # for viz
+
+
 for stage in range(C2F_ITERS):
     if stage == 0:
         inference_frames_jit = inference_frames_coarse_jit
         likelihood_r = r
-    else:
+    elif stage == 1:
         inference_frames_jit = inference_frames_fine_jit
         likelihood_r = fine_r
+    else:
+        inference_frames_jit = inference_frames_finest_jit
+        likelihood_r = finest_r
+
 
     grid = make_centered_grid_enumeration_3d_points(search_r, search_r, search_r, tr_half_steps, tr_half_steps, tr_half_steps)
     translation_proposals = jnp.einsum("ij,ajk->aik", current_pose_center, f_jit(grid))
@@ -189,7 +210,7 @@ for stage in range(C2F_ITERS):
                             fx_fy, cx_cy, f"{stage}_search_range.png")
 
 
-    print(f"Search radius: {search_r} ; Stepsize:{search_r/tr_half_steps}; Num steps {tr_half_steps}")
+    print(f"Likelihood r:{likelihood_r}, Search radius: {search_r} ; Stepsize:{search_r/tr_half_steps}; Num steps {tr_half_steps}")
     print("enumerating over ", rotation_proposals.shape[0], " rotations")
     print("enumerating over ", translation_proposals.shape[0], " translations")
 
@@ -225,7 +246,6 @@ for stage in range(C2F_ITERS):
     print("\n Viz ... \n")
     all_images = []
 
-    gt_depth_img = get_depth_image(observed[:,:,2], 5.0)
     pose_hypothesis_depth = render_planes_lambda(current_pose_center)[:, :, 2] #sample_likelihood this
     cloud = depth_to_coords_in_camera(pose_hypothesis_depth, K)[0]
     sampled_cloud_r = sample_cloud_within_r(cloud, r)  # new cloud
@@ -235,7 +255,7 @@ for stage in range(C2F_ITERS):
     for i in range(translation_proposals.shape[0]//2): #NUMBER OF TRANSLATION PROPOSALS TO VIZ):
         transl_proposal_image = get_depth_image(render_planes_lambda(translation_proposals[2*i])[:, :, 2], 5.0)
         images = [gt_depth_img, hypothesis_img, transl_proposal_image]
-        labels = ["GT Image", f"Likelihood evaluation\nr={likelihood_r}", f"Enumeration\ngridscale={search_r}"]
+        labels = [f"GT Image\n{gt_pose_x, gt_pose_y, gt_pose_z}", f"Likelihood evaluation\nr={likelihood_r},latent pose={best_pose_x, best_pose_y, best_pose_z}", f"Enumeration\ngridscale={search_r}"]
         dst = multi_panel(images, labels, middle_width, top_border, 8)
         all_images.append(dst)
     
@@ -254,7 +274,8 @@ for stage in range(C2F_ITERS):
     tr_half_steps = max(2, int(tr_half_steps/2)) # reduce number of steps in new search space
     fib_numsteps, rot_numsteps = fib_numsteps*2, rot_numsteps*2
     current_pose_center = f(jnp.array([best_pose_proposal[0, :3, -1]]))[0]
-
+    best_pose_x, best_pose_y, best_pose_z = current_pose_center[:3, -1]
+    best_pose_x, best_pose_y, best_pose_z = int(best_pose_x*100)/100, int(best_pose_y*100)/100, int(best_pose_z)*100/100  # for viz rounding
 
     print("==================================")
 
@@ -273,74 +294,3 @@ icp_img = render_planes_jit(new_pose)
 save_depth_image(icp_img[:,:,2], 5.0, f"{stage}_icp_img_fast.png")
 
 
-
-
-# #### Viz
-
-
-# max_depth = 30.0
-# middle_width = 20
-# top_border = 100
-# cm = plt.get_cmap("turbo")
-# all_images = []
-# for i in range(NUMBER OF TRANSLATION PROPOSALS TO VIZ):
-
-#     gt_img_viz = same image as always
-
-#     r_img_viz = sample(r) at current best pose
-
-#     enums_viz = render(at best pose)
-
-#     images = [gt_img_viz, r_img_viz, enums_viz]
-#     labels = ["GT Image", "Depth Image", "Enumeration"]
-#     dst = multi_panel(images, labels, middle_width, top_border, 40)
-#     all_images.append(dst)
-
-
-
-
-
-
-
-
-#     rgb = rgb_imgs[i]
-#     rgb_img = Image.fromarray(
-#         rgb.astype(np.int8), mode="RGBA"
-#     )
-
-#     depth_img = Image.fromarray(
-#         np.rint(
-#             cm(np.array(ground_truth_images[i, :, :, 2]) / max_depth) * 255.0
-#         ).astype(np.int8),
-#         mode="RGBA",
-#     ).resize((original_width,original_height))
-
-#     pose = x[i,-1,:,:]
-#     rendered_image = render_from_pose_jit(pose)
-#     rendered_depth_img = Image.fromarray(
-#         (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
-#     ).resize((original_width,original_height))
-
-#     i1 = rendered_depth_img.copy()
-#     i2 = rgb_img.copy()
-#     i1.putalpha(128)
-#     i2.putalpha(128)
-#     overlay_img = Image.alpha_composite(i1, i2)
-
-#     images = [rgb_img, depth_img, rendered_depth_img, overlay_img]
-#     labels = ["RGB Image", "Depth Image", "Inferred Depth", "Overlay"]
-#     dst = multi_panel(images, labels, middle_width, top_border, 40)
-#     all_images.append(dst)
-
-
-# all_images[0].save(
-#     fp="out.gif",
-#     format="GIF",
-#     append_images=all_images,
-#     save_all=True,
-#     duration=100,
-#     loop=0,
-# )
-
-
-from IPython import embed; embed()
