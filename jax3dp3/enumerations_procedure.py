@@ -10,7 +10,7 @@ def enumerative_inference_single_frame(scorer_parallel, gt_image, proposals_batc
         new_x, new_weight = jax.lax.cond(carry[-1] > jnp.max(weights_new), lambda: carry, lambda: (x, x_weight))
 
         return (new_x, new_weight), None  # return highest weight pose proposal encountered so far
-    best_prop, _ = jax.lax.scan(_enum_infer_batch_scan, (jnp.empty((4,4)), jnp.NINF), proposals_batches)
+    best_prop, _ = jax.lax.scan(_enum_infer_batch_scan, (jnp.empty(proposals_batches.shape[2:]), jnp.NINF), proposals_batches)
     return best_prop
 
 

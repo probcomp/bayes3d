@@ -13,7 +13,7 @@ def threedp3_likelihood_alternate(
 ):
     obs_mask = obs_xyz[ :,:,2] > 0.0
     rendered_mask = rendered_xyz[:,:,2] > 0.0
-    rendered_xyz_patches = extract_2d_patches(rendered_xyz, (5,5))
+    rendered_xyz_patches = extract_2d_patches(rendered_xyz, (7,7))
     counts = counts_per_pixel(
         obs_xyz,
         rendered_xyz_patches,
@@ -76,7 +76,7 @@ def threedp3_likelihood(
     indices = jnp.stack([ii,jj],axis=-1)
     counts = count_ii_jj(indices, obs_xyz, rendered_xyz_padded, r, filter_size)
     num_latent_points = rendered_mask.sum()
-    probs = 1 / (((1 - outlier_prob)/num_latent_points) * 4/3 * jnp.pi * r**3) * counts + outlier_prob
+    probs = outlier_prob  +  (1.0 - outlier_prob) / num_latent_points  * counts * 1.0 / (4/3 * jnp.pi * r**3)
     log_probs = jnp.log(probs)
     return jnp.sum(jnp.where(obs_mask, log_probs, 0.0))
 
