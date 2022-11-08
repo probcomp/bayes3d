@@ -2,6 +2,7 @@ import jax.numpy as jnp
 import jax
 import functools
 from .utils import extract_2d_patches
+from functools import partial
 
 # @functools.partial(jax.jit, static_argnames=["r", "outlier_prob"])
 def threedp3_likelihood_alternate(
@@ -78,3 +79,28 @@ def threedp3_likelihood(
     probs = 1 / (((1 - outlier_prob)/num_latent_points) * 4/3 * jnp.pi * r**3) * counts + outlier_prob
     log_probs = jnp.log(probs)
     return jnp.sum(jnp.where(obs_mask, log_probs, 0.0))
+
+
+def sample_coordinate_within_r(r, key, coord):
+    phi = jax.random.uniform(key, minval=0.0, maxval=2*jnp.pi)
+    
+    new_key, subkey1, subkey2 = jax.random.split(key, 3)
+
+    costheta = jax.random.uniform(subkey1, minval=-1.0, maxval=1.0)
+    u = jax.random.uniform(subkey2, minval=0.0, maxval=1.0)
+
+    theta = jnp.arccos(costheta)
+    radius = r * jnp.cbrt(u)
+
+    sx = radius * jnp.sin(theta)* jnp.cos(phi)
+    sy = radius * jnp.sin(theta) * jnp.sin(phi)
+    sz = radius * jnp.cos(theta)
+
+    return new_key, coord + jnp.array([sx, sy, sz]) 
+
+def sample_cloud_within_r(cloud, r):
+    cloud_copy = cloud.reshape(-1, 3)  # reshape to ensure correct scan dimensions
+    key = jax.random.PRNGKey(214)
+    sample_coordinate_partial = partial(sample_coordinate_within_r, r)
+
+    return jax.lax.scan(sample_coordinate_partial, key, cloud_copy)[-1]

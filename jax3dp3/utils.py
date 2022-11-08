@@ -102,29 +102,27 @@ def depth_to_coords_in_camera(
     coords_on_image = np.moveaxis(vu, 0, -1)
     return coords_in_camera, coords_on_image
 
-
-def sample_coordinate_within_r(r, key, coord):
-    x, y, z = coord
-
-    phi = jax.random.uniform(key, minval=0.0, maxval=2*jnp.pi)
-    
-    new_key, subkey1, subkey2 = jax.random.split(key, 3)
-
-    costheta = jax.random.uniform(subkey1, minval=-1.0, maxval=1.0)
-    u = jax.random.uniform(subkey2, minval=0.0, maxval=1.0)
-
-    theta = jnp.arccos(costheta)
-    radius = r * jnp.cbrt(u)
-
-    sx = radius * jnp.sin(theta)* jnp.cos(phi)
-    sy = radius * jnp.sin(theta) * jnp.sin(phi)
-    sz = radius * jnp.cos(theta)
-
-    return new_key, coord + jnp.array([sx, sy, sz]) 
-
-def sample_cloud_within_r(cloud, r):
-    cloud_copy = cloud.reshape(-1, 3)  # reshape to ensure correct scan dimensions
-    key = jax.random.PRNGKey(214)
-    sample_coordinate_partial = partial(sample_coordinate_within_r, r)
-
-    return jax.lax.scan(sample_coordinate_partial, key, cloud_copy)[-1]
+def is_rotation_matrix(R) :
+    Rt = jnp.transpose(R)
+    shouldBeIdentity = np.dot(Rt, R)
+    I = jnp.identity(3, dtype = R.dtype)
+    n = jnp.linalg.norm(I - shouldBeIdentity)
+    return n < 1e-6
+ 
+def rotation_matrix_to_euler_angles(R) :
+    assert(is_rotation_matrix(R))
+ 
+    sy = jnp.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
+ 
+    singular = sy < 1e-6
+ 
+    if  not singular :
+        x = jnp.arctan2(R[2,1] , R[2,2])
+        y = jnp.arctan2(-R[2,0], sy)
+        z = jnp.arctan2(R[1,0], R[0,0])
+    else :
+        x = jnp.arctan2(-R[1,2], R[1,1])
+        y = jnp.arctan2(-R[2,0], sy)
+        z = 0
+ 
+    return jnp.array([x, y, z])
