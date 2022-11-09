@@ -21,14 +21,13 @@ import matplotlib.pyplot as plt
 import cv2
 from functools import partial 
 from jax3dp3.likelihood import threedp3_likelihood
+from jax3dp3.enumerations import make_grid_enumeration, make_translation_grid_enumeration
+from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, transform_from_pos
 
-OBJ_DEFAULT_POSE = TEMPLATE_DEFAULT_POSE = jnp.array([
-    [1.0, 0.0, 0.0, -1.0],   
-    [0.0, 1.0, 0.0, -1.0],   
-    [0.0, 0.0, 1.0, 2.0],   
-    [0.0, 0.0, 0.0, 1.0],   
-    ]
-) 
+## Viz properties
+middle_width = 20
+top_border = 45
+cm = plt.get_cmap("turbo")
 
 h, w, fx_fy, cx_cy = (
     100,
@@ -46,32 +45,14 @@ K = jnp.array([[fx, 0, cx], [0, fy, cy], [0,0,1]])
 
 
 ### Generate GT images
-
-num_frames = 50
-
-gt_poses = [
-    jnp.array([
+gt_pose = jnp.array([
     [1.0, 0.0, 0.0, -1.0],   
     [0.0, 1.0, 0.0, -1.0],   
     [0.0, 0.0, 1.0, 2.0],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
-]
-rot = R.from_euler('zyx', [1.0, -0.1, -2.0], degrees=True).as_matrix()
-delta_pose =     jnp.array([
-    [1.0, 0.0, 0.0, 0.15],   
-    [0.0, 1.0, 0.0, 0.05],   
-    [0.0, 0.0, 1.0, 0.02],   
-    [0.0, 0.0, 0.0, 1.0],   
-    ]
-)
-delta_pose = delta_pose.at[:3,:3].set(jnp.array(rot))
 
-for t in range(num_frames):
-    gt_poses.append(gt_poses[-1].dot(delta_pose))
-gt_poses = jnp.stack(gt_poses)
-print("gt_poses.shape", gt_poses.shape)
 
 cube_length = 0.5
 shape = get_cube_shape(cube_length)
@@ -79,86 +60,48 @@ shape = get_cube_shape(cube_length)
 render_planes_lambda = lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)
 render_planes_jit = jax.jit(render_planes_lambda)
 render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)))
-gt_images = render_planes_parallel_jit(gt_poses)
+gt_image = render_planes_jit(gt_pose)
 
 
-## Viz properties
-middle_width = 20
-top_border = 45
-cm = plt.get_cmap("turbo")
+def scorer(pose, gt_image, r):
+    rendered_image = render_planes(pose, shape, h, w, fx_fy, cx_cy)
+    weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
+    return weight
+scorer_parallel = jax.vmap(scorer, in_axes = (0, None, None))
+scorer_parallel_jit = jax.jit(scorer_parallel)
 
-def make_scoring_function(shape, h, w, fx_fy, cx_cy, r, outlier_prob):
-    def scorer(pose, gt_image):
-        rendered_image = render_planes(pose, shape, h, w, fx_fy, cx_cy)
-        weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
-        return weight
-    return scorer
-
-### Define scoring functions
-def make_scoring_function(shape, h, w, fx_fy, cx_cy, r, outlier_prob):
-    def scorer(pose, gt_image):
-        rendered_image = render_planes(pose, shape, h, w, fx_fy, cx_cy)
-        weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
-        return weight
-    return scorer
-
-r = 0.25 #cube_length * 2
-coarse_scorer = make_scoring_function(shape, h, w, fx_fy, cx_cy ,r, outlier_prob)
-coarse_scorer_parallel = jax.vmap(coarse_scorer, in_axes = (0, None))
-
-fine_r = 0.25 #r/2
-fine_scorer = make_scoring_function(shape, h, w, fx_fy, cx_cy, fine_r, outlier_prob)
-fine_scorer_parallel = jax.vmap(fine_scorer, in_axes = (0, None))
-
-finest_r = 0.05
-finest_scorer = make_scoring_function(shape, h, w, fx_fy, cx_cy, fine_r, outlier_prob)
-finest_scorer_parallel = jax.vmap(finest_scorer, in_axes = (0, None))
-
-test_gt_images = []
-test_frame_idx = 10
-
-observed = gt_images[test_frame_idx, :, :, :]
+observed = gt_image
 print("GT image shape=", observed.shape)
-print("GT pose=", gt_poses[test_frame_idx])
+print("GT pose=", gt_pose)
 
 save_depth_image(observed[:,:,2], max_depth, "gt_img.png")
 
-test_gt_images.append(observed)
-test_gt_images = jnp.stack(test_gt_images)
-observed_depth = observed[:, :, 2]
-
-occ_x, occ_y, occ_z = observed[observed_depth > 0, :3].T
-occ_xmin, occ_xmax, occ_ymin, occ_ymax, occ_zmin, occ_zmax = jnp.min(occ_x), jnp.max(occ_x), jnp.min(occ_y), jnp.max(occ_y), jnp.min(occ_z), jnp.max(occ_z)
-
-# Helper functions
-f = (jax.vmap(lambda t: 
-        jnp.vstack(
-        [jnp.hstack([jnp.eye(3), t.reshape(3,-1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]  # careful on whether it should be [0,0,0,1] when not joint
-    )))
-f_jit = jax.jit(f)
-batch_split = lambda proposals, num_batches: jnp.array(jnp.split(proposals, num_batches))
+# Example of nans
+nans = scorer(transform_from_pos(jnp.array([0.0, 0.0, -10.0])), gt_image, 0.1)
 
 
-############
-# Single-frame coarse to fine
-############
+current_pose_estimate = gt_pose
+
+# tuples of (radius, width of gridding, grid_resolution)
+schedule = [(0.1, 3.0, 20), (0.1, 0.5, 10), (0.05, 0.1, 10), (0.01, 0.05, 10)]
+
+for (r, width, num_grid_points) in schedule:
+    enumerations = make_translation_grid_enumeration(
+        -width, -width, -width,
+        width, width, width,
+        num_grid_points,num_grid_points,num_grid_points
+    )
+    proposals = jnp.einsum("...ij,...jk->...ik", current_pose_estimate, enumerations)
+    weights = scorer_parallel_jit(proposals, gt_image, r)
+    current_pose_estimate = proposals[jnp.argmax(weights)]
+    print('current_pose_estimate:');print(current_pose_estimate)
+
+save_depth_image(render_planes_jit(current_pose_estimate)[:,:,2], max_depth, "inferred.png")
 
 
+############################# NISHADS STUFF ^ ############################# 
 
-inference_frames = jax.vmap(enumerative_inference_single_frame, in_axes=(None, 0, None)) # vmap over images
-inference_frames_coarse_jit = jax.jit(partial(inference_frames, coarse_scorer_parallel))
-inference_frames_fine_jit = jax.jit(partial(inference_frames, fine_scorer_parallel))
-inference_frames_finest_jit = jax.jit(partial(inference_frames, finest_scorer_parallel))
-
-
-inference_frames_coarse_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 4, 4, 4)))  
-inference_frames_coarse_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 128, 4, 4))) 
-
-
-inference_frames_fine_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 16, 4, 4))) 
-
-inference_frames_finest_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 2, 4, 4)))  # TODO avoid hardcoding number of enums
-inference_frames_finest_jit(jnp.empty((1,100,100,4)), jnp.empty((4, 64, 4, 4))) 
+from IPython import embed; embed()
 
 
 # -----------------------------------------------------------------------
@@ -190,7 +133,7 @@ total_inf_time = 0
 
 best_image = jnp.zeros((100,100,4))
 gt_depth_img = get_depth_image(observed[:,:,2], max_depth)
-gt_pose_x, gt_pose_y, gt_pose_z = gt_poses[test_frame_idx][:3, -1]
+gt_pose_x, gt_pose_y, gt_pose_z = gt_pose[:3, -1]
 gt_pose_x, gt_pose_y, gt_pose_z = int(gt_pose_x*100)/100, int(gt_pose_y*100)/100, int(gt_pose_z)*100/100
 
 best_pose_x, best_pose_y, best_pose_z = current_pose_center[:3, -1]
