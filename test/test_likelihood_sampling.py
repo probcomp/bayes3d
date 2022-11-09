@@ -44,8 +44,8 @@ render_planes_jit = jax.jit(render_planes_lambda)
 sample_cloud_within_r_jit = jax.jit(sample_cloud_within_r)
 # ------- GT rendering --------------------
 pose_center = jnp.array([
-    [1.0, 0.0, 0.0, 0],   
-    [0.0, 1.0, 0.0, 0],   
+    [1.0, 0.0, 0.0, 0.5],   
+    [0.0, 1.0, 0.0, -0.5],   
     [0.0, 0.0, 1.0, 2],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
