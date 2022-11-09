@@ -85,7 +85,7 @@ for i in range(depth_images.shape[0]):
 
 
 images[0].save(
-    fp="out.gif",
+    fp="data.gif",
     format="GIF",
     append_images=images,
     save_all=True,
