@@ -27,6 +27,12 @@ data = np.load("data.npz")
 depth_imgs = np.array(data["depth_imgs"]).copy()
 rgb_imgs = np.array(data["rgb_imgs"]).copy()
 
+
+max_depth = 30.0
+middle_width = 20
+top_border = 100
+cm = plt.get_cmap("turbo")
+
 scaling_factor = 0.2
 
 fx = data["fx"] * scaling_factor
@@ -55,14 +61,13 @@ fx_fy = jnp.array([fx, fy])
 cx_cy = jnp.array([cx,cy])
 ground_truth_images = jnp.array(ground_truth_images)
 
-
-r = 0.1
-outlier_prob = 0.01
+r = 0.2
+outlier_prob = 0.2
 
 shape_planes = []
 shape_dims = []
 for _ in range(2):
-    plane, dims = shape = get_rectangular_prism_shape(jnp.array([3.0, 4.5, 1.15])/2.0)
+    plane, dims = shape = get_rectangular_prism_shape(jnp.array([3.0, 4.3, 1.15])/2.0)
     shape_planes.append(plane)
     shape_dims.append(dims)
 shape_dims = jnp.array(shape_dims)
@@ -83,52 +88,58 @@ likelihood_parallel_jit = jax.jit(likelihood_parallel)
 categorical_vmap = jax.vmap(jax.random.categorical, in_axes=(None, 0))
 logsumexp_vmap = jax.vmap(logsumexp)
 
-
-
-initial_poses = jnp.array(
+initial_poses_estimates = jnp.array(
     [
-
-
         [
             [1.0, 0.0, 0.0, 0.00],
-            [0.0, 1.0, 0.0, 0.00],
-            [0.0, 0.0, 1.0, 10.0],
+            [0.0, 1.0, 0.0, 1.00],
+            [0.0, 0.0, 1.0, 8.0],
             [0.0, 0.0, 0.0, 1.0],
         ],
         [
-            [1.0, 0.0, 0.0, 0.00],
-            [0.0, 1.0, 0.0, -3.00],
+            [1.0, 0.0, 0.0, -3.00],
+            [0.0, 1.0, 0.0, -2.00],
             [0.0, 0.0, 1.0, 15.0],
             [0.0, 0.0, 0.0, 1.0],
         ],
     ]
 )
 
-max_depth = 30.0
-middle_width = 20
-top_border = 100
-cm = plt.get_cmap("turbo")
+rgb = rgb_imgs[0]
+rgb_img = Image.fromarray(
+    rgb.astype(np.int8), mode="RGBA"
+)
+rgb_img.save("rgb.png")
 
+
+initial_poses = initial_poses_estimates.copy()
 rendered_image = render_planes_multiobject(initial_poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
-rendered_depth_img = Image.fromarray(
+before = Image.fromarray(
     (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
 ).resize((original_width,original_height))
-rendered_depth_img.save("before.png")
 
-enumerations = make_grid_enumeration(-0.4, -0.4, -0.4, 0.4, 0.4, 0.4, 7, 7, 7, 20, 10)
-for _ in range(3):
+find_best_pose = jax.jit(lambda x,y: enumerative_inference_single_frame(likelihood_parallel, x, y))
+
+enumerations1 = make_grid_enumeration(-0.4, -0.4, -0.4, 0.4, 0.4, 0.4, 4, 4, 4, 20, 10)
+enumerations2 = make_grid_enumeration(-0.0, -0.0, -0.0, 0.0, 0.0, 0.0, 1, 1, 1, 300, 20)
+for _ in range(10):
     for i in range(initial_poses.shape[0]):
-        initial_poses_expanded = jnp.tile(initial_poses[None, :, :, :], (enumerations.shape[0], 1, 1, 1))
-        proposals = initial_poses_expanded.at[:, i].set(jnp.einsum("...ij,...jk->...ik", initial_poses_expanded[:, i], enumerations))
+        initial_poses_expanded = jnp.tile(initial_poses[None, :, :, :], (enumerations1.shape[0], 1, 1, 1))
+        proposals = initial_poses_expanded.at[:, i].set(jnp.einsum("...ij,...jk->...ik", initial_poses_expanded[:, i], enumerations1))
         proposals_batched = jnp.array(jnp.split(proposals, 40))
-        initial_poses, _ = enumerative_inference_single_frame(likelihood_parallel, ground_truth_images[0], proposals_batched)
+        initial_poses, _ = find_best_pose(ground_truth_images[0], proposals_batched)
+
+        initial_poses_expanded = jnp.tile(initial_poses[None, :, :, :], (enumerations2.shape[0], 1, 1, 1))
+        proposals = initial_poses_expanded.at[:, i].set(jnp.einsum("...ij,...jk->...ik", initial_poses_expanded[:, i], enumerations2))
+        proposals_batched = jnp.array(jnp.split(proposals, 40))
+        initial_poses, _ = find_best_pose(ground_truth_images[0], proposals_batched)
 
 rendered_image = render_planes_multiobject(initial_poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
-
-rendered_depth_img = Image.fromarray(
+after = Image.fromarray(
     (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
 ).resize((original_width,original_height))
-rendered_depth_img.save("after.png")
+dst = multi_panel([rgb_img, before, after], ["rgb", "before","after"], middle_width, top_border, 40)
+dst.save("before_after.png")
 
 
 
@@ -156,7 +167,7 @@ def run_inference(initial_particles, ground_truth_images):
         return (particles, weights, keys), particles
 
     initial_weights = jnp.full(initial_particles.shape[0], 0.0)
-    initial_key = jax.random.PRNGKey(3)
+    initial_key = jax.random.PRNGKey(5)
     initial_keys = jax.random.split(initial_key, initial_particles.shape[0])
     return jax.lax.scan(particle_filtering_step, (initial_particles, initial_weights, initial_keys), ground_truth_images)
 

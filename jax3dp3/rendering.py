@@ -113,6 +113,30 @@ def render_sphere(pose, shape, h,w, fx_fy, cx_cy):
     points_homogeneous = jnp.concatenate([points, jnp.ones((h,w,1))],axis=-1)
     return points_homogeneous
 
+
+def render_spheres(poses, radii, h, w, fx_fy, cx_cy):
+    center = poses[:, :3,-1]
+    center_norm_square = jnp.linalg.norm(center,axis=-1)**2
+
+    r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
+    pixel_coords = jnp.stack([r,c],axis=-1)
+    pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
+    u = pixel_coords_dir / jnp.linalg.norm(pixel_coords_dir,axis=-1, keepdims=True)
+
+    u_dot_c = jnp.einsum("ijk,ak->ija", u, -center)
+
+    nabla = u_dot_c**2 - (center_norm_square - radii**2)
+    valid = nabla > 0
+
+    d = valid * (-u_dot_c - jnp.sqrt(nabla))
+    points = jnp.einsum("...ai,...ki->...ak", d[:,:,:, None], u[:,:,:,None])
+    z_vals = (10000.0 - points[:,:,:,2]) * (points[:,:,:,2] > 0.0)
+    idxs = jnp.argmax(z_vals, axis=-1)
+
+    points = points[jnp.arange(points.shape[0])[:, None], jnp.arange(points.shape[1])[None, :], idxs]
+    points_homogeneous = jnp.concatenate([points, jnp.ones((h,w,1))],axis=-1)
+    return points_homogeneous
+
 def render_planes_vmapper(pose, shape, h,w, fx_fy, cx_cy):
     shape_planes, shape_dimensions = shape
     plane_poses = jnp.einsum("ij,ajk",pose, shape_planes)

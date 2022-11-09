@@ -20,6 +20,7 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 import cv2
 from functools import partial 
+from jax3dp3.likelihood import threedp3_likelihood
 
 OBJ_DEFAULT_POSE = TEMPLATE_DEFAULT_POSE = jnp.array([
     [1.0, 0.0, 0.0, -1.0],   
@@ -86,6 +87,12 @@ middle_width = 20
 top_border = 45
 cm = plt.get_cmap("turbo")
 
+def make_scoring_function(shape, h, w, fx_fy, cx_cy, r, outlier_prob):
+    def scorer(pose, gt_image):
+        rendered_image = render_planes(pose, shape, h, w, fx_fy, cx_cy)
+        weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
+        return weight
+    return scorer
 
 ### Define scoring functions
 def make_scoring_function(shape, h, w, fx_fy, cx_cy, r, outlier_prob):

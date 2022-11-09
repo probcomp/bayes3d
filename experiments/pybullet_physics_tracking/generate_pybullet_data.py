@@ -15,31 +15,33 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 planeId = p.loadURDF("plane.urdf")
 
 
-cubeStartPos = [0, 0, 1]
+cubeStartPos = [-5, -4, 4]
 cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
 filename_1 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/003_cracker_box/textured.obj'
 scale_1 = [10.0, 10.0, 10.0]
-brick_coll = p.createCollisionShape(p.GEOM_MESH, fileName=filename_1, meshScale=scale_1)
-brick_vis = p.createVisualShape(p.GEOM_MESH, fileName=filename_1, meshScale=scale_1)
-brick = p.createMultiBody(baseMass=1110.0001,
-                            baseCollisionShapeIndex=brick_coll, baseVisualShapeIndex=brick_vis,
+sphere_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=0.3)
+sphere_visual_shape = p.createVisualShape(p.GEOM_SPHERE,radius=0.3)
+sphere_obj = p.createMultiBody(baseMass=1110.0001,
+                            baseCollisionShapeIndex=sphere_collision_shape, baseVisualShapeIndex=sphere_visual_shape,
                             basePosition=cubeStartPos,
                             baseOrientation=cubeStartOrientation)
 
-cubeStartPos = [-5, 0, 5]
-cubeStartOrientation = p.getQuaternionFromEuler([np.pi/10,np.pi/3,np.pi/5])
+cubeStartPos = [2, 0, 2.1]
+cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
 filename_2 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/003_cracker_box/textured.obj'
-scale_2 = [10.0, 10.0, 10.0]
-obj_2_coll = p.createCollisionShape(p.GEOM_MESH, fileName=filename_2, meshScale=scale_2)
-obj_2_vis = p.createVisualShape(p.GEOM_MESH, fileName=filename_2, meshScale=scale_2)
-obj_2 = p.createMultiBody(baseMass=0.0001,
-                            baseCollisionShapeIndex=obj_2_coll, baseVisualShapeIndex=obj_2_vis,
+scale_2 = [1000.0, 1000.0, 1000.0]
+box_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=1.0)
+box_visual_shape = p.createVisualShape(p.GEOM_SPHERE, radius=1.0)
+box_obj = p.createMultiBody(baseMass=0.1,
+                            baseCollisionShapeIndex=box_collision_shape, baseVisualShapeIndex=box_visual_shape,
                             basePosition=cubeStartPos,
                             baseOrientation=cubeStartOrientation)
 
-p.changeDynamics(planeId, -1, restitution=1.1)
-p.changeDynamics(brick, -1, restitution=1.1)
-p.changeDynamics(obj_2, -1, restitution=1.1)
+p.resetBaseVelocity(sphere_obj, [0.0, 4.0, -1.0], [0.0, 0.0, 0.0])
+
+p.changeDynamics(planeId, -1, restitution=1.0)
+p.changeDynamics(sphere_obj, -1, restitution=1.1)
+p.changeDynamics(box_obj, -1, restitution=1.0)
 
 viewMatrix = p.computeViewMatrix(
     cameraEyePosition=np.array([10.0, 0.0, 1.0]),
@@ -65,7 +67,7 @@ fy = cy / np.tan(fov_y / 2.0)
 rgb_imgs = []
 depth_imgs = []
 for _ in range(50):
-    for _ in range(10):     
+    for _ in range(20):     
         p.stepSimulation()
     w,h, rgb, depth, segmentation = p.getCameraImage(width, height,
         viewMatrix,
@@ -74,14 +76,6 @@ for _ in range(50):
     depth = far * near / (far - (far - near) * depth)
     rgb_imgs.append(rgb)
     depth_imgs.append(depth)
-
-for _ in range(100):
-    p.stepSimulation()
-
-w, h, rgb, depth, segmentation = p.getCameraImage(
-    width, height, viewMatrix, projMatrix
-)
-
 
 np.savez("data.npz", rgb_imgs=rgb_imgs, depth_imgs=depth_imgs, fx=fx, fy=fy, cx=cx, cy=cy, width=width, height=height)
 

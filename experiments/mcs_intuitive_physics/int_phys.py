@@ -98,7 +98,7 @@ def likelihood(x, obs):
 likelihood_parallel = jax.vmap(likelihood, in_axes = (0, None))
 likelihood_parallel_jit = jax.jit(likelihood_parallel)
 
-enumerations = make_translation_grid_enumeration(-0.4, -0.4, -0.4, 0.4, 0.4, 0.4, 51, 21, 11)
+enumerations = make_translation_grid_enumeration(-1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 51, 21, 11)
 
 depth_data = (coord_images * mask[:,:,:,None])
 
