@@ -15,16 +15,6 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 planeId = p.loadURDF("plane.urdf")
 
 
-cubeStartPos = [-5, -4, 4]
-cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
-filename_1 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/003_cracker_box/textured.obj'
-scale_1 = [10.0, 10.0, 10.0]
-sphere_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=0.3)
-sphere_visual_shape = p.createVisualShape(p.GEOM_SPHERE,radius=0.3)
-sphere_obj = p.createMultiBody(baseMass=1110.0001,
-                            baseCollisionShapeIndex=sphere_collision_shape, baseVisualShapeIndex=sphere_visual_shape,
-                            basePosition=cubeStartPos,
-                            baseOrientation=cubeStartOrientation)
 
 cubeStartPos = [2, 0, 2.1]
 cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
@@ -36,6 +26,18 @@ box_obj = p.createMultiBody(baseMass=0.1,
                             baseCollisionShapeIndex=box_collision_shape, baseVisualShapeIndex=box_visual_shape,
                             basePosition=cubeStartPos,
                             baseOrientation=cubeStartOrientation)
+
+cubeStartPos = [-5, -4, 4]
+cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
+filename_1 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/003_cracker_box/textured.obj'
+scale_1 = [10.0, 10.0, 10.0]
+sphere_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=0.3)
+sphere_visual_shape = p.createVisualShape(p.GEOM_SPHERE,radius=0.3)
+sphere_obj = p.createMultiBody(baseMass=1110.0001,
+                            baseCollisionShapeIndex=sphere_collision_shape, baseVisualShapeIndex=sphere_visual_shape,
+                            basePosition=cubeStartPos,
+                            baseOrientation=cubeStartOrientation)
+
 
 p.resetBaseVelocity(sphere_obj, [0.0, 4.0, -1.0], [0.0, 0.0, 0.0])
 

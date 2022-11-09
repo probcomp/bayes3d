@@ -11,6 +11,7 @@ from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
 from jax3dp3.distributions import gaussian_vmf
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
+from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
 
 import time
 from PIL import Image
@@ -21,7 +22,7 @@ from jax.scipy.special import logsumexp
 from jax3dp3.viz.gif import make_gif
 from jax3dp3.viz.img import multi_panel
 from jax3dp3.enumerations import make_grid_enumeration
-from jax3dp3.rendering import render_planes_multiobject
+from jax3dp3.rendering import render_spheres
 
 data = np.load("data.npz")
 depth_imgs = np.array(data["depth_imgs"]).copy()
@@ -61,25 +62,18 @@ fx_fy = jnp.array([fx, fy])
 cx_cy = jnp.array([cx,cy])
 ground_truth_images = jnp.array(ground_truth_images)
 
-r = 0.2
-outlier_prob = 0.2
+r = 0.1
+outlier_prob = 0.05
 
-shape_planes = []
-shape_dims = []
-for _ in range(2):
-    plane, dims = shape = get_rectangular_prism_shape(jnp.array([3.0, 4.3, 1.15])/2.0)
-    shape_planes.append(plane)
-    shape_dims.append(dims)
-shape_dims = jnp.array(shape_dims)
-shape_planes = jnp.array(shape_planes)
+radii = jnp.array([1.0, 0.2])
 
-render_from_pose = lambda pose: render_planes(pose,shape,h,w,fx_fy,cx_cy)
+render_from_pose = lambda pose: render_spheres(pose,radii,h,w,fx_fy,cx_cy)
 render_from_pose_jit = jax.jit(render_from_pose)
 render_planes_parallel_jit = jax.jit(jax.vmap(lambda x: render_from_pose(x)))
 
 
 def likelihood(x, obs):
-    rendered_image = render_planes_multiobject(x, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
+    rendered_image = render_spheres(x, radii, h,w, fx_fy, cx_cy)
     weight = threedp3_likelihood(obs, rendered_image, r, outlier_prob)
     return weight
 likelihood_parallel = jax.vmap(likelihood, in_axes = (0, None))
@@ -92,13 +86,13 @@ initial_poses_estimates = jnp.array(
     [
         [
             [1.0, 0.0, 0.0, 0.00],
-            [0.0, 1.0, 0.0, 1.00],
+            [0.0, 1.0, 0.0, -1.1],
             [0.0, 0.0, 1.0, 8.0],
             [0.0, 0.0, 0.0, 1.0],
         ],
         [
-            [1.0, 0.0, 0.0, -3.00],
-            [0.0, 1.0, 0.0, -2.00],
+            [1.0, 0.0, 0.0, -4.00],
+            [0.0, 1.0, 0.0, -3.00],
             [0.0, 0.0, 1.0, 15.0],
             [0.0, 0.0, 0.0, 1.0],
         ],
@@ -113,28 +107,29 @@ rgb_img.save("rgb.png")
 
 
 initial_poses = initial_poses_estimates.copy()
-rendered_image = render_planes_multiobject(initial_poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
+rendered_image = render_from_pose_jit(initial_poses)
 before = Image.fromarray(
     (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
 ).resize((original_width,original_height))
 
-find_best_pose = jax.jit(lambda x,y: enumerative_inference_single_frame(likelihood_parallel, x, y))
 
-enumerations1 = make_grid_enumeration(-0.4, -0.4, -0.4, 0.4, 0.4, 0.4, 4, 4, 4, 20, 10)
-enumerations2 = make_grid_enumeration(-0.0, -0.0, -0.0, 0.0, 0.0, 0.0, 1, 1, 1, 300, 20)
 for _ in range(10):
     for i in range(initial_poses.shape[0]):
+        enumerations1 = make_grid_enumeration(-0.4, -0.4, -0.4, 0.4, 0.4, 0.4, 10, 10, 10, 2, 1)
         initial_poses_expanded = jnp.tile(initial_poses[None, :, :, :], (enumerations1.shape[0], 1, 1, 1))
         proposals = initial_poses_expanded.at[:, i].set(jnp.einsum("...ij,...jk->...ik", initial_poses_expanded[:, i], enumerations1))
-        proposals_batched = jnp.array(jnp.split(proposals, 40))
-        initial_poses, _ = find_best_pose(ground_truth_images[0], proposals_batched)
+        weights = likelihood_parallel_jit(proposals, ground_truth_images[0])
+        initial_poses = proposals[jnp.argmax(weights)]
 
-        initial_poses_expanded = jnp.tile(initial_poses[None, :, :, :], (enumerations2.shape[0], 1, 1, 1))
-        proposals = initial_poses_expanded.at[:, i].set(jnp.einsum("...ij,...jk->...ik", initial_poses_expanded[:, i], enumerations2))
-        proposals_batched = jnp.array(jnp.split(proposals, 40))
-        initial_poses, _ = find_best_pose(ground_truth_images[0], proposals_batched)
 
-rendered_image = render_planes_multiobject(initial_poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
+save_depth_image(ground_truth_images[0][:,:,2],20.0,"gt_depth.png")
+save_depth_image(render_from_pose(initial_poses)[:,:,2],20.0,"inferred_depth.png")
+
+
+
+
+
+rendered_image = render_from_pose_jit(initial_poses)
 after = Image.fromarray(
     (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
 ).resize((original_width,original_height))
@@ -144,9 +139,6 @@ dst.save("before_after.png")
 
 
 DRIFT_VAR = 0.4
-
-
-
 
 def run_inference(initial_particles, ground_truth_images):
     variances = jnp.array([0.05, 0.3, 0.5])
@@ -209,8 +201,8 @@ for i in range(ground_truth_images.shape[0]):
     ).resize((original_width,original_height))
 
     pose = x[i,-1,:,:,:]
-    rendered_image = render_planes_multiobject(pose, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
-    
+    rendered_image = render_from_pose_jit(pose)
+
     rendered_depth_img = Image.fromarray(
         (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
     ).resize((original_width,original_height))
