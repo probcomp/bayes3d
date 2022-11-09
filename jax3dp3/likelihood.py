@@ -16,7 +16,7 @@ def count_ii_jj(
     r: float,
     filter_size: int
 ):
-    t = data_xyz[ij[0], ij[1], :] - jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 4))
+    t = data_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
     distance = jnp.linalg.norm(t, axis=-1).ravel() # (4,4)
     return jnp.sum(distance <= r)
 

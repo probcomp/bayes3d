@@ -1,5 +1,5 @@
 {
-  "name": "eval_5_validation_passive_spatio_temporal_continuity_0001_08",
+  "name": "eval_5_validation_passive_spatio_temporal_continuity_0001_01",
   "version": 3,
   "ceilingMaterial": "AI2-THOR/Materials/Walls/Drywall4Tiled",
   "floorMaterial": "AI2-THOR/Materials/Fabrics/CarpetWhite 3",
@@ -25,13 +25,13 @@
       "shows": [
         {
           "position": {
-            "x": -4.16,
+            "x": -4.67,
             "y": 0.0126,
-            "z": 1.6
+            "z": 2.45
           },
           "rotation": {
             "x": 0.0,
-            "y": 70.0,
+            "y": 90.0,
             "z": 0.0
           },
           "stepBegin": 90,
@@ -48,17 +48,10 @@
           "stepBegin": 90,
           "stepEnd": 90,
           "vector": {
-            "x": 0,
-            "y": 0,
-            "z": 7875.0
-          },
-          "relative": true
-        }
-      ],
-      "shrouds": [
-        {
-          "stepBegin": 99,
-          "stepEnd": 111
+            "x": 8190.0,
+            "y": 0.0,
+            "z": 0.0
+          }
         }
       ]
     },
