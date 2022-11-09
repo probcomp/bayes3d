@@ -61,13 +61,9 @@ min_r = 0
 max_r = cube_length * 2
 
 all_images = []
-cloud = cloud[cloud[:,:,2] > 0]
 for likelihood_r in reversed(jnp.linspace(min_r, max_r, 40)):
     print("likelihood r =", likelihood_r)
-    cloud_copy = cloud.reshape(-1, 3)  # reshape to ensure correct scan dimensions
-    key = jax.random.PRNGKey(214)
-    keys = jax.random.split(key, cloud.shape[0])
-    _,sampled_cloud_r = jax.vmap(sample_coordinate_within_r, in_axes=(None, 0, 0))(likelihood_r, keys, cloud_copy)
+    sampled_cloud_r = sample_cloud_within_r(cloud, likelihood_r)
     rendered_cloud_r = render_cloud_at_pose(sampled_cloud_r, jnp.eye(4), h, w, fx_fy, cx_cy, pixel_smudge)
     
     hypothesis_depth_img = get_depth_image(rendered_cloud_r[:, :, 2], max_depth).resize((w*width_scaler, h*height_scaler))

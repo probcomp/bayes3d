@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import jax
+import numpy as np
 import functools
 from .utils import extract_2d_patches
 from functools import partial
@@ -60,8 +61,9 @@ def sample_coordinate_within_r(r, key, coord):
     return new_key, coord + jnp.array([sx, sy, sz]) 
 
 def sample_cloud_within_r(cloud, r):
-    cloud_copy = cloud.reshape(-1, 3)  # reshape to ensure correct scan dimensions
+    cloud = cloud[cloud[:,:,2] > 0].reshape(-1, 3)
     key = jax.random.PRNGKey(214)
-    sample_coordinate_partial = partial(sample_coordinate_within_r, r)
+    keys = jax.random.split(key, cloud.shape[0])
+    _, sampled_cloud_r = jax.vmap(sample_coordinate_within_r, in_axes=(None, 0, 0))(r, keys, cloud)
 
-    return jax.lax.scan(sample_coordinate_partial, key, cloud_copy)[-1]
+    return sampled_cloud_r
