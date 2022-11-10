@@ -102,9 +102,9 @@ latent_pose_estimate = jnp.array([
 
 
 # tuples of (radius, width of gridding, grid_resolution)
-schedule_tr = [(0.1, 3, 10), (0.1, 1, 10), (0.05, 0.24, 3), (0.01, 0.05, 3)]
+schedule_tr = [(0.1, 3, 10), (0.1, 1, 10), (0.05, 0.24, 5), (0.01, 0.05, 5)]
 schedule_rot = [(10, 10), (20, 20), (30, 30), (30,30)]
-viz_stepsizes = [9,9,25,25]
+viz_stepsizes = [1,1,5,5]
 
 all_images = []
 for (r, grid_width, num_grid_points), (fib_nums, rot_nums) in zip(schedule_tr, schedule_rot):
@@ -126,11 +126,11 @@ for (r, grid_width, num_grid_points), (fib_nums, rot_nums) in zip(schedule_tr, s
 
     # # rotation
     # enumerations_r = get_rotation_proposals(fib_nums, rot_nums)  
-    # proposals = jnp.einsum('ij,ajk->aik', current_pose_estimate, enumerations_r)
+    # proposals = jnp.einsum('ij,ajk->aik', best_pose_estimate, enumerations_r)
     # proposals_batches = batch_split(proposals, 4)
     # print("(rot) proposals batches size=", proposals_batches.shape)
     # weights = batched_scorer_parallel(scorer_parallel, proposals_batches, gt_image, r).reshape(-1)
-    # current_pose_estimate = proposals[jnp.argmax(weights)]
+    # best_pose_estimate = proposals[jnp.argmax(weights)]
 
 
     print('best_pose_estimate:');print(best_pose_estimate)
@@ -162,10 +162,10 @@ for (r, grid_width, num_grid_points), (fib_nums, rot_nums) in zip(schedule_tr, s
         f"Enumeration\ngridscale={grid_width/num_grid_points}"]
         dst = multi_panel(images, labels, middle_width, top_border, 13)
         all_images.append(dst)
-
+        print(i)
 
     # viz: pause at best estimated pose
-    pause_frames_at_best = 100
+    pause_frames_at_best = 25
     best_pose_x, best_pose_y, best_pose_z = best_pose_estimate[:3, -1]
     for _ in range(pause_frames_at_best):
         transl_proposal_image = get_depth_image(render_planes_lambda(best_pose_estimate)[:, :, 2], max_depth).resize((w*width_scaler, h*height_scaler))
