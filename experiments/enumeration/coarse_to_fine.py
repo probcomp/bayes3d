@@ -6,10 +6,11 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 from jax3dp3.icp import icp
+from jax3dp3.batched_scorer import batched_scorer_parallel
 from jax3dp3.likelihood import sample_cloud_within_r, threedp3_likelihood
 from jax3dp3.rendering import render_planes, render_cloud_at_pose
 from jax3dp3.enumerations import get_rotation_proposals
-from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
+from jax3dp3.enumerations_procedure import enumerative_inference_single_frame, batch_split
 from jax3dp3.shape import get_cube_shape, get_corner_shape
 from jax3dp3.utils import make_centered_grid_enumeration_3d_points, depth_to_coords_in_camera
 from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
@@ -24,11 +25,7 @@ from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.enumerations import make_grid_enumeration, make_translation_grid_enumeration
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, transform_from_pos
 
-## Viz properties
-middle_width = 20
-top_border = 45
-cm = plt.get_cmap("turbo")
-
+## Camera settings
 h, w, fx_fy, cx_cy = (
     100,
     100,
@@ -43,12 +40,24 @@ cx, cy = cx_cy
 max_depth = 5.0
 K = jnp.array([[fx, 0, cx], [0, fy, cy], [0,0,1]])
 
+## Viz properties
+middle_width = 20
+top_border = 50
+num_images = 2  # gt and smapled
+
+og_width = num_images * w + (num_images - 1) * middle_width
+og_height = h + top_border
+
+width_scaler = 2
+height_scaler = 2
 
 ### Generate GT images
+gx, gy, gz = 0.531, 0.501, 1.950
+eulerx, eulery, eulerz = 0, 0, 0
 gt_pose = jnp.array([
-    [1.0, 0.0, 0.0, -1.0],   
-    [0.0, 1.0, 0.0, -1.0],   
-    [0.0, 0.0, 1.0, 2.0],   
+    [1.0, 0.0, 0.0, gx],   
+    [0.0, 1.0, 0.0, gy],   
+    [0.0, 0.0, 1.0, gz],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
@@ -69,39 +78,123 @@ def scorer(pose, gt_image, r):
     return weight
 scorer_parallel = jax.vmap(scorer, in_axes = (0, None, None))
 scorer_parallel_jit = jax.jit(scorer_parallel)
+batched_scorer_parallel_jit = jax.jit(partial(batched_scorer_parallel, scorer_parallel))
+
 
 observed = gt_image
 print("GT image shape=", observed.shape)
 print("GT pose=", gt_pose)
 
+gt_depth_img = get_depth_image(observed[:,:,2], max_depth).resize((w*width_scaler, h*height_scaler))
 save_depth_image(observed[:,:,2], max_depth, "gt_img.png")
 
 # Example of nans
 nans = scorer(transform_from_pos(jnp.array([0.0, 0.0, -10.0])), gt_image, 0.1)
 
 
-current_pose_estimate = gt_pose
+latent_pose_estimate = jnp.array([
+    [1.0, 0.0, 0.0, 0],   
+    [0.0, 1.0, 0.0, 0],   
+    [0.0, 0.0, 1.0, 2],   
+    [0.0, 0.0, 0.0, 1.0],   
+    ]
+)
+
 
 # tuples of (radius, width of gridding, grid_resolution)
-schedule = [(0.1, 3.0, 20), (0.1, 0.5, 10), (0.05, 0.1, 10), (0.01, 0.05, 10)]
+schedule_tr = [(0.1, 3, 10), (0.1, 1, 10), (0.05, 0.24, 3), (0.01, 0.05, 3)]
+schedule_rot = [(10, 10), (20, 20), (30, 30), (30,30)]
+viz_stepsizes = [9,9,25,25]
 
-for (r, width, num_grid_points) in schedule:
-    enumerations = make_translation_grid_enumeration(
-        -width, -width, -width,
-        width, width, width,
+all_images = []
+for (r, grid_width, num_grid_points), (fib_nums, rot_nums) in zip(schedule_tr, schedule_rot):
+    print(f"r={r}, grid_width={grid_width}, num_grid_points={num_grid_points}")
+    assert grid_width*2/num_grid_points - cube_length <= r
+    estx, esty, estz = latent_pose_estimate[:3, -1]  # hacky but this is for bbox viz
+
+    # translation
+    enumerations_t = make_translation_grid_enumeration(
+        -grid_width, -grid_width, -grid_width,
+        grid_width, grid_width, grid_width,
         num_grid_points,num_grid_points,num_grid_points
     )
-    proposals = jnp.einsum("...ij,...jk->...ik", current_pose_estimate, enumerations)
-    weights = scorer_parallel_jit(proposals, gt_image, r)
-    current_pose_estimate = proposals[jnp.argmax(weights)]
-    print('current_pose_estimate:');print(current_pose_estimate)
+    proposals = jnp.einsum("...ij,...jk->...ik", latent_pose_estimate, enumerations_t)
+    proposals_batches = batch_split(proposals, 4)
+    print("(tr) proposals batches size=", proposals_batches.shape)
+    weights = batched_scorer_parallel_jit(proposals_batches, gt_image, r).reshape(-1)
+    best_pose_estimate = proposals[jnp.argmax(weights)]
 
-save_depth_image(render_planes_jit(current_pose_estimate)[:,:,2], max_depth, "inferred.png")
+    # # rotation
+    # enumerations_r = get_rotation_proposals(fib_nums, rot_nums)  
+    # proposals = jnp.einsum('ij,ajk->aik', current_pose_estimate, enumerations_r)
+    # proposals_batches = batch_split(proposals, 4)
+    # print("(rot) proposals batches size=", proposals_batches.shape)
+    # weights = batched_scorer_parallel(scorer_parallel, proposals_batches, gt_image, r).reshape(-1)
+    # current_pose_estimate = proposals[jnp.argmax(weights)]
+
+
+    print('best_pose_estimate:');print(best_pose_estimate)
+
+
+    # Viz
+    print("Viz...")
+
+    pose_hypothesis_depth = render_planes_lambda(latent_pose_estimate)[:, :, 2] #sample_likelihood this
+    cloud = depth_to_coords_in_camera(pose_hypothesis_depth, K)[0]
+    sampled_cloud_r = sample_cloud_within_r(cloud, r)  # new cloud
+    rendered_cloud_r = render_cloud_at_pose(sampled_cloud_r, jnp.eye(4), h, w, fx_fy, cx_cy, pixel_smudge)
+
+    hypothesis_depth_img = get_depth_image(rendered_cloud_r[:, :, 2], max_depth).resize((w*width_scaler, h*height_scaler))    
+
+    # hypothesis_depth_img = enumeration_range_bbox_viz(hypothesis_depth_img, \
+    #                     estx-grid_width, estx+grid_width, \
+    #                     esty-grid_width, esty+grid_width, \
+    #                     estz-grid_width, estz+grid_width, \
+    #                     fx_fy, cx_cy, f"search_range.png")
+
+    viz_stepsize = viz_stepsizes.pop()
+    latent_pose_x, latent_pose_y, latent_pose_z = latent_pose_estimate[:3, -1]
+    for i in range(proposals.shape[0]//viz_stepsize): 
+        transl_proposal_image = get_depth_image(render_planes_lambda(proposals[i*viz_stepsize])[:, :, 2], max_depth).resize((w*width_scaler, h*height_scaler))
+        images = [gt_depth_img, hypothesis_depth_img, transl_proposal_image]
+        labels = [f"GT Image\n latent pose={gx, gy, gz}\n rotx={eulerx}, roty={eulery}, rotz={eulerz}", \
+        f"Likelihood evaluation\nr={r},\nlatent pose={int(latent_pose_x*100)/100, int(latent_pose_y*100)/100, int(latent_pose_z*100)/100}", \
+        f"Enumeration\ngridscale={grid_width/num_grid_points}"]
+        dst = multi_panel(images, labels, middle_width, top_border, 13)
+        all_images.append(dst)
+
+
+    # viz: pause at best estimated pose
+    pause_frames_at_best = 100
+    best_pose_x, best_pose_y, best_pose_z = best_pose_estimate[:3, -1]
+    for _ in range(pause_frames_at_best):
+        transl_proposal_image = get_depth_image(render_planes_lambda(best_pose_estimate)[:, :, 2], max_depth).resize((w*width_scaler, h*height_scaler))
+        images = [gt_depth_img, hypothesis_depth_img, transl_proposal_image]
+        labels = [f"GT Image\n latent pose={gx, gy, gz}\n rotx={eulerx}, roty={eulery}, rotz={eulerz}", \
+        f"Likelihood evaluation\nr={r},\nlatent pose={int(best_pose_x*100)/100, int(best_pose_y*100)/100, int(best_pose_z*100)/100}", \
+        f"BEST ESTIMATED POSE=\n{int(best_pose_x*100)/100, int(best_pose_y*100)/100, int(best_pose_z*100)/100}"]
+        dst = multi_panel(images, labels, middle_width, top_border, 13)
+        all_images.append(dst)
+
+    latent_pose_estimate = best_pose_estimate
+
+    print("------------------")
+
+
+all_images[0].save(
+    fp=f"likelihood_out.gif",
+    format="GIF",
+    append_images=all_images,
+    save_all=True,
+    duration=75,
+    loop=0,
+)
+
+from IPython import embed; embed()
 
 
 ############################# NISHADS STUFF ^ ############################# 
 
-from IPython import embed; embed()
 
 
 # -----------------------------------------------------------------------
@@ -157,7 +250,7 @@ for stage in range(C2F_ITERS):
     rotation_proposals = get_rotation_proposals(fib_numsteps, rot_numsteps)  
 
     cx, cy, cz = current_pose_center[:3, -1]
-    _ = enumeration_range_bbox_viz(get_depth_image(best_image[:,:,2], max_depth), cx-search_r, cx+search_r, \
+    bbox_viz = enumeration_range_bbox_viz(get_depth_image(best_image[:,:,2], max_depth), cx-search_r, cx+search_r, \
                             cy-search_r, cy+search_r, \
                             cz-search_r, cz+search_r, \
                             fx_fy, cx_cy, f"{stage}_search_range.png")

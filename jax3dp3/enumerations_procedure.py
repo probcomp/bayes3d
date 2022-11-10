@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 
 def enumerative_inference_single_frame(scorer_parallel, gt_image, proposals_batches):  
-    # scan over batches of rotation proposals for single image
+    # scan over batches of pose proposals for single image
     def _enum_infer_batch_scan(carry, proposals):   
         # score over the selected rotation proposals
         weights_new = scorer_parallel(proposals, gt_image)
@@ -12,6 +12,13 @@ def enumerative_inference_single_frame(scorer_parallel, gt_image, proposals_batc
         return (new_x, new_weight), None  # return highest weight pose proposal encountered so far
     best_prop, _ = jax.lax.scan(_enum_infer_batch_scan, (jnp.empty(proposals_batches.shape[2:]), jnp.NINF), proposals_batches)
     return best_prop
+
+
+def batch_split(proposals, num_batches):
+    if len(proposals) % num_batches != 0:
+        print("WARNING: Not evenly divisible; defaulting to 1x split")
+        num_batches = 1
+    return jnp.array(jnp.split(proposals, num_batches))
 
 
 #### 
