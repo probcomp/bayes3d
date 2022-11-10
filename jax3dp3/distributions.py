@@ -8,6 +8,16 @@ from .transforms_3d import (
 from jax.scipy.special import logsumexp
 
 
+def gaussian_vmf_cov(key, covar, concentration):
+    translation = tfp.distributions.MultivariateNormalFullCovariance(jnp.zeros(3), covar).sample(seed=key)
+    quat = tfp.distributions.VonMisesFisher(
+        jnp.array([1.0, 0.0, 0.0, 0.0]), concentration
+    ).sample(seed=key)
+    rot_matrix =  quaternion_to_rotation_matrix(quat)
+    return jnp.vstack(
+        [jnp.hstack([rot_matrix, translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
+    )
+
 def gaussian_vmf(key, var, concentration):
     translation = tfp.distributions.MultivariateNormalDiag(jnp.zeros(3), jnp.ones(3) * var).sample(seed=key)
     quat = tfp.distributions.VonMisesFisher(
