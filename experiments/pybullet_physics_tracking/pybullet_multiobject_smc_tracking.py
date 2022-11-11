@@ -63,7 +63,7 @@ cx_cy = jnp.array([cx,cy])
 ground_truth_images = jnp.array(ground_truth_images)
 
 r = 0.1
-outlier_prob = 0.05
+outlier_prob = 0.1
 
 radii = jnp.array([0.5, 0.3])
 
@@ -140,7 +140,6 @@ dst.save("before_after.png")
 
 DRIFT_VAR = 0.4
 
-from IPython import embed; embed()
 
 def run_inference(initial_particles, ground_truth_images):
     variances = jnp.stack([
@@ -155,25 +154,25 @@ def run_inference(initial_particles, ground_truth_images):
 
     def particle_filtering_step(data, gt_image):
         particles, weights, keys = data
-        for i in range(particles.shape[1]):
-            proposal_type = jax.random.categorical(keys[0], mixture_logits, shape=(particles.shape[0],))
-            drift_poses = jax.vmap(gaussian_vmf_cov, in_axes=(0, 0, 0))(keys, variances[proposal_type], concentrations[proposal_type])
-            particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", particles[:,i], drift_poses))
-            weights = weights + likelihood_parallel(particles, gt_image)
-            parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
-            particles = particles[parent_idxs]
-            weights = jnp.full(weights.shape[0],logsumexp(weights) - jnp.log(weights.shape[0]))
-            keys = jax.random.split(keys[0], weights.shape[0])
+        i = 1
+        proposal_type = jax.random.categorical(keys[0], mixture_logits, shape=(particles.shape[0],))
+        drift_poses = jax.vmap(gaussian_vmf_cov, in_axes=(0, 0, 0))(keys, variances[proposal_type], concentrations[proposal_type])
+        particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", particles[:,i], drift_poses))
+        weights = weights + likelihood_parallel(particles, gt_image)
+        parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
+        particles = particles[parent_idxs]
+        weights = jnp.full(weights.shape[0],logsumexp(weights) - jnp.log(weights.shape[0]))
+        keys = jax.random.split(keys[0], weights.shape[0])
         return (particles, weights, keys), particles
 
     initial_weights = jnp.full(initial_particles.shape[0], 0.0)
-    initial_key = jax.random.PRNGKey(5)
+    initial_key = jax.random.PRNGKey(6)
     initial_keys = jax.random.split(initial_key, initial_particles.shape[0])
     return jax.lax.scan(particle_filtering_step, (initial_particles, initial_weights, initial_keys), ground_truth_images)
 
 
 run_inference_jit = jax.jit(run_inference)
-num_particles = 5000
+num_particles = 50
 particles = []
 for _ in range(num_particles):
     particles.append(initial_poses)
@@ -228,7 +227,7 @@ for i in range(ground_truth_images.shape[0]):
 
 
 all_images[0].save(
-    fp="out.gif",
+    fp="out2.gif",
     format="GIF",
     append_images=all_images,
     save_all=True,

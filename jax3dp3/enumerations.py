@@ -74,3 +74,6 @@ def make_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x,num_y,num_
     translations = make_translation_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x,num_y,num_z)
     all_proposals = jnp.einsum("aij,bjk->abik", rotations, translations).reshape(-1, 4, 4)
     return all_proposals
+
+
+

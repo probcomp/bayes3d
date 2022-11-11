@@ -66,8 +66,8 @@ fy = cy / np.tan(fov_y / 2.0)
 
 rgb_imgs = []
 depth_imgs = []
-for _ in range(50):
-    for _ in range(20):     
+for _ in range(200):
+    for _ in range(5):     
         p.stepSimulation()
     w,h, rgb, depth, segmentation = p.getCameraImage(width, height,
         viewMatrix,
