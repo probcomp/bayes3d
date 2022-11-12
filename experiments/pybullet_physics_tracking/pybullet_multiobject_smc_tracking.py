@@ -8,7 +8,7 @@ from jax3dp3.utils import (
     depth_to_coords_in_camera
 )
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
-from jax3dp3.distributions import gaussian_vmf
+from jax3dp3.distributions import gaussian_vmf, gaussian_vmf_cov
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
 from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
@@ -63,9 +63,9 @@ cx_cy = jnp.array([cx,cy])
 ground_truth_images = jnp.array(ground_truth_images)
 
 r = 0.1
-outlier_prob = 0.05
+outlier_prob = 0.1
 
-radii = jnp.array([1.0, 0.2])
+radii = jnp.array([0.5, 0.3])
 
 render_from_pose = lambda pose: render_spheres(pose,radii,h,w,fx_fy,cx_cy)
 render_from_pose_jit = jax.jit(render_from_pose)
@@ -140,32 +140,39 @@ dst.save("before_after.png")
 
 DRIFT_VAR = 0.4
 
+
 def run_inference(initial_particles, ground_truth_images):
-    variances = jnp.array([0.05, 0.3, 0.5])
+    variances = jnp.stack([
+        jnp.diag(jnp.array([0.05, 0.05, 0.001])),
+        jnp.diag(jnp.array([0.3, 0.3, 0.001])),
+        jnp.diag(jnp.array([0.5, 0.5, 0.001])),
+    ]
+    )
+        # jnp.array(0.05, 0.3, 0.5])
     concentrations = jnp.array([2000.0, 300.0, 100.0])
-    mixture_logits = jnp.log(jnp.ones(variances.shape) / variances.shape[0])
+    mixture_logits = jnp.log(jnp.ones(concentrations.shape) / concentrations.shape[0])
 
     def particle_filtering_step(data, gt_image):
         particles, weights, keys = data
-        for i in range(particles.shape[1]):
-            proposal_type = jax.random.categorical(keys[0], mixture_logits, shape=(particles.shape[0],))
-            drift_poses = jax.vmap(gaussian_vmf, in_axes=(0, 0, 0))(keys, variances[proposal_type], concentrations[proposal_type])
-            particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", particles[:,i], drift_poses))
-            weights = weights + likelihood_parallel(particles, gt_image)
-            parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
-            particles = particles[parent_idxs]
-            weights = jnp.full(weights.shape[0],logsumexp(weights) - jnp.log(weights.shape[0]))
-            keys = jax.random.split(keys[0], weights.shape[0])
+        i = 1
+        proposal_type = jax.random.categorical(keys[0], mixture_logits, shape=(particles.shape[0],))
+        drift_poses = jax.vmap(gaussian_vmf_cov, in_axes=(0, 0, 0))(keys, variances[proposal_type], concentrations[proposal_type])
+        particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", particles[:,i], drift_poses))
+        weights = weights + likelihood_parallel(particles, gt_image)
+        parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
+        particles = particles[parent_idxs]
+        weights = jnp.full(weights.shape[0],logsumexp(weights) - jnp.log(weights.shape[0]))
+        keys = jax.random.split(keys[0], weights.shape[0])
         return (particles, weights, keys), particles
 
     initial_weights = jnp.full(initial_particles.shape[0], 0.0)
-    initial_key = jax.random.PRNGKey(5)
+    initial_key = jax.random.PRNGKey(6)
     initial_keys = jax.random.split(initial_key, initial_particles.shape[0])
     return jax.lax.scan(particle_filtering_step, (initial_particles, initial_weights, initial_keys), ground_truth_images)
 
 
 run_inference_jit = jax.jit(run_inference)
-num_particles = 5000
+num_particles = 50
 particles = []
 for _ in range(num_particles):
     particles.append(initial_poses)
@@ -200,7 +207,7 @@ for i in range(ground_truth_images.shape[0]):
         mode="RGBA",
     ).resize((original_width,original_height))
 
-    pose = x[i,-1,:,:,:]
+    pose = x[i,0,:,:,:]
     rendered_image = render_from_pose_jit(pose)
 
     rendered_depth_img = Image.fromarray(
@@ -220,7 +227,7 @@ for i in range(ground_truth_images.shape[0]):
 
 
 all_images[0].save(
-    fp="out.gif",
+    fp="out2.gif",
     format="GIF",
     append_images=all_images,
     save_all=True,
