@@ -139,7 +139,7 @@ for (r, grid_width, num_grid_points), (fib_nums, rot_nums) in zip(schedule_tr, s
     # Viz
     print("Viz...")
 
-    pose_hypothesis_depth = render_planes_lambda(latent_pose_estimate)[:, :, 2] #sample_likelihood this
+    pose_hypothesis_depth = render_planes_lambda(gt_pose)[:, :, 2] #sample_likelihood this
     cloud = depth_to_coords_in_camera(pose_hypothesis_depth, K)[0]
     sampled_cloud_r = sample_cloud_within_r(cloud, r)  # new cloud
     rendered_cloud_r = render_cloud_at_pose(sampled_cloud_r, jnp.eye(4), h, w, fx_fy, cx_cy, pixel_smudge)
@@ -151,6 +151,9 @@ for (r, grid_width, num_grid_points), (fib_nums, rot_nums) in zip(schedule_tr, s
     #                     esty-grid_width, esty+grid_width, \
     #                     estz-grid_width, estz+grid_width, \
     #                     fx_fy, cx_cy, f"search_range.png")
+
+    from IPython import embed; embed()
+
 
     viz_stepsize = viz_stepsizes.pop()
     latent_pose_x, latent_pose_y, latent_pose_z = latent_pose_estimate[:3, -1]
