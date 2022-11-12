@@ -18,7 +18,7 @@ h, w, fx_fy, cx_cy = (
     jnp.array([50.0, 50.0]),
     jnp.array([50.0, 50.0]),
 )
-pixel_smudge = 0
+pixel_smudge = 5
 max_depth = 5.0
 K = jnp.array([[fx_fy[0], 0, cx_cy[0]], [0, fx_fy[1], cx_cy[1]], [0,0,1]])
 
@@ -51,7 +51,7 @@ pose_center = jnp.array([
     ]
 ) 
 gt_depth_img = get_depth_image(render_planes_jit(pose_center)[:,:,2], 5.0).resize((w*width_scaler, h*height_scaler))
-save_depth_image(render_planes_jit(pose_center)[:,:,2], 5.0,"GTIMAGE.png")
+# save_depth_image(render_planes_jit(pose_center)[:,:,2], 5.0,"GTIMAGE.png")
 
 pose_hypothesis_depth = render_planes_lambda(pose_center)[:, :, 2]  
 cloud = depth_to_coords_in_camera(pose_hypothesis_depth, K)[0]
@@ -80,7 +80,7 @@ for _ in range(5):
 
     
 all_images[0].save(
-    fp=f"likelihood_out.gif",
+    fp=f"sample_likelihood_smudge.gif",
     format="GIF",
     append_images=all_images,
     save_all=True,
@@ -89,6 +89,3 @@ all_images[0].save(
 )
 
 cloud.shape
-
-
-from IPython import embed; embed()

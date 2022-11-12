@@ -59,14 +59,14 @@ def make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_poi
     rotation_proposals = geodesicHopf_select_axis_vmap(unit_sphere_directions, jnp.arange(0, 2*jnp.pi, stepsize)).reshape(-1, 4, 4)
     return rotation_proposals
 
-def make_translation_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x,num_y,num_z):
+def make_translation_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x=2,num_y=2,num_z=2):
     deltas = jnp.stack(jnp.meshgrid(
         jnp.linspace(min_x, max_x, num_x),
         jnp.linspace(min_y, max_y, num_y),
         jnp.linspace(min_z, max_z, num_z)
     ),
         axis=-1)
-    deltas = deltas.reshape(-1,3)
+    deltas = deltas.reshape((-1,3),order='F')
     return jax.vmap(transform_from_pos)(deltas)
 
 def make_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x,num_y,num_z, fibonacci_sphere_points, num_planar_angle_points):
