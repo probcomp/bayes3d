@@ -26,9 +26,9 @@ brick = p.createMultiBody(baseMass=1110.0001,
                             basePosition=cubeStartPos,
                             baseOrientation=cubeStartOrientation)
 
-cubeStartPos = [-5, -4, 1]
-cubeStartOrientation = p.getQuaternionFromEuler([0.0, np.pi/2, 0.0])
-filename_2 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/009_gelatin_box/textured.obj'
+cubeStartPos = [-5, -4, 2.0]
+cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
+filename_2 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/004_sugar_box/textured.obj'
 scale_2 = [20.0, 20.0, 20.0]
 obj_2_coll = p.createCollisionShape(p.GEOM_MESH, fileName=filename_2, meshScale=scale_2)
 obj_2_vis = p.createVisualShape(p.GEOM_MESH, fileName=filename_2, meshScale=scale_2)
@@ -66,7 +66,7 @@ fy = cy / np.tan(fov_y / 2.0)
 
 rgb_imgs = []
 depth_imgs = []
-for y in np.linspace(-4.0, 3.0,50):
+for y in np.linspace(-4.0, 4.0,50):
     # for _ in range(5):     
     #     p.stepSimulation()
     new_position = copy(cubeStartPos)

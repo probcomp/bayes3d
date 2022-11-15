@@ -73,7 +73,7 @@ plane, dims = shape = get_rectangular_prism_shape(jnp.array([6.0, 8.3, 2.15])/2.
 shape_planes.append(plane)
 shape_dims.append(dims)
 
-plane, dims = shape = get_rectangular_prism_shape(jnp.array([4.3, 3.0, 1.15])/2.0)
+plane, dims = shape = get_rectangular_prism_shape(jnp.array([3.3, 7.0, 1.15])/2.0)
 shape_planes.append(plane)
 shape_dims.append(dims)
 
@@ -232,7 +232,7 @@ for i in range(ground_truth_images.shape[0]):
     overlay_img = Image.alpha_composite(i1, i2)
 
     translations = x[i, :, 1, :3, -1]
-    img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 3)
+    img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 1)
     projected_particles_img = get_depth_image(img[:,:,2], 40.0).resize((original_width,original_height))
 
 
