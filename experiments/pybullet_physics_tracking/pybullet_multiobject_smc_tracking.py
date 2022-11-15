@@ -22,7 +22,9 @@ from jax.scipy.special import logsumexp
 from jax3dp3.viz.gif import make_gif
 from jax3dp3.viz.img import multi_panel
 from jax3dp3.enumerations import make_grid_enumeration
-from jax3dp3.rendering import render_spheres
+from jax3dp3.rendering import render_spheres, render_cloud_at_pose,render_planes_multiobject
+from jax3dp3.rendering import render_planes_multiobject
+
 
 data = np.load("data.npz")
 depth_imgs = np.array(data["depth_imgs"]).copy()
@@ -63,17 +65,28 @@ cx_cy = jnp.array([cx,cy])
 ground_truth_images = jnp.array(ground_truth_images)
 
 r = 0.1
-outlier_prob = 0.1
+outlier_prob = 0.01
 
-radii = jnp.array([0.5, 0.3])
+shape_planes = []
+shape_dims = []
+plane, dims = shape = get_rectangular_prism_shape(jnp.array([6.0, 8.3, 2.15])/2.0)
+shape_planes.append(plane)
+shape_dims.append(dims)
 
-render_from_pose = lambda pose: render_spheres(pose,radii,h,w,fx_fy,cx_cy)
+plane, dims = shape = get_rectangular_prism_shape(jnp.array([4.3, 3.0, 1.15])/2.0)
+shape_planes.append(plane)
+shape_dims.append(dims)
+
+shape_dims = jnp.array(shape_dims)
+shape_planes = jnp.array(shape_planes)
+
+render_from_pose = lambda pose: render_planes_multiobject(pose, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
 render_from_pose_jit = jax.jit(render_from_pose)
 render_planes_parallel_jit = jax.jit(jax.vmap(lambda x: render_from_pose(x)))
 
 
 def likelihood(x, obs):
-    rendered_image = render_spheres(x, radii, h,w, fx_fy, cx_cy)
+    rendered_image = render_from_pose(x)
     weight = threedp3_likelihood(obs, rendered_image, r, outlier_prob)
     return weight
 likelihood_parallel = jax.vmap(likelihood, in_axes = (0, None))
@@ -87,13 +100,13 @@ initial_poses_estimates = jnp.array(
         [
             [1.0, 0.0, 0.0, 0.00],
             [0.0, 1.0, 0.0, -1.1],
-            [0.0, 0.0, 1.0, 8.0],
+            [0.0, 0.0, 1.0, 20.0],
             [0.0, 0.0, 0.0, 1.0],
         ],
         [
             [1.0, 0.0, 0.0, -4.00],
-            [0.0, 1.0, 0.0, -3.00],
-            [0.0, 0.0, 1.0, 15.0],
+            [0.0, 1.0, 0.0, 0.00],
+            [0.0, 0.0, 1.0, 25.0],
             [0.0, 0.0, 0.0, 1.0],
         ],
     ]
@@ -138,18 +151,15 @@ dst.save("before_after.png")
 
 
 
-DRIFT_VAR = 0.4
-
-
 def run_inference(initial_particles, ground_truth_images):
     variances = jnp.stack([
-        jnp.diag(jnp.array([0.05, 0.05, 0.001])),
-        jnp.diag(jnp.array([0.3, 0.3, 0.001])),
-        jnp.diag(jnp.array([0.5, 0.5, 0.001])),
+        jnp.diag(jnp.array([0.02, 0.02, 0.001])),
+        jnp.diag(jnp.array([0.02, 0.02, 0.001])),
+        jnp.diag(jnp.array([0.02, 0.02, 0.001])),
     ]
     )
         # jnp.array(0.05, 0.3, 0.5])
-    concentrations = jnp.array([2000.0, 300.0, 100.0])
+    concentrations = jnp.array([2000.0, 2000.0, 2000.0])
     mixture_logits = jnp.log(jnp.ones(concentrations.shape) / concentrations.shape[0])
 
     def particle_filtering_step(data, gt_image):
@@ -166,17 +176,18 @@ def run_inference(initial_particles, ground_truth_images):
         return (particles, weights, keys), particles
 
     initial_weights = jnp.full(initial_particles.shape[0], 0.0)
-    initial_key = jax.random.PRNGKey(6)
+    initial_key = jax.random.PRNGKey(3)
     initial_keys = jax.random.split(initial_key, initial_particles.shape[0])
     return jax.lax.scan(particle_filtering_step, (initial_particles, initial_weights, initial_keys), ground_truth_images)
 
 
 run_inference_jit = jax.jit(run_inference)
-num_particles = 50
+num_particles = 5000
 particles = []
 for _ in range(num_particles):
     particles.append(initial_poses)
 particles = jnp.stack(particles)
+
 _,x = run_inference_jit(particles, ground_truth_images)
 
 
@@ -220,8 +231,14 @@ for i in range(ground_truth_images.shape[0]):
     i2.putalpha(128)
     overlay_img = Image.alpha_composite(i1, i2)
 
-    images = [rgb_img, depth_img, rendered_depth_img, overlay_img]
-    labels = ["RGB Image", "Depth Image", "Inferred Depth", "Overlay"]
+    translations = x[i, :, 1, :3, -1]
+    img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 3)
+    projected_particles_img = get_depth_image(img[:,:,2], 40.0).resize((original_width,original_height))
+
+
+
+    images = [rgb_img, depth_img, rendered_depth_img, overlay_img, projected_particles_img]
+    labels = ["RGB Image Frame {}".format(i), "Depth Image", "Inferred Depth", "Overlay",  "Particles"]
     dst = multi_panel(images, labels, middle_width, top_border, 40)
     all_images.append(dst)
 
@@ -235,5 +252,20 @@ all_images[0].save(
     loop=0,
 )
 
+import matplotlib.pyplot as plt
+
+plt.scatter(translations[:,0],translations[:,1])
+plt.xlim(-4,4)
+plt.ylim(-4,4)
+plt.savefig("scatter.png")
+
+translations = x[20, :, 1, :3, -1]
+img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 3)
+save_depth_image(img[:,:,2], 40.0, "scatter.png")
+
+plt.clf()
+plt.matshow(img[:,:,2])
+plt.colorbar()
+plt.savefig("scatter.png")
 
 from IPython import embed; embed()

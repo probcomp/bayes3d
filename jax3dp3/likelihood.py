@@ -28,7 +28,7 @@ def threedp3_likelihood(
     r,
     outlier_prob
 ):
-    filter_size = 2
+    filter_size = 3
     obs_mask = obs_xyz[:,:,2] > 0.0
     rendered_mask = rendered_xyz[:,:,2] > 0.0
     rendered_xyz_padded = jax.lax.pad(rendered_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))

@@ -5,46 +5,46 @@ import pybullet as p
 import pybullet_data
 from jax3dp3.viz.gif import make_gif
 from PIL import Image
+from copy import copy
 from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
 
 p.connect(p.DIRECT)
 p.resetSimulation()
-p.setGravity(0, 0, -5)
+# p.setGravity(0, 0, -5)
 
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 planeId = p.loadURDF("plane.urdf")
 
-
-
-cubeStartPos = [2, 0, 1.0]
-cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
-filename_2 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/003_cracker_box/textured.obj'
-box_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=1.0)
-box_visual_shape = p.createVisualShape(p.GEOM_SPHERE, radius=0.5)
-box_obj = p.createMultiBody(baseMass=0.1,
-                            baseCollisionShapeIndex=box_collision_shape, baseVisualShapeIndex=box_visual_shape,
-                            basePosition=cubeStartPos,
-                            baseOrientation=cubeStartOrientation)
-
-cubeStartPos = [-5, -4, 4]
+cubeStartPos = [0, 0, 2.2]
 cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
 filename_1 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/003_cracker_box/textured.obj'
-sphere_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=0.3)
-sphere_visual_shape = p.createVisualShape(p.GEOM_SPHERE,radius=0.3)
-sphere_obj = p.createMultiBody(baseMass=1110.0001,
-                            baseCollisionShapeIndex=sphere_collision_shape, baseVisualShapeIndex=sphere_visual_shape,
+scale_1 = [20.0, 20.0, 20.0]
+brick_coll = p.createCollisionShape(p.GEOM_MESH, fileName=filename_1, meshScale=scale_1)
+brick_vis = p.createVisualShape(p.GEOM_MESH, fileName=filename_1, meshScale=scale_1)
+brick = p.createMultiBody(baseMass=1110.0001,
+                            baseCollisionShapeIndex=brick_coll, baseVisualShapeIndex=brick_vis,
                             basePosition=cubeStartPos,
                             baseOrientation=cubeStartOrientation)
 
+cubeStartPos = [-5, -4, 1]
+cubeStartOrientation = p.getQuaternionFromEuler([0.0, np.pi/2, 0.0])
+filename_2 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/009_gelatin_box/textured.obj'
+scale_2 = [20.0, 20.0, 20.0]
+obj_2_coll = p.createCollisionShape(p.GEOM_MESH, fileName=filename_2, meshScale=scale_2)
+obj_2_vis = p.createVisualShape(p.GEOM_MESH, fileName=filename_2, meshScale=scale_2)
+obj_2 = p.createMultiBody(baseMass=0.0001,
+                            baseCollisionShapeIndex=obj_2_coll, baseVisualShapeIndex=obj_2_vis,
+                            basePosition=cubeStartPos,
+                            baseOrientation=cubeStartOrientation)
 
-p.resetBaseVelocity(sphere_obj, [0.0, 4.0, -1.0], [0.0, 0.0, 0.0])
+# p.resetBaseVelocity(sphere_obj, [0.0, 4.0, -1.0], [0.0, 0.0, 0.0])
 
 p.changeDynamics(planeId, -1, restitution=1.0)
-p.changeDynamics(sphere_obj, -1, restitution=1.1)
-p.changeDynamics(box_obj, -1, restitution=1.0)
+p.changeDynamics(brick, -1, restitution=1.0)
+p.changeDynamics(obj_2, -1, restitution=1.0)
 
 viewMatrix = p.computeViewMatrix(
-    cameraEyePosition=np.array([10.0, 0.0, 1.0]),
+    cameraEyePosition=np.array([20.0, 0.0, 1.0]),
     cameraTargetPosition=np.array([0.0, 0.0, 1.0]),
     cameraUpVector=np.array([0.0, 0.0, 1.0]),
 )
@@ -66,9 +66,12 @@ fy = cy / np.tan(fov_y / 2.0)
 
 rgb_imgs = []
 depth_imgs = []
-for _ in range(200):
-    for _ in range(5):     
-        p.stepSimulation()
+for y in np.linspace(-4.0, 3.0,50):
+    # for _ in range(5):     
+    #     p.stepSimulation()
+    new_position = copy(cubeStartPos)
+    new_position[1] = y
+    p.resetBasePositionAndOrientation(obj_2, new_position, cubeStartOrientation)
     w,h, rgb, depth, segmentation = p.getCameraImage(width, height,
         viewMatrix,
         projMatrix
