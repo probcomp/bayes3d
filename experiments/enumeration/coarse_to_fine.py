@@ -1,21 +1,15 @@
 import sys
 sys.path.append('.')
 
-import numpy as np
 import jax.numpy as jnp
 import jax
-from jax3dp3.icp import icp
 from jax3dp3.batched_scorer import batched_scorer_parallel
-from jax3dp3.likelihood import sample_cloud_within_r, threedp3_likelihood
-from jax3dp3.rendering import render_planes, render_cloud_at_pose
+from jax3dp3.likelihood import threedp3_likelihood
+from jax3dp3.rendering import render_planes
 from jax3dp3.enumerations import get_rotation_proposals
 from jax3dp3.shape import get_cube_shape
-from jax3dp3.utils import make_centered_grid_enumeration_3d_points, depth_to_coords_in_camera
-from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
-from jax3dp3.bbox import overlay_bounding_box
+from jax3dp3.viz.img import save_depth_image, get_depth_image
 import time
-from scipy.spatial.transform import Rotation as R
-import matplotlib.pyplot as plt
 from functools import partial 
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.enumerations import make_translation_grid_enumeration
