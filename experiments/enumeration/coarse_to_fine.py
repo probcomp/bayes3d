@@ -24,7 +24,6 @@ h, w, fx_fy, cx_cy = (
 )
 
 outlier_prob = 0.1
-pixel_smudge = 0
 fx, fy = fx_fy
 cx, cy = cx_cy   
 max_depth = 5.0
@@ -41,10 +40,8 @@ gt_pose = jnp.array([
     ]
 )
 
-
 cube_length = 0.5
 shape = get_cube_shape(cube_length)
-NUM_BATCHES = 4
 
 render_planes_lambda = lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)
 render_planes_jit = jax.jit(render_planes_lambda)
@@ -59,19 +56,15 @@ def scorer(pose, gt_image, r):
 scorer_parallel = jax.vmap(scorer, in_axes = (0, None, None))
 scorer_parallel_jit = jax.jit(scorer_parallel)
 
+NUM_BATCHES = 4
 batched_scorer_parallel = partial(batched_scorer_parallel, scorer_parallel, NUM_BATCHES)
 batched_scorer_parallel_jit = jax.jit(batched_scorer_parallel)
 
-observed = gt_image
-print("GT image shape=", observed.shape)
+print("GT image shape=", gt_image.shape)
 print("GT pose=", gt_pose)
 
-gt_depth_img = get_depth_image(observed[:,:,2], max_depth)
-save_depth_image(observed[:,:,2], max_depth, "gt_img.png")
-
-# Example of nans
-nans = scorer(transform_from_pos(jnp.array([0.0, 0.0, -10.0])), gt_image, 0.1)
-
+gt_depth_img = get_depth_image(gt_image[:,:,2], max_depth)
+save_depth_image(gt_image[:,:,2], max_depth, "gt_img.png")
 
 latent_pose_estimate = jnp.array([
     [1.0, 0.0, 0.0, 0.5],   
@@ -94,14 +87,12 @@ enumeration_grid_tr = [make_translation_grid_enumeration(
                     ) for (_, grid_width, num_grid_points) in schedule_tr]
 enumeration_grid_r = [get_rotation_proposals(fib_nums, rot_nums) for (fib_nums, rot_nums) in schedule_rot]
 
-TOTAL_INF_TIME = 0
-
 
 def coarse_to_fine(enum_grid_tr, enum_grid_r, enum_likelihood_r, latent_pose_estimate, gt_image):
     for cnt in range(len(enum_likelihood_r)):
         r = enum_likelihood_r[cnt]
         enumerations_t =  enum_grid_tr[cnt]
-        proposals = jnp.einsum("...ij,...jk->...ik", latent_pose_estimate, enumerations_t)
+        proposals = jnp.einsum("...ij,...jk->...ik", latent_pose_estimate, enumerations_t, optimize="optimal")
 
         # translation inference
         weights = batched_scorer_parallel(proposals, gt_image, r) 
@@ -109,7 +100,7 @@ def coarse_to_fine(enum_grid_tr, enum_grid_r, enum_likelihood_r, latent_pose_est
 
         # rotation inference
         enumerations_r = enum_grid_r[cnt]
-        proposals = jnp.einsum('ij,ajk->aik', best_pose_estimate, enumerations_r)
+        proposals = jnp.einsum('ij,ajk->aik', best_pose_estimate, enumerations_r, optimize="optimal")
 
         weights = batched_scorer_parallel(proposals, gt_image, r) 
         best_pose_estimate = proposals[jnp.argmax(weights)]
