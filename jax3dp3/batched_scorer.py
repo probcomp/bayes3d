@@ -4,8 +4,8 @@ import jax.numpy as jnp
 def batch_split(proposals, num_batches):
     num_proposals = proposals.shape[0]
     if num_proposals % num_batches != 0:
-        print("WARNING: Not evenly divisible; defaulting to 1x split")  # TODO find a good factor
-        num_batches = 1
+        print(f"WARNING: {num_proposals} Not evenly divisible by {num_batches}; defaulting to 2x split")  # TODO find a good factor
+        num_batches = 2
     return jnp.array(jnp.split(proposals, num_batches))
 
 # Run the `scorer_parallel` scorer over the batched proposals `proposals_batches`, on `gt_image`
