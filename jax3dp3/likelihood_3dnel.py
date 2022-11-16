@@ -3,27 +3,47 @@ import jax
 import numpy as np
 import functools
 from functools import partial
+from jax.scipy.special import logsumexp
 
 @functools.partial(
     jnp.vectorize,
     signature='(m)->()',
     excluded=(1,2,3,4,),
 )
-def count_ii_jj(
+def pixelwise_3dnel(
     ij,
     data_xyz: jnp.ndarray,
+    object_ids: jnp.ndarray,
+    data_descriptors: jnp.ndarray,
+    log_normalizers: jnp.ndarray,
+    model_descriptors: jnp.ndarray,
     model_xyz: jnp.ndarray,
     r: float,
     filter_size: int
 ):
     t = data_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
     distance = jnp.linalg.norm(t, axis=-1).ravel() # (4,4)
-    return jnp.sum(distance <= r)
+    
+    s = jnp.sum(
+        data_descriptors[ij[0], ij[1], :]  * jax.lax.dynamic_slice(model_descriptors, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
+        ,axis=-1
+    ) -  log_normalizers[ij[0], ij[1]]
+    
+    num_latent_points = rendered_mask.sum()
 
+    mixture_components = logsumexp(
+        a=s, b=(distance <= r)
+    ) + jnp.log(jnp.nan_to_num(
+        (1.0 - outlier_prob) / num_latent_points  * ) * 1.0 / (4/3 * jnp.pi * r**3)
+    )
+    return logsumexp(mixture_components, jnp.log(outlier_prob))
 
-def threedp3_likelihood(
+def threednel_likelihood(
     obs_xyz: jnp.ndarray,
+    data_descriptors: jnp.ndarray,
+    log_normalizers: jnp.ndarray,
     rendered_xyz: jnp.ndarray,
+    rendered_descriptors: jnp.ndarray,
     r,
     outlier_prob
 ):
@@ -39,30 +59,3 @@ def threedp3_likelihood(
     log_probs = jnp.log(probs)
     return jnp.sum(jnp.where(obs_mask, log_probs, 0.0))
 
-
-
-
-def sample_coordinate_within_r(r, key, coord):
-    phi = jax.random.uniform(key, minval=0.0, maxval=2*jnp.pi)
-    
-    new_key, subkey1, subkey2 = jax.random.split(key, 3)
-
-    costheta = jax.random.uniform(subkey1, minval=-1.0, maxval=1.0)
-    u = jax.random.uniform(subkey2, minval=0.0, maxval=1.0)
-
-    theta = jnp.arccos(costheta)
-    radius = r * jnp.cbrt(u)
-
-    sx = radius * jnp.sin(theta)* jnp.cos(phi)
-    sy = radius * jnp.sin(theta) * jnp.sin(phi)
-    sz = radius * jnp.cos(theta)
-
-    return new_key, coord + jnp.array([sx, sy, sz]) 
-
-def sample_cloud_within_r(cloud, r):
-    cloud = cloud[cloud[:,:,2] > 0].reshape(-1, 3)
-    key = jax.random.PRNGKey(214)
-    keys = jax.random.split(key, cloud.shape[0])
-    _, sampled_cloud_r = jax.vmap(sample_coordinate_within_r, in_axes=(None, 0, 0))(r, keys, cloud)
-
-    return sampled_cloud_r
