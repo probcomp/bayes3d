@@ -36,22 +36,6 @@ cx, cy = cx_cy
 max_depth = 5.0
 K = jnp.array([[fx, 0, cx], [0, fy, cy], [0,0,1]])
 
-## Viz properties
-VIZ_MODE = False  
-all_images = []
-viz_stepsizes = [2,2,2,2]
-
-
-middle_width = 20
-top_border = 50
-num_images = 2  # gt and smapled
-
-og_width = num_images * w + (num_images - 1) * middle_width
-og_height = h + top_border
-
-width_scaler = 2
-height_scaler = 2
-
 ### Generate GT images
 gx, gy, gz = 0.531, 0.251, 1.950
 eulerx, eulery, eulerz = 0, 0, 0
