@@ -2,9 +2,8 @@
 
 Setup virtualenv and install dependencies:
 ```
-python3.10 -m venv venv # Replace with any python version >= 3.7
-source venv/bin/activate
-pip install --upgrade pip
+conda create -n jax python=3.8
+conda activate jax
 pip install -r requirements.txt
 python setup.py develop
 ```
