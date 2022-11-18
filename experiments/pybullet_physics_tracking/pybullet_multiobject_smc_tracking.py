@@ -182,7 +182,7 @@ def run_inference(initial_particles, ground_truth_images):
 
 
 run_inference_jit = jax.jit(run_inference)
-num_particles = 5000
+num_particles = 1000
 particles = []
 for _ in range(num_particles):
     particles.append(initial_poses)
@@ -191,11 +191,11 @@ particles = jnp.stack(particles)
 _,x = run_inference_jit(particles, ground_truth_images)
 
 
-# start = time.time()
-# _,x = run_inference_jit(particles, ground_truth_images)
-# end = time.time()
-# print ("Time elapsed:", end - start)
-# print ("FPS:", ground_truth_images.shape[0] / (end - start))
+start = time.time()
+_,x = run_inference_jit(particles, ground_truth_images)
+end = time.time()
+print ("Time elapsed:", end - start)
+print ("FPS:", ground_truth_images.shape[0] / (end - start))
 
 
 
@@ -232,7 +232,7 @@ for i in range(ground_truth_images.shape[0]):
     overlay_img = Image.alpha_composite(i1, i2)
 
     translations = x[i, :, 1, :3, -1]
-    img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 1)
+    img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 0)
     projected_particles_img = get_depth_image(img[:,:,2], 40.0).resize((original_width,original_height))
 
 
@@ -244,7 +244,7 @@ for i in range(ground_truth_images.shape[0]):
 
 
 all_images[0].save(
-    fp="out2.gif",
+    fp="out_{}_particles.gif".format(num_particles),
     format="GIF",
     append_images=all_images,
     save_all=True,
