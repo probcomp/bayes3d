@@ -22,18 +22,12 @@ def render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx
     points_in_plane_frame = jnp.einsum("...ij,ab...j->ab...i", inv_plane_poses, points)
 
     inv_object_poses = jnp.linalg.inv(poses)
-    print('inv_object_poses.shape:');print(inv_object_poses.shape)
     points_in_object_frame = jnp.einsum("...ij,ab...kj->ab...ki", inv_object_poses, points)
-    print('points_in_object_frame.shape:');print(points_in_object_frame.shape)
 
 
     valid = jnp.all(jnp.abs(points_in_plane_frame[:,:,:,:,:2]) < shape_dimensions,axis=-1) # (H,W,N, M)
-    print('points.shape:');print(points.shape)
-    print('valid.shape:');print(valid.shape)
     intersection_points = points * valid[:,:,:,:,None]
-    print('intersection_points.shape:');print(intersection_points.shape)
     idxs_pre = jnp.argmax(intersection_points[:,:,:,:,2], axis=-1)
-    print('idxs_pre.shape:');print(idxs_pre.shape)
     intersection_points_2 = intersection_points[
         jnp.arange(intersection_points.shape[0])[:, None,None],
         jnp.arange(intersection_points.shape[1])[None,:, None],
@@ -41,13 +35,17 @@ def render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx
         idxs_pre,
         :
     ]
+    points_in_object_frame = points_in_object_frame[
+        jnp.arange(points_in_object_frame.shape[0])[:, None,None],
+        jnp.arange(points_in_object_frame.shape[1])[None,:, None],
+        jnp.arange(points_in_object_frame.shape[2])[None,None,:],
+        idxs_pre,
+        :
+    ]
     idxs = jnp.argmax(intersection_points_2[:,:,:,2], axis=-1)
-    print('idxs.shape:');print(idxs.shape)
 
     collided = jnp.any(jnp.any(valid, axis=-1), axis=-1)
-    print('collided.shape:');print(collided.shape)
     segmentation = (collided * idxs) + (1.0 - collided) * -1.0
-    print('intersection_points_2.shape:');print(intersection_points_2.shape)
     points_final = (
         intersection_points_2[
             jnp.arange(intersection_points_2.shape[0])[:, None],
@@ -58,4 +56,12 @@ def render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx
         collided[:,:,None]
     )
 
+    points_in_object_frame = (points_in_object_frame[
+            jnp.arange(points_in_object_frame.shape[0])[:, None],
+            jnp.arange(points_in_object_frame.shape[1])[None, :],
+            idxs,
+        ]
+        *
+        collided[:,:,None]
+    )
     return points_final, segmentation, points_in_object_frame

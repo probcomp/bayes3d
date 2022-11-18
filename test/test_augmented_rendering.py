@@ -45,18 +45,19 @@ pose_2 = jnp.array([
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
-rot = R.from_euler('zyx', [0.2, -0.4, 1.0]).as_matrix()
+rot = R.from_euler('zyx', [0.2, -0.1, 0.3]).as_matrix()
 pose_2 = pose_2.at[:3,:3].set(jnp.array(rot))
 
 poses = jnp.stack([pose_1, pose_2])
 
 
-gt_image,segmentation, points_in_object_frame= render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
+gt_image,segmentation, points_in_object_frame = render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
 print('gt_image.shape ',gt_image.shape)
 save_depth_image(gt_image[:,:,2], 10.0, "multiobject.png")
-from IPython import embed; embed()
-save_depth_image(points_in_object_frame[:,:,2], 10.0, "obj_ref_frame.png")
-save_depth_image(segmentation == 1, 20.0, "seg.png")
+save_depth_image(points_in_object_frame[:,:,0] + 0.5, 2.0, "x.png")
+save_depth_image(points_in_object_frame[:,:,1] + 0.5, 2.0, "y.png")
+save_depth_image(points_in_object_frame[:,:,2] + 0.5, 2.0, "z.png")
+save_depth_image(segmentation == 0, 20.0, "seg.png")
 
 
 
