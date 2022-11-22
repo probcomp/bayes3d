@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 import jax
+import time
 from jax3dp3.viz.img import save_depth_image,save_rgb_image
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
@@ -102,8 +103,6 @@ def likelihood(x, obs):
 likelihood_parallel = jax.vmap(likelihood, in_axes = (0, None))
 likelihood_parallel_jit = jax.jit(likelihood_parallel)
 
-enumerations = make_translation_grid_enumeration(-1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 51, 21, 11)
-
 depth_data = (coord_images * mask[:,:,:,None])
 
 cm = plt.get_cmap("turbo")
@@ -112,61 +111,7 @@ middle_width = 20
 top_border = 100
 
 
-x = initial_poses
-t = start_t + 1
-gt_image = depth_data[t]
-for i in range(x.shape[0]):
-    enumerations_full = jnp.tile(jnp.eye(4)[None, :,:],(enumerations.shape[0], x.shape[0],1,1))
-    enumerations_full = enumerations_full.at[:,i,:,:].set(enumerations)
-    proposals = jnp.einsum("bij,abjk->abik", x, enumerations_full)
-
-    proposals_batched = jnp.stack(jnp.split(proposals, 21))
-    x = enumerative_inference_single_frame(likelihood_parallel, gt_image, proposals_batched)[0]
-
-rgb = rgb_images[t]
-rgb_img = Image.fromarray(
-    rgb.astype(np.int8), mode="RGB"
-)
-depth_img = Image.fromarray(
-    np.rint(
-        cm(np.array(depth_data[t, :, :, 2]) / max_depth) * 255.0
-    ).astype(np.int8),
-    mode="RGBA",
-).resize((original_width,original_height))
-
-poses = initial_poses
-rendered_image = render_planes_multiobject_jit(poses)
-rendered_depth_img_initial = Image.fromarray(
-    (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
-).resize((original_width,original_height))
-
-poses = x
-rendered_image = render_planes_multiobject_jit(poses)
-rendered_depth_img = Image.fromarray(
-    (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
-).resize((original_width,original_height))
-
-i1 = rendered_depth_img.copy()
-i2 = rgb_img.copy()
-i1.putalpha(128)
-i2.putalpha(128)
-overlay_img = Image.alpha_composite(i1, i2)
-
-i1 = rendered_depth_img_initial.copy()
-i2 = rgb_img.copy()
-i1.putalpha(128)
-i2.putalpha(128)
-overlay_img_original = Image.alpha_composite(i1, i2)
-
-panel_images = [rgb_img, depth_img, rendered_depth_img_initial, rendered_depth_img, overlay_img_original, overlay_img]
-labels = ["RGB Image", "Depth Image", "Initial", "Inferred Depth", "Overlay Original", "Overlay"]
-dst = multi_panel(panel_images, labels, middle_width, top_border, 40)
-dst.save("initial.png")
-
-
-
-
-
+object_index = 2
 
 def run_inference(initial_particles, initial_particles_velocities, ground_truth_images):
     variances = jnp.stack([
@@ -181,9 +126,9 @@ def run_inference(initial_particles, initial_particles_velocities, ground_truth_
 
     def particle_filtering_step(data, gt_image):
         particles, particle_velocities, weights, keys = data
-        i = 2
         proposal_type = jax.random.categorical(keys[0], mixture_logits, shape=(particles.shape[0],))
         drift_poses = jax.vmap(gaussian_vmf_cov, in_axes=(0, 0, 0))(keys, variances[proposal_type], concentrations[proposal_type])
+        i = object_index
         new_particles = particles.copy()
         new_particles = new_particles.at[:, i, :3, -1].set(new_particles[:, i, :3, -1] + particle_velocities)
         new_particles = new_particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", new_particles[:,i], drift_poses))
@@ -219,6 +164,13 @@ run_inference_jit = jax.jit(run_inference)
 end_t = start_t + 50
 _,x = run_inference_jit(particle_positions,  particle_velocities, depth_data[start_t:end_t])
 
+start = time.time()
+_,x = run_inference_jit(particle_positions,  particle_velocities, depth_data[start_t:end_t])
+end = time.time()
+print ("Time elapsed:", end - start)
+print ("FPS:", (depth_data[start_t:end_t].shape[0]) / (end-start))
+
+
 
 cm = plt.get_cmap("turbo")
 images = []
@@ -246,7 +198,7 @@ for i in range(start_t, end_t):
     i2.putalpha(128)
     overlay_img = Image.alpha_composite(i1, i2)
 
-    translations = x[i-start_t, :, 2, :3, -1]
+    translations = x[i-start_t, :, object_index, :3, -1]
     img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 0)
     projected_particles_img = get_depth_image(img[:,:,2], 40.0).resize((original_width,original_height))
 
