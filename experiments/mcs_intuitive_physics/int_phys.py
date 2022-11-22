@@ -17,6 +17,10 @@ from jax3dp3.enumerations import make_translation_grid_enumeration
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.viz.img import multi_panel
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
+from jax3dp3.distributions import gaussian_vmf, gaussian_vmf_cov
+from jax.scipy.special import logsumexp
+from jax3dp3.rendering import render_spheres, render_cloud_at_pose,render_planes_multiobject
+from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
 
 data = np.load("data.npz")
 rgb_images = data["rgb_images"]
@@ -164,23 +168,56 @@ dst.save("initial.png")
 
 
 
-def run_inference(initial_poses, ground_truth_images):
-    def _inner(x, gt_image):
-        for i in range(x.shape[0]):
-            enumerations_full = jnp.tile(jnp.eye(4)[None, :,:],(enumerations.shape[0], x.shape[0],1,1))
-            enumerations_full = enumerations_full.at[:,i,:,:].set(enumerations)
-            proposals = jnp.einsum("bij,abjk->abik", x, enumerations_full)
+def run_inference(initial_particles, initial_particles_velocities, ground_truth_images):
+    variances = jnp.stack([
+        jnp.diag(jnp.array([0.06, 0.0001, 0.0001])),
+        jnp.diag(jnp.array([0.06, 0.0001, 0.0001])),
+        jnp.diag(jnp.array([0.06, 0.0001, 0.0001])),
+    ]
+    )
+        # jnp.array(0.05, 0.3, 0.5])
+    concentrations = jnp.array([2000.0, 2000.0, 2000.0])
+    mixture_logits = jnp.log(jnp.ones(concentrations.shape) / concentrations.shape[0])
 
-            proposals_batched = jnp.stack(jnp.split(proposals, 21))
-            x = enumerative_inference_single_frame(likelihood_parallel, gt_image, proposals_batched)[0]
+    def particle_filtering_step(data, gt_image):
+        particles, particle_velocities, weights, keys = data
+        i = 2
+        proposal_type = jax.random.categorical(keys[0], mixture_logits, shape=(particles.shape[0],))
+        drift_poses = jax.vmap(gaussian_vmf_cov, in_axes=(0, 0, 0))(keys, variances[proposal_type], concentrations[proposal_type])
+        new_particles = particles.copy()
+        new_particles = new_particles.at[:, i, :3, -1].set(new_particles[:, i, :3, -1] + particle_velocities)
+        new_particles = new_particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", new_particles[:,i], drift_poses))
 
-        return x, x
+        new_particles_velocities = new_particles[:, i, :3, -1] - particles[:, i, :3, -1]
 
-    return jax.lax.scan(_inner, initial_poses, ground_truth_images)
+        weights = weights + likelihood_parallel(new_particles, gt_image)
+        parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
+        new_particles = new_particles[parent_idxs]
+        new_particles_velocities = new_particles_velocities[parent_idxs]
+        weights = jnp.full(weights.shape[0],logsumexp(weights) - jnp.log(weights.shape[0]))
+        keys = jax.random.split(keys[0], weights.shape[0])
+        return (new_particles, new_particles_velocities, weights, keys), particles
+
+    initial_weights = jnp.full(initial_particles.shape[0], 0.0)
+    initial_key = jax.random.PRNGKey(3)
+    initial_keys = jax.random.split(initial_key, initial_particles.shape[0])
+    return jax.lax.scan(particle_filtering_step, (initial_particles, initial_particles_velocities, initial_weights, initial_keys), ground_truth_images)
+
 
 run_inference_jit = jax.jit(run_inference)
-end_t = start_t + 20
-_, tracked_poses = run_inference_jit(initial_poses, depth_data[start_t:end_t])
+num_particles = 1000
+particle_positions = []
+particle_velocities = []
+for _ in range(num_particles):
+    particle_positions.append(initial_poses)
+    particle_velocities.append(np.zeros(3))
+
+particle_positions = jnp.stack(particle_positions)
+particle_velocities = jnp.stack(particle_velocities)
+
+run_inference_jit = jax.jit(run_inference)
+end_t = start_t + 50
+_,x = run_inference_jit(particle_positions,  particle_velocities, depth_data[start_t:end_t])
 
 
 cm = plt.get_cmap("turbo")
@@ -197,7 +234,7 @@ for i in range(start_t, end_t):
         mode="RGBA",
     ).resize((original_width,original_height))
     
-    poses = tracked_poses[i-start_t,:,:,:]
+    poses = x[i-start_t,0,:,:,:]
     rendered_image = render_planes_multiobject_jit(poses)
     rendered_depth_img = Image.fromarray(
         (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
@@ -209,8 +246,12 @@ for i in range(start_t, end_t):
     i2.putalpha(128)
     overlay_img = Image.alpha_composite(i1, i2)
 
-    panel_images = [rgb_img, depth_img, rendered_depth_img, overlay_img]
-    labels = ["RGB Image", "Depth Image", "Inferred Depth", "Overlay"]
+    translations = x[i-start_t, :, 2, :3, -1]
+    img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 0)
+    projected_particles_img = get_depth_image(img[:,:,2], 40.0).resize((original_width,original_height))
+
+    panel_images = [rgb_img, depth_img, rendered_depth_img, overlay_img, projected_particles_img]
+    labels = ["RGB Image", "Depth Image", "Inferred Depth", "Overlay", "Particles"]
     dst = multi_panel(panel_images, labels, middle_width, top_border, 40)
     images.append(dst)
 

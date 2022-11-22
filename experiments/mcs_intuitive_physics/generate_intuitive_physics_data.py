@@ -7,6 +7,7 @@ from jax3dp3.viz.img import multi_panel
 
 controller = mcs.create_controller(config_file_or_dict='./config.ini')
 scene_data = mcs.load_scene_json_file("scene.json")
+# scene_data = mcs.load_scene_json_file("scene_implausible.json")
 
 data = [ controller.start_scene(scene_data) ]
 
