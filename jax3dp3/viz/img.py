@@ -3,17 +3,17 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import os
 
-def save_depth_image(image, max_depth, filename):
+def save_depth_image(image, filename, min=0.0, max=1.0):
     cm = plt.get_cmap('turbo')
     img = Image.fromarray(
-        np.rint(cm(np.array(image) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
+        np.rint(cm((np.clip(np.array(image), min, max) - min) / (max - min)) * 255.0).astype(np.int8), mode="RGBA"
     )
     img.save(filename)
 
-def get_depth_image(image, max_depth):
+def get_depth_image(image, min=0.0, max=1.0):
     cm = plt.get_cmap('turbo')
     img = Image.fromarray(
-        np.rint(cm(np.array(image) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
+        np.rint(cm((np.clip(np.array(image), min, max) - min) / (max - min)) * 255.0).astype(np.int8), mode="RGBA"
     )
     return img
 

@@ -44,16 +44,18 @@ rand_weight_log = jnp.log(np.ones(NUM_MIXTURE)/NUM_MIXTURE)
 rand_sphere_size = 14
 rand_prec = jnp.array([np.identity(3)*rand_sphere_size/shape_scale for _ in range(NUM_MIXTURE)])
 
-init_t,stds,est_alpha = fm_render.render(rand_mean, rand_prec, rand_weight_log, camera_starts_rays, beta_2, beta_3, beta_4, beta_5)
-
-print('est_alpha.max():');print(est_alpha.max())
-print('est_alpha.min():');print(est_alpha.min())
+depth,stds,est_alpha = fm_render.render(rand_mean, rand_prec, rand_weight_log, camera_starts_rays, beta_2, beta_3, beta_4, beta_5)
 
 ground_truth_alpha = est_alpha
+ground_truth_depth = depth
+ground_truth_depth_viz = ground_truth_depth.at[ground_truth_alpha < 0.5].set(0.0)
 
+min_depth = 0.0
 max_depth = 1.0
-ground_truth_img = get_depth_image(ground_truth_alpha.reshape(image_size), max_depth)
+save_depth_image(est_alpha.reshape(image_size), "ground_truth_alpha.png", max=1.0)
+save_depth_image(ground_truth_depth_viz.reshape(image_size), "ground_truth_depth_viz.png", min=min_depth, max=max_depth)
 
+ground_truth_img = get_depth_image(ground_truth_alpha.reshape(image_size), min=min_depth, max=max_depth)
 
 
 rand_mean = center+np.random.multivariate_normal(mean=[0,0,0],cov=1e-1*np.identity(3)*shape_scale,size=NUM_MIXTURE)
@@ -62,10 +64,9 @@ rand_prec = jnp.array([np.identity(3)*rand_sphere_size/shape_scale for _ in rang
 
 init_t,stds,est_alpha = fm_render.render(rand_mean, rand_prec, rand_weight_log, camera_starts_rays, beta_2, beta_3, beta_4, beta_5)
 
-initial_img = get_depth_image(est_alpha.reshape(image_size),max_depth)
 
 
-def objective(params,true_alpha):
+def objective(params, true_alpha):
     CLIP_ALPHA = 1e-6
     means,prec,weights_log,camera_rays,beta_2,beta_3,beta_4,beta_5 = params
     render_res = fm_render.render(means,prec,weights_log,camera_rays,beta_2,beta_3,beta_4,beta_5)
@@ -114,8 +115,11 @@ for i in loop:
     opt_state = opt_update(i, g[:3], opt_state)
 
     means,prec,weights_log,camera_rays,beta_2,beta_3,beta_4,beta_5 = params
-    _,_,est_alpha = fm_render.render(means,prec,weights_log,camera_rays,beta_2,beta_3,beta_4,beta_5)
-    img = get_depth_image(est_alpha.reshape(image_size),max_depth)
+    depth,_,alpha = fm_render.render(means,prec,weights_log,camera_rays,beta_2,beta_3,beta_4,beta_5)
+
+    depth = depth.at[alpha < 0.5].set(0.0)
+
+    img = get_depth_image(alpha.reshape(image_size),min=min_depth, max=max_depth)
     optimization_images.append(
         multi_panel(
             [ground_truth_img.resize(image_size_visualization), img.resize(image_size_visualization)],
