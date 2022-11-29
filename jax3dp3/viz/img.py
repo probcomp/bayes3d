@@ -74,8 +74,9 @@ def multi_panel(images, labels, middle_width, top_border, fontsize):
     drawer = ImageDraw.Draw(dst)
     font = ImageFont.truetype(os.path.join(os.path.dirname(__file__), "fonts", "DMSans-Regular.ttf"), fontsize)
 
-    for (i, msg) in enumerate(labels):
-        _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font)
-        drawer.text((i * w + i * middle_width + w/2 - text_w/2, top_border/2 - text_h/2), msg, font=font, fill="black")
+    if labels is not None:
+        for (i, msg) in enumerate(labels):
+            _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font)
+            drawer.text((i * w + i * middle_width + w/2 - text_w/2, top_border/2 - text_h/2), msg, font=font, fill="black")
     return dst
 
