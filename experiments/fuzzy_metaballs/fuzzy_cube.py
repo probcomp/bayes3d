@@ -1,6 +1,8 @@
+import os
 from jax3dp3.fuzzy import fuzzy_renderer as fm_render
 import jax.numpy as jnp
 import jax
+import jax3dp3.utils
 import numpy as np
 from jax3dp3.viz.img import save_depth_image,save_rgb_image, get_depth_image, multi_panel
 from tqdm import tqdm
@@ -11,6 +13,7 @@ import functools
 from jax3dp3.viz.img import save_depth_image
 from jax3dp3.triangle_renderer import render_triangles
 from jax3dp3.transforms_3d import transform_from_pos, apply_transform
+import jax3dp3.transforms_3d as t3d
 import trimesh
 
 
@@ -45,26 +48,26 @@ def rays_from_R_T(R,T, image_size=image_size):
 camera_angle_sweep = jnp.linspace(0.0, 2*jnp.pi, 10)
 distance = 5.0
 
-shape = get_cube_shape(2.0)
-pose = jnp.eye(4)
-
-mesh = trimesh.load("bunny.obj")
+mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
 trimesh_shape = (10.0*mesh.vertices)[mesh.faces] * jnp.array([1.0, -1.0, 1.0])
-pose = transform_from_pos(jnp.array([0.0, 0.0, 0.0]))
 
 cameras_list = []
 alpha_list = []
 all_depths = []
+
+identity_rays = rays_from_R_T(jnp.eye(3), jnp.zeros(3))
 for angle in camera_angle_sweep:
     R = transform_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), angle)[:3,:3]
     T = R @ jnp.array([0.0, 0.0, -distance])
-    rays = rays_from_R_T(R,T)
 
+    pose = t3d.transform_from_rot_and_pos(R,T)
+    data = render_triangles(jnp.linalg.inv(pose), trimesh_shape, identity_rays[:,0,:].reshape(1,-1,3))[0]
+
+    rays = rays_from_R_T(R,T)
     cameras_list.append(rays)
 
-    data = render_triangles(pose, trimesh_shape, rays.reshape(1,-1,2,3))[0]
     alpha_list.append(data[:,2] != 0.0)
-    all_depths.append(data[:,2] + distance)
+    all_depths.append(data[:,2])
 
 
 gt_viz_images = [get_depth_image(sil.reshape(image_size)) for sil in alpha_list]
@@ -181,20 +184,6 @@ optimization_images[0].save(
     duration=100,
     loop=0,
 )
-
-
-def render_at_pose(pose):
-    new_means = apply_transform(means, pose)
-    new_prec = jnp.einsum("ij,ajk->aik", pose[:3,:3], prec)
-    return fm_render.render(new_means, new_prec, weights_log, cameras_list[cam_idx],beta_2,beta_3,beta_4,beta_5)[0]
-
-
-f = jax.jit(
-    jax.vmap(
-        render_at_pose
-    )
-)
-D = f(jnp.tile(jnp.eye(4)[None, :,:],(500,1,1)))
 
 
 

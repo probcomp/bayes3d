@@ -2,6 +2,10 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 import jax
+import os
+
+def get_assets_dir():
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
 
 def extract_2d_patches(data: jnp.ndarray, filter_shape: Tuple[int, int]) -> jnp.ndarray:
     """For each pixel, extract 2D patches centered at that pixel.
@@ -100,28 +104,3 @@ def depth_to_coords_in_camera(
     )
     coords_on_image = np.moveaxis(vu, 0, -1)
     return coords_in_camera, coords_on_image
-
-def is_rotation_matrix(R) :
-    Rt = jnp.transpose(R)
-    shouldBeIdentity = np.dot(Rt, R)
-    I = jnp.identity(3, dtype = R.dtype)
-    n = jnp.linalg.norm(I - shouldBeIdentity)
-    return n < 1e-6
- 
-def rotation_matrix_to_euler_angles(R) :
-    assert(is_rotation_matrix(R))
- 
-    sy = jnp.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
- 
-    singular = sy < 1e-6
- 
-    if  not singular :
-        x = jnp.arctan2(R[2,1] , R[2,2])
-        y = jnp.arctan2(-R[2,0], sy)
-        z = jnp.arctan2(R[1,0], R[0,0])
-    else :
-        x = jnp.arctan2(-R[1,2], R[1,1])
-        y = jnp.arctan2(-R[2,0], sy)
-        z = 0
- 
-    return jnp.array([x, y, z])
