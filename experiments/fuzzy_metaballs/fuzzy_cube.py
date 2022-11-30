@@ -8,11 +8,16 @@ from jax3dp3.transforms_3d import transform_from_axis_angle
 from jax3dp3.shape import get_cube_shape
 from jax3dp3.rendering import render_planes_rays
 import functools
+from jax3dp3.viz.img import save_depth_image
+from jax3dp3.triangle_renderer import render_triangles
+from jax3dp3.transforms_3d import transform_from_pos, apply_transform
+import trimesh
+
 
 image_size = (120,120)
 
 hyperparams = fm_render.hyperparams
-NUM_MIXTURE = 40
+NUM_MIXTURE = 100
 beta_2 = jnp.float32(np.exp(hyperparams[0]))
 beta_3 = jnp.float32(np.exp(hyperparams[1]))
 beta_4 = jnp.float32(np.exp(hyperparams[2]))
@@ -43,6 +48,9 @@ distance = 5.0
 shape = get_cube_shape(2.0)
 pose = jnp.eye(4)
 
+mesh = trimesh.load("bunny.obj")
+trimesh_shape = (10.0*mesh.vertices)[mesh.faces] * jnp.array([1.0, -1.0, 1.0])
+pose = transform_from_pos(jnp.array([0.0, 0.0, 0.0]))
 
 cameras_list = []
 alpha_list = []
@@ -54,9 +62,10 @@ for angle in camera_angle_sweep:
 
     cameras_list.append(rays)
 
-    data = render_planes_rays(rays, pose, shape)
+    data = render_triangles(pose, trimesh_shape, rays.reshape(1,-1,2,3))[0]
     alpha_list.append(data[:,2] != 0.0)
     all_depths.append(data[:,2] + distance)
+
 
 gt_viz_images = [get_depth_image(sil.reshape(image_size)) for sil in alpha_list]
 multi_panel(
@@ -95,7 +104,7 @@ init_t,stds,est_alpha = fm_render.render(rand_mean, rand_prec, rand_weight_log, 
 from jax.example_libraries import optimizers
 
 # Number of optimization steps
-Niter = 200
+Niter = 400
 # number of images to batch gradients over
 
 loop = tqdm(range(Niter))
@@ -157,8 +166,12 @@ optimization_images = [
         50,
         20
     )
-    for depth in optimization_depths
+    for (i,depth) in enumerate(optimization_depths)
 ]
+
+
+p = opt_params(opt_state)
+
 
 optimization_images[0].save(
     fp="out.gif",
@@ -168,5 +181,21 @@ optimization_images[0].save(
     duration=100,
     loop=0,
 )
+
+
+def render_at_pose(pose):
+    new_means = apply_transform(means, pose)
+    new_prec = jnp.einsum("ij,ajk->aik", pose[:3,:3], prec)
+    return fm_render.render(new_means, new_prec, weights_log, cameras_list[cam_idx],beta_2,beta_3,beta_4,beta_5)[0]
+
+
+f = jax.jit(
+    jax.vmap(
+        render_at_pose
+    )
+)
+D = f(jnp.tile(jnp.eye(4)[None, :,:],(500,1,1)))
+
+
 
 from IPython import embed; embed()

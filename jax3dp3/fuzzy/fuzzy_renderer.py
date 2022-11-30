@@ -40,7 +40,7 @@ def render(means, prec_full, weights_log, camera_starts_rays, beta_2, beta_3, be
         res,d2  = jax.vmap((perf_ray))(camera_starts_rays) # jit perf
         return res, d2
 
-    zs,stds = jax.vmap(perf_idx)(prec,weights,means)  # jit perf
+    zs,stds = jax.vmap(perf_idx)(prec,weights, means)  # jit perf
     sig1 = (zs > 0)# sigmoid
 
     w = sig1*jnp.nan_to_num(jax_stable_exp(-zs*beta_2 + beta_3*stds))+1e-20
