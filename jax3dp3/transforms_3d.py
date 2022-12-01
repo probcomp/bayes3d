@@ -17,7 +17,7 @@ def transform_from_rot_and_pos(rot, t):
         [jnp.hstack([rot, t.reshape(3,1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
     )
 
-def transform_from_axis_angle(axis, angle):
+def rotation_from_axis_angle(axis, angle):
     sina = jnp.sin(angle)
     cosa = jnp.cos(angle)
     direction = axis / jnp.linalg.norm(axis)
@@ -28,8 +28,11 @@ def transform_from_axis_angle(axis, angle):
     R = R + jnp.array([[0.0, -direction[2], direction[1]],
                         [direction[2], 0.0, -direction[0]],
                         [-direction[1], direction[0], 0.0]])
+    return R
+
+def transform_from_axis_angle(axis, angle):
     M = jnp.identity(4)
-    M = M.at[:3, :3].set(R)
+    M = M.at[:3, :3].set(rotation_from_axis_angle(axis, angle))
     return M
 
 def add_homogenous_ones(cloud):

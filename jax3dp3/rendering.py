@@ -132,6 +132,41 @@ def render_planes_multiobject(poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy
     return points_final
 
 
+def render_planes_multiobject(poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy):
+    r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
+    pixel_coords = jnp.stack([r,c],axis=-1)
+    pixel_coords_dir = jnp.concatenate([(pixel_coords - jnp.array([cx,cy])) /  jnp.array([fx,fy]), jnp.ones((h,w,1))],axis=-1)
+
+    return render_planes_multiobject_rays(poses, shape_planes, shape_dims, pixel_coords_dir)
+
+def render_planes_multiobject_rays(poses, shape_planes, shape_dims, pixel_coords_dir):
+    plane_poses = jnp.einsum("...ij,...ajk",poses, shape_planes).reshape(-1, 4, 4)
+    shape_dimensions = shape_dims.reshape(-1, 2)
+
+
+    denoms = jnp.einsum("ijk,ak->ija", pixel_coords_dir , plane_poses[:,:3,2])
+    numerators = jnp.einsum("...k,...k", 
+        plane_poses[:,:3,3],
+        plane_poses[:,:3,2]
+    )
+    d = numerators / (denoms + 1e-10)
+    points_temp = jnp.einsum("...ij,...kj", d[:,:,:,None], pixel_coords_dir[:,:,:,None])
+    points = jnp.concatenate([points_temp, jnp.ones((*points_temp.shape[:3],1,))],axis=-1) # (H,W,N,4)
+    inv_plane_poses = jnp.linalg.inv(plane_poses)
+    points_in_plane_frame = jnp.einsum("...ij,ab...j->ab...i", inv_plane_poses, points)
+
+    valid = jnp.all(jnp.abs(points_in_plane_frame[:,:,:,:2]) < shape_dimensions,axis=-1) # (H,W,N)
+    z_vals = (1000.0 - points[:,:,:,2]) * valid
+    idxs = jnp.argmax(z_vals, axis=-1)
+
+    points_final = (
+        points[jnp.arange(points.shape[0])[:, None], jnp.arange(points.shape[1])[None, :], idxs]
+        *
+        jnp.any(valid, axis=-1)[:,:,None]
+    )
+
+    return points_final
+
 
 def render_sphere(pose, shape, h,w, fx_fy, cx_cy):
     radius = shape
