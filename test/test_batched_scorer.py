@@ -49,9 +49,9 @@ def scorer(pose, gt_image, r):
     rendered_image = render_planes(pose, shape, h, w, fx_fy, cx_cy)
     weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
     return weight
-scorer_parallel = jax.vmap(scorer, in_axes = (0, None, None))
+scorer_partial = lambda pose: scorer(pose, gt_image, r)
+scorer_parallel = jax.vmap(scorer_partial, in_axes = (0, ))
 scorer_parallel_jit = jax.jit(scorer_parallel)
-
 
 # define batched version of parallel scorer
 NUM_BATCHES = 2
@@ -73,13 +73,13 @@ print("initial latent=", latent_pose_estimate)
 
 # process proposal with einsum and run batched scorer
 r = 0.5
-num_proposals = 10000
+num_proposals = 1000
 translations_enums = jnp.ones((num_proposals,4,4))  # some random values
 print(f"{num_proposals} proposals")
 
 def test_batched_scorer(latent_pose_estimate, translations_enums, gt_image, r):
     proposals = jnp.einsum("...ij,...jk->...ik", latent_pose_estimate, translations_enums, optimize="optimal")
-    weights = batched_scorer_parallel_jit(proposals, gt_image, r) 
+    weights = batched_scorer_parallel_jit(proposals) 
     best_pose_estimate = proposals[jnp.argmax(weights)]
     return best_pose_estimate
 test_batched_scorer_jit = jax.jit(test_batched_scorer)
