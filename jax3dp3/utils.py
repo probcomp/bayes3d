@@ -2,6 +2,10 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 import jax
+import os
+
+def get_assets_dir():
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
 
 def extract_2d_patches(data: jnp.ndarray, filter_shape: Tuple[int, int]) -> jnp.ndarray:
     """For each pixel, extract 2D patches centered at that pixel.
@@ -48,6 +52,15 @@ def make_centered_grid_enumeration_3d_points(x,y,z,num_x,num_y,num_z):
     ),
         axis=-1)
     deltas = deltas.reshape(-1,3)
+    return deltas
+
+def make_centered_grid_enumeration_2d_points(min_x,max_x,min_y,max_y,num_x,num_y):
+    deltas = jnp.stack(jnp.meshgrid(
+        jnp.linspace(min_x,max_x,num_x),
+        jnp.linspace(min_y,max_y,num_y),
+    ),
+        axis=-1)
+    deltas = deltas.reshape(-1,2)
     return deltas
 
 def make_cube_point_cloud(side_width, num_points):
@@ -100,28 +113,3 @@ def depth_to_coords_in_camera(
     )
     coords_on_image = np.moveaxis(vu, 0, -1)
     return coords_in_camera, coords_on_image
-
-def is_rotation_matrix(R) :
-    Rt = jnp.transpose(R)
-    shouldBeIdentity = np.dot(Rt, R)
-    I = jnp.identity(3, dtype = R.dtype)
-    n = jnp.linalg.norm(I - shouldBeIdentity)
-    return n < 1e-6
- 
-def rotation_matrix_to_euler_angles(R) :
-    assert(is_rotation_matrix(R))
- 
-    sy = jnp.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
- 
-    singular = sy < 1e-6
- 
-    if  not singular :
-        x = jnp.arctan2(R[2,1] , R[2,2])
-        y = jnp.arctan2(-R[2,0], sy)
-        z = jnp.arctan2(R[1,0], R[0,0])
-    else :
-        x = jnp.arctan2(-R[1,2], R[1,1])
-        y = jnp.arctan2(-R[2,0], sy)
-        z = 0
- 
-    return jnp.array([x, y, z])

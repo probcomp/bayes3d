@@ -4,12 +4,13 @@ import jax.numpy as jnp
 
 @functools.partial(
     jnp.vectorize,
-    signature='(2,3)->(4)',
+    signature='(3)->(4)',
     excluded=(1,),
 )
 def ray_triangle_vmap(ray, vertices):
-    dir = ray[0]
-    orig = ray[1]
+    dir = ray
+    orig = jnp.zeros(3)
+
     v0,v1,v2 = vertices[0], vertices[1], vertices[2]
 
     v0v1 = v1 - v0; 
