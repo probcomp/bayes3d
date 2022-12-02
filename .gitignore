@@ -6,4 +6,3 @@ venv/*
 *.pyc
 *.npz
 *.egg-info/*
-**/data
