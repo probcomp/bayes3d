@@ -14,11 +14,11 @@ from scipy.spatial.transform import Rotation as R
 
 import matplotlib.pyplot as plt
 
-h, w, fx_fy, cx_cy = (
+h, w, fx,fy, cx,cy = (
     300,
     300,
-    jnp.array([200.0, 200.0]),
-    jnp.array([150.0, 150.0]),
+    200.0, 200.0,
+    150.0, 150.0,
 )
 
 
@@ -29,13 +29,13 @@ shape_planes = jnp.stack([shape1_planes,shape2_planes])
 shape_dims = jnp.stack([shape1_dims,shape2_dims])
 
 pose_1 = jnp.array([
-    [1.0, 0.0, 0.0, -1.0],   
-    [0.0, 1.0, 0.0, -1.0],   
+    [1.0, 0.0, 0.0, -0.5],   
+    [0.0, 1.0, 0.0, -0.05],   
     [0.0, 0.0, 1.0, 2.0],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
-rot = R.from_euler('zyx', [1.0, -0.1, -2.0]).as_matrix()
+rot = R.from_euler('zyx', [0.2, -0.1, -2.0]).as_matrix()
 pose_1 = pose_1.at[:3,:3].set(jnp.array(rot))
 
 pose_2 = jnp.array([
@@ -45,14 +45,14 @@ pose_2 = jnp.array([
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
-rot = R.from_euler('zyx', [0.2, -0.4, 1.0]).as_matrix()
+rot = R.from_euler('zyx', [0.2, -0.4, 0.2]).as_matrix()
 pose_2 = pose_2.at[:3,:3].set(jnp.array(rot))
 
 poses = jnp.stack([pose_1, pose_2])
 
 
-gt_image = render_planes_multiobject(poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
+gt_image = render_planes_multiobject(poses, shape_planes, shape_dims, h,w, fx,fy,cx,cy)
 print('gt_image.shape ',gt_image.shape)
-save_depth_image(gt_image[:,:,2], 10.0, "multiobject.png")
+save_depth_image(gt_image[:,:,2], "multiobject.png", max=10.0)
 
 from IPython import embed; embed()
