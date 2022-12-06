@@ -1,6 +1,6 @@
 import os
 
-from jax3dp3.viz.img import save_depth_image
+from jax3dp3.viz import save_depth_image
 import jax.numpy as jnp
 import jax3dp3.camera
 import jax3dp3.utils

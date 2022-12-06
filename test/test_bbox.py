@@ -2,7 +2,7 @@ import sys
 sys.path.append('.')
 
 import jax.numpy as jnp
-from jax3dp3.viz.img import get_depth_image
+from jax3dp3.viz import get_depth_image
 from jax3dp3.bbox import overlay_bounding_box, proj_2d
 
 h, w, fx_fy, cx_cy = (

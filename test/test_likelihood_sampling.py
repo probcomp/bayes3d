@@ -8,7 +8,7 @@ from jax3dp3.likelihood import sample_cloud_within_r, sample_coordinate_within_r
 from jax3dp3.rendering import render_planes, render_cloud_at_pose
 from jax3dp3.shape import get_cube_shape 
 from jax3dp3.utils import depth_to_coords_in_camera
-from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
+from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
 import matplotlib.pyplot as plt
 
 #--------- Camera viz settings ------------

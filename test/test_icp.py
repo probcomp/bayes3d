@@ -16,7 +16,7 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 import cv2
 from jax3dp3.shape import get_cube_shape
-from jax3dp3.viz.img import save_depth_image
+from jax3dp3.viz import save_depth_image
 from jax3dp3.icp import get_nearest_neighbor, find_least_squares_transform_between_clouds, icp
 import jax.numpy as jnp
 

@@ -8,7 +8,7 @@ from jax3dp3.utils import (
 )
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
 from jax3dp3.shape import get_cube_shape
-from jax3dp3.viz.img import save_depth_image
+from jax3dp3.viz import save_depth_image
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 from scipy.spatial.transform import Rotation as R
 

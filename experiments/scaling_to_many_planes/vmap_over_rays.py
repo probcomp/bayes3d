@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import jax
 import functools
-from jax3dp3.viz.img import save_depth_image
+from jax3dp3.viz import save_depth_image
 from jax3dp3.triangle_renderer import render_triangles
 from jax3dp3.transforms_3d import transform_from_pos
 import time

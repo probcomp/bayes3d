@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import cv2
 from jax.scipy.special import logsumexp
 from jax3dp3.viz.gif import make_gif
-from jax3dp3.viz.img import multi_panel
+from jax3dp3.viz import multi_panel
 from jax3dp3.enumerations import make_grid_enumeration
 
 data = np.load("data.npz")

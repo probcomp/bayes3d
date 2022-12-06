@@ -2,6 +2,23 @@ import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import os
+import matplotlib.pyplot as plt
+from PIL import Image
+import numpy as np
+import matplotlib
+import graphviz
+import distinctipy
+
+
+def make_gif_from_pil_images(images, filename):
+    images[0].save(
+        fp=filename,
+        format="GIF",
+        append_images=images,
+        save_all=True,
+        duration=100,
+        loop=0,
+    )
 
 def save_depth_image(image, filename, min=0.0, max=1.0):
     cm = plt.get_cmap('turbo')
@@ -89,3 +106,33 @@ def multi_panel(images, labels, middle_width, top_border, fontsize):
             drawer.text((i * w + i * middle_width + w/2 - text_w/2, top_border/2 - text_h/2), msg, font=font, fill="black")
     return dst
 
+
+
+
+
+def viz_graph(num_nodes, edges, filename, node_names=None):
+    if node_names is None:
+        node_names = [str(i) for i in range(num_nodes)]
+
+    g_out = graphviz.Digraph()
+    g_out.attr("node", style="filled")
+    
+    colors = matplotlib.cm.tab20(range(num_nodes))
+    colors = distinctipy.get_colors(nv, pastel_factor=0.7)
+    for i in range(len(edges)):
+        g_out.node(str(i), node_names[i], fillcolor=matplotlib.colors.to_hex(colors[i]))
+
+    for (i,j) in edges:
+        if i==-1:
+            continue
+        g_out.edge(str(i),str(j))
+
+    max_width_px = 2000
+    max_height_px = 2000
+    dpi = 200
+
+    g_out.attr("graph",
+                # See https://graphviz.gitlab.io/_pages/doc/info/attrs.html#a:size
+                size="{},{}!".format(max_width_px / dpi, max_height_px / dpi),
+                dpi=str(dpi))
+    g_out.render(filename, format=filename.split(".")[-1])

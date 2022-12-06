@@ -7,7 +7,7 @@ from jax3dp3.batched_scorer import batched_scorer_parallel
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.rendering import render_planes
 from jax3dp3.shape import get_cube_shape
-from jax3dp3.viz.img import save_depth_image, get_depth_image
+from jax3dp3.viz import save_depth_image, get_depth_image
 import time
 from functools import partial 
 from jax3dp3.likelihood import threedp3_likelihood 

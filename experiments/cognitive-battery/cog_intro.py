@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
+from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
 from jax3dp3.utils import depth_to_coords_in_camera
 from jax3dp3.transforms_3d import transform_from_pos
 from jax3dp3.shape import (

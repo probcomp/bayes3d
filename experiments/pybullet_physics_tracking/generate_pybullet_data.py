@@ -6,7 +6,7 @@ import pybullet_data
 from jax3dp3.viz.gif import make_gif
 from PIL import Image
 from copy import copy
-from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
+from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
 
 p.connect(p.DIRECT)
 p.resetSimulation()

@@ -14,7 +14,7 @@ from jax.scipy.stats.multivariate_normal import logpdf
 from jax.scipy.special import logsumexp
 from jax3dp3.enumerations import fibonacci_sphere, geodesicHopf_select_axis
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
-from jax3dp3.viz.img import save_depth_image
+from jax3dp3.viz import save_depth_image
 import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R

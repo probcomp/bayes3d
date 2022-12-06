@@ -4,13 +4,13 @@ import jax.numpy as jnp
 import jax
 import jax3dp3.utils
 import numpy as np
-from jax3dp3.viz.img import save_depth_image,save_rgb_image, get_depth_image, multi_panel
+from jax3dp3.viz import save_depth_image,save_rgb_image, get_depth_image, multi_panel
 from tqdm import tqdm
 from jax3dp3.transforms_3d import transform_from_axis_angle
 from jax3dp3.shape import get_cube_shape
 from jax3dp3.rendering import render_planes_rays
 import functools
-from jax3dp3.viz.img import save_depth_image
+from jax3dp3.viz import save_depth_image
 from jax3dp3.triangle_renderer import render_triangles
 import jax3dp3.transforms_3d as t3d
 import jax3dp3.camera

@@ -2,8 +2,8 @@ import machine_common_sense as mcs
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-from jax3dp3.viz.img import save_depth_image,save_rgb_image
-from jax3dp3.viz.img import multi_panel
+from jax3dp3.viz import save_depth_image,save_rgb_image
+from jax3dp3.viz import multi_panel
 
 controller = mcs.create_controller(config_file_or_dict='./config.ini')
 scene_data = mcs.load_scene_json_file("scene.json")

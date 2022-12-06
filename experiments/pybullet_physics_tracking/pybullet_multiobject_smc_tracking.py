@@ -11,7 +11,7 @@ from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
 from jax3dp3.distributions import gaussian_vmf, gaussian_vmf_cov
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
-from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
+from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
 
 import time
 from PIL import Image
@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import cv2
 from jax.scipy.special import logsumexp
 from jax3dp3.viz.gif import make_gif
-from jax3dp3.viz.img import multi_panel
+from jax3dp3.viz import multi_panel
 from jax3dp3.enumerations import make_grid_enumeration
 from jax3dp3.rendering import render_spheres, render_cloud_at_pose,render_planes_multiobject
 from jax3dp3.rendering import render_planes_multiobject

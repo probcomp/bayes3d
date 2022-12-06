@@ -8,7 +8,7 @@ from jax3dp3.utils import (
     depth_to_coords_in_camera
 )
 from jax3dp3.shape import get_cube_shape
-from jax3dp3.viz.img import save_depth_image
+from jax3dp3.viz import save_depth_image
 
 import matplotlib.pyplot as plt
 

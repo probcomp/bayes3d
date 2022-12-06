@@ -8,4 +8,5 @@ opencv-python
 tensorflow-probability
 pybullet
 open3d
-
+graphviz
+distinctipy

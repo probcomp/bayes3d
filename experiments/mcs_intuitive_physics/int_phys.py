@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import jax
 import time
-from jax3dp3.viz.img import save_depth_image,save_rgb_image
+from jax3dp3.viz import save_depth_image,save_rgb_image
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
     depth_to_coords_in_camera
@@ -16,12 +16,12 @@ from jax3dp3.shape import get_rectangular_prism_shape
 from jax3dp3.rendering import render_planes_multiobject
 from jax3dp3.enumerations import make_translation_grid_enumeration
 from jax3dp3.likelihood import threedp3_likelihood
-from jax3dp3.viz.img import multi_panel
+from jax3dp3.viz import multi_panel
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
 from jax3dp3.distributions import gaussian_vmf, gaussian_vmf_cov
 from jax.scipy.special import logsumexp
 from jax3dp3.rendering import render_spheres, render_cloud_at_pose,render_planes_multiobject
-from jax3dp3.viz.img import save_depth_image, get_depth_image, multi_panel
+from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
 
 data = np.load("data.npz")
 rgb_images = data["rgb_images"]

@@ -10,7 +10,7 @@ from jax3dp3.rendering import render_planes
 from jax3dp3.distributions import VonMisesFisher
 from jax3dp3.enumerations import get_rotation_proposals
 from jax3dp3.shape import get_cube_shape, get_corner_shape
-from jax3dp3.viz.img import save_depth_image
+from jax3dp3.viz import save_depth_image
 import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R

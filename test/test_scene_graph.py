@@ -4,18 +4,20 @@ import jax
 import jax3dp3.transforms_3d as t3d
 from jax3dp3.shape import get_rectangular_prism_shape
 from jax3dp3.rendering import render_sphere, render_planes_multiobject,render_planes_multiobject_rays
-from jax3dp3.viz.img import save_depth_image, get_depth_image
+from jax3dp3.viz import save_depth_image, get_depth_image
 from jax3dp3.camera import camera_rays_from_params
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.utils import make_centered_grid_enumeration_2d_points
+import jax3dp3.viz
 from jax.scipy.special import logsumexp
 import matplotlib.pyplot as plt
 from PIL import Image
 from jax3dp3.batched_scorer import batched_scorer_parallel
 import time
+import matplotlib
 
 box_dims = jnp.array([
-    [70.0, 0.1, 20.0],
+    [30.0, 0.1, 20.0],
     [1.0, 1.0, 1.0],
     [3.0, 4.0, 0.2],
     [6.0, 6.0, 0.2],
@@ -25,7 +27,7 @@ contact_planes = jax.vmap(get_contact_planes)(box_dims)
 
 camera_pose = t3d.transform_from_rot_and_pos(
     t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]),-jnp.pi/6)[:3,:3],
-    jnp.array([0.0, -10.0, -20.0])
+    jnp.array([0.0, -15.0, -30.0])
 )
 
 poses = jnp.array([
@@ -46,10 +48,10 @@ edges = jnp.array([
 
 contact_params = jnp.array([
     [0.0, 0.0, jnp.pi/4],
-    [-4.0, 0.0, jnp.pi/4],
+    [-8.0, 0.0, jnp.pi/4],
     [-2.0, 4.0, jnp.pi/2],
-    [-6.0, -1.0, jnp.pi/2],
-    [7.0, 2.0, jnp.pi/2],
+    [-8.0, -1.0, jnp.pi/2],
+    [7.0, -4.0, jnp.pi/2],
 ])
 
 
@@ -76,18 +78,20 @@ poses = f(edges, contact_params, poses)
 
 shape_planes, shape_dims = jax.vmap(get_rectangular_prism_shape)(box_dims)
 
+min,max = 1.0, 40.0
+
 h, w, fx, fy, cx, cy = (
-    100,
-    100,
-    200.0 / 3.0,
-    200.0 / 3.0,
-    50.0,
-    50.0,
+    200,
+    400,
+    400.0,
+    400.0,
+    200.0,
+    100.0,
 )
 rays = camera_rays_from_params(h,w, fx,fy,cx,cy)
 gt_image = render_planes_multiobject_rays(poses, shape_planes, shape_dims, rays)
 print('gt_image.shape ',gt_image.shape)
-save_depth_image(gt_image[:,:,2], "multiobject.png", max=30.0)
+save_depth_image(gt_image[:,:,2], "multiobject.png", min=min,max=max)
 
 key = jax.random.PRNGKey(3)
 def scorer(contact_params, obs):
@@ -96,20 +100,14 @@ def scorer(contact_params, obs):
     weight = threedp3_likelihood(obs, rendered_image, 0.1, 0.01)
     return weight
 
-scorer_jit = jax.jit(scorer)
-
-print(scorer_jit(contact_params, gt_image))
-
 scorer_parallel = jax.vmap(lambda x: scorer(x, gt_image))
 scorer_parallel_jit = jax.jit(scorer_parallel)
 
-grid = make_centered_grid_enumeration_2d_points(-20.0, 20.0, -20.0, 20.0, 200, 200)
+grid = make_centered_grid_enumeration_2d_points(-15.0, 15.0, -10.0, 10.0, 50, 50)
 
 contact_params_sweep = jnp.stack([contact_params for _ in range(grid.shape[0])])
 contact_params_sweep = contact_params_sweep.at[:,1,:2].set(grid)
-
-batched_scorer_jit = jax.jit(lambda x: batched_scorer_parallel(scorer_parallel, 16, x))
-
+batched_scorer_jit = jax.jit(lambda x: batched_scorer_parallel(scorer_parallel, 10, x))
 
 batched_scorer_jit(contact_params_sweep)
 
@@ -133,7 +131,7 @@ plt.savefig("distribution.png")
 
 
 idxs = jax.random.categorical(jax.random.PRNGKey(3),x,shape=(1000,))
-idxs = jnp.argsort(-x)[:1000]
+idxs = jnp.argsort(-x)[:500]
 object_idxs = jnp.array([0,1])
 idx = idxs[0]
 
@@ -145,13 +143,15 @@ def make_image(contact_params):
 make_image_jit = jax.jit(make_image)
 
 images = []
-gt_image_viz = get_depth_image(gt_image[:,:,2], max=30.0)
+
+gt_image_viz = get_depth_image(gt_image[:,:,2],  min=min,max=max)
 for idx in idxs:
     d = make_image_jit(contact_params_sweep[idx])
     images.append(
-       Image.blend(get_depth_image(d[:,:,2], max=30.0), gt_image_viz, 0.5)
+       Image.blend(get_depth_image(d[:,:,2],  min=min, max=max), gt_image_viz, 0.5)
     )
 
+images[0].save("test.png")
 images[0].save(
     fp="posterior.gif",
     format="GIF",
@@ -160,5 +160,7 @@ images[0].save(
     duration=100,
     loop=0,
 )
+
+jax3dp3.viz.viz_graph(len(edges), edges, "test.png")
 
 from IPython import embed; embed()
