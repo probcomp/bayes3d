@@ -43,7 +43,7 @@ shape = get_cube_shape(cube_length)
 
 render_planes_lambda = lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)
 render_planes_jit = jax.jit(render_planes_lambda)
-render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)))
+render_planes_parallel_jit = jax.jit(jax.vmap(render_planes_lambda))
 gt_image = render_planes_jit(gt_pose)
 
 

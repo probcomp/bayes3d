@@ -9,7 +9,7 @@ def transform_from_pos(t):
 
 def transform_from_rot(rot):
     return jnp.vstack(
-        [jnp.hstack([rot, jnp.zeros(3,1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
+        [jnp.hstack([rot, jnp.zeros((3,1))]), jnp.array([0.0, 0.0, 0.0, 1.0])]
     )
 
 def transform_from_rot_and_pos(rot, t):
