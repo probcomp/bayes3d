@@ -19,29 +19,42 @@ from jax3dp3.viz.gif import make_gif_from_pil_images
 from PIL import Image
 
 from tqdm import tqdm
-# Initialize metadata
 
-num_frames = 103
+# Initialize metadata
+def get_camera_intrinsics(width, height, fov):
+    cx, cy = width / 2.0, height / 2.0
+    aspect_ratio = width / height
+    fov_y = np.deg2rad(fov)
+    fov_x = 2 * np.arctan(aspect_ratio * np.tan(fov_y / 2.0))
+    fx = cx / np.tan(fov_x / 2.0)
+    fy = cy / np.tan(fov_y / 2.0)
+    
+    return fx, fy, cx, cy
+
 data_path = "data/swap_data/videos"
+num_frames = len(os.listdir(os.path.join(data_path, "frames")))
 
 width =  300
 height =  300
-fx =  150
-fy =  150
-cx =  150
-cy =  150
+
+fov = 99
+
+if fov:
+    fx, fy, cx, cy = get_camera_intrinsics(width, height, fov)
+else:
+    fx =  150
+    fy =  150
+    cx =  150
+    cy =  150
 
 fx_fy = jnp.array([fx, fy])
 cx_cy = jnp.array([cx, cy])
-
 
 K = jnp.array([
     [fx_fy[0], 0.0, cx_cy[0]],
     [0.0, fx_fy[1], cx_cy[1]],
     [0.0, 0.0, 1.0],
 ])
-
-# Load and pre-process rgb and depth images
 
 rgb_images, depth_images, seg_maps = [], [], [] 
 rgb_images_pil = []
@@ -57,23 +70,20 @@ for i in range(num_frames):
 
     seg_map = np.load(os.path.join(data_path, f"segmented/frame_{i}.npy"))
     seg_maps.append(seg_map)
-
+    
 coord_images = []
 seg_images = []
 
 for frame_idx in range(num_frames):
-    # frame_idx = 20
-    k = 5 if 5 <= frame_idx < 19 else 4 # 4 objects in frames [5:19]
-
     coord_image,_ = depth_to_coords_in_camera(depth_images[frame_idx], K)
     segmentation_image = seg_maps[frame_idx]
     mask = np.invert(
         (coord_image[:,:,0] < 1.0) *
-        (coord_image[:,:,0] > -0.5) *
-        (coord_image[:,:,1] < 0.28) *
-        (coord_image[:,:,1] > -0.5) *
-        (coord_image[:,:,2] < 4.0) *
-        (coord_image[:,:,2] > 1.2) 
+        (coord_image[:,:,0] > -1) *
+        (coord_image[:,:,1] < 0.465) *
+        (coord_image[:,:,1] > -.8) *
+        (coord_image[:,:,2] < 2) *
+        (coord_image[:,:,2] > 1.15) 
     )
     coord_image[mask,:] = 0.0
     segmentation_image[mask,:] = 0.0
@@ -83,10 +93,7 @@ for frame_idx in range(num_frames):
 coord_images = np.stack(coord_images)
 seg_images = np.stack(seg_images)
 
-
-
-
-start_t = 10
+start_t = 0
 shape_planes, shape_dims, init_poses = [], [], []
 seg_img = seg_images[start_t][:,:,2]
 
@@ -110,13 +117,9 @@ for obj_id in jnp.unique(seg_img):
     init_poses.append(init_pose)
 
     shape, dim = get_rectangular_prism_shape(dims)
-    # print('dims:');print(dims)
-    # print('center_of_box:');print(center_of_box)
-    # print("\n")
     shape_planes.append(shape)
     shape_dims.append(dim)
-    # break
-
+    
 shape_planes = jnp.stack(shape_planes)
 shape_dims = jnp.stack(shape_dims)
 init_poses = jnp.stack(init_poses)
@@ -135,14 +138,9 @@ def render_planes_multiobject_lambda(poses):
 render_planes_multiobject_jit = jax.jit(render_planes_multiobject_lambda)
 
 reconstruction_image = render_planes_multiobject_jit(init_poses)
-save_depth_image(reconstruction_image[:,:,2], "reconstruction.png", max=5.0)
+# save_depth_image(reconstruction_image[:,:,2], "reconstruction.png", max=5.0)
 
-
-# reconstruction_image = render_planes_multiobject_jit(init_poses)
-
-
-
-r = 0.005
+r = 0.01
 outlier_prob = 0.01
 def likelihood(x, params):
     obs= params[0]
@@ -153,9 +151,10 @@ def likelihood(x, params):
 likelihood_parallel = jax.vmap(likelihood, in_axes = (0, None))
 likelihood_parallel_jit = jax.jit(likelihood_parallel)
 
+n = num_proposals = 7
+d = delta = 0.1
 
-
-enumerations = make_translation_grid_enumeration(-0.1, -0.1, -0.1, 0.1, 0.1, 0.1, 9, 9, 9)
+enumerations = make_translation_grid_enumeration(-d, -d, -d, d, d, d, n, n, n)
 
 cm = plt.get_cmap("turbo")
 max_depth = 30.0
@@ -166,9 +165,10 @@ top_border = 100
 pose_estimates = init_poses.copy()
 
 inferred_poses = []
-batched_scorer_parallel_jit = jax.jit(lambda poses, image: batched_scorer_parallel(likelihood_parallel, 9, poses, (image,)))
+batched_scorer_parallel_jit = jax.jit(lambda poses, image: batched_scorer_parallel(likelihood_parallel, n, poses, (image,)))
 
-num_steps = 90
+
+num_steps = num_frames
 for t in tqdm(range(start_t, start_t+num_steps)):
     gt_image = jnp.array(coord_images[t])
     for i in range(pose_estimates.shape[0]):
@@ -176,10 +176,7 @@ for t in tqdm(range(start_t, start_t+num_steps)):
         enumerations_full = enumerations_full.at[:,i,:,:].set(enumerations)
         proposals = jnp.einsum("bij,abjk->abik", pose_estimates, enumerations_full)
 
-
-        # print(proposals.shape)
         weights = batched_scorer_parallel_jit(proposals, gt_image)
-        # print(weights.max())
         pose_estimates = proposals[weights.argmax()]
     inferred_poses.append(pose_estimates.copy())
 
@@ -196,7 +193,4 @@ for t in range(start_t, start_t+num_steps):
         multi_panel([rgb_viz, gt_depth_1, depth], ["RGB Image", "Actual Depth", "Reconstructed Depth"], middle_width=10, top_border=100, fontsize=20)
     )
 
-make_gif_from_pil_images(all_images, "out.gif")
-
-
-from IPython import embed; embed()
+make_gif_from_pil_images(all_images, "swap_out_r01.gif")
