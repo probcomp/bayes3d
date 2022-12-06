@@ -3,11 +3,8 @@ import jax.numpy as jnp
 import jax
 from jax3dp3.rendering import render_planes
 from jax3dp3.distributions import gaussian_vmf
-from jax3dp3.utils import (
-    make_centered_grid_enumeration_3d_points,
-    depth_to_coords_in_camera
-)
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
+from jax3dp3.enumerations import make_translation_grid_enumeration
 from jax3dp3.shape import get_cube_shape
 import time
 from PIL import Image
@@ -15,6 +12,7 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 import cv2
 from jax3dp3.likelihood import threedp3_likelihood
+import jax3dp3.viz
 
 h, w, fx_fy, cx_cy = (
     300,
@@ -70,26 +68,15 @@ print("score", score)
 
 scorer_parallel = jax.vmap(scorer, in_axes = (0, None))
 
-f_jit = jax.jit(jax.vmap(lambda t:     jnp.vstack(
-        [jnp.hstack([jnp.eye(3), t.reshape(3,-1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
-    )))
-pose_deltas = f_jit(make_centered_grid_enumeration_3d_points(0.2, 0.2, 0.2, 5, 5, 5))
-print("grid ", pose_deltas.shape)
-key, *sub_keys = jax.random.split(key, pose_deltas.shape[0] + 1)
-sub_keys_translation = jnp.array(sub_keys)
 
-key, *sub_keys = jax.random.split(key, 100)
-sub_keys = jnp.array(sub_keys)
-f_jit = jax.jit(jax.vmap(lambda key: gaussian_vmf(key, 0.00001, 800.0)))
-rotation_deltas = f_jit(sub_keys)
-print("grid ", rotation_deltas.shape)
-key, *sub_keys = jax.random.split(key, rotation_deltas.shape[0] + 1)
-sub_keys_orientation = jnp.array(sub_keys)
+translation_deltas = make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
+key = jax.random.PRNGKey(3)
+rotation_deltas = jax.vmap(lambda key: gaussian_vmf(key, 0.00001, 800.0))(jax.random.split(key, 100))
 
 
 def _inner(x, gt_image):
     for _ in range(1):
-        proposals = jnp.einsum("ij,ajk->aik", x, pose_deltas)
+        proposals = jnp.einsum("ij,ajk->aik", x, translation_deltas)
         weights_new = scorer_parallel(proposals, gt_image)
         x = proposals[jnp.argmax(weights_new)]
 
@@ -103,7 +90,6 @@ def _inner(x, gt_image):
 def inference(init_pos, gt_images):
     return jax.lax.scan(_inner, init_pos, gt_images)
 
-
 inference_jit = jax.jit(inference)
 
 a = inference_jit(gt_poses[0], gt_images)
@@ -114,43 +100,21 @@ end = time.time()
 print ("Time elapsed:", end - start)
 print ("FPS:", gt_poses.shape[0] / (end - start))
 
-cm = plt.get_cmap('turbo')
+from IPython import embed; embed()
 
+viz_images = []
 max_depth = 20.0
-images = []
-middle_width = 50
 for i in range(gt_images.shape[0]):
-    dst = Image.new(
-        "RGBA", (2 * w + middle_width, h)
+    gt_img = jax3dp3.viz.get_depth_image(gt_images[i,:,:,2], max=max_depth)
+    rendered_img = jax3dp3.viz.get_depth_image(render_planes_jit(inferred_poses[i])[:,:,2], max=max_depth)
+    viz_images.append(
+        jax3dp3.viz.multi_panel(
+            [gt_img, rendered_img],
+            ["Ground Truth", "Inferred Reconstruction"],
+            10,
+            50,
+            20
+        )
     )
-    obsedved_image_pil = Image.fromarray(
-        (cm(np.array(gt_images[i,:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
-    )
+jax3dp3.viz.make_gif_from_pil_images(viz_images,"test.gif")
 
-    dst.paste(
-        obsedved_image_pil,
-        (0, 0),
-    )
-
-    pose = inferred_poses[i]
-    rendered_image = render_planes_jit(pose)
-    rendered_image_pil = Image.fromarray(
-        (cm(np.array(rendered_image[:, :, 2]) / max_depth) * 255.0).astype(np.int8), mode="RGBA"
-    )
-
-    dst.paste(
-        rendered_image_pil,
-        (w + middle_width, 0),
-    )
-    images.append(dst)
-
-
-
-images[0].save(
-    fp="out.gif",
-    format="GIF",
-    append_images=images,
-    save_all=True,
-    duration=100,
-    loop=0,
-)

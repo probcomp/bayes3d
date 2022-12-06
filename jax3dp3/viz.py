@@ -20,12 +20,6 @@ def make_gif_from_pil_images(images, filename):
         loop=0,
     )
 
-def save_depth_image(image, filename, min=0.0, max=1.0):
-    cm = plt.get_cmap('turbo')
-    img = Image.fromarray(
-        np.rint(cm((np.clip(np.array(image), min, max) - min) / (max - min)) * 255.0).astype(np.int8), mode="RGBA"
-    )
-    img.save(filename)
 
 def get_depth_image(image, min=0.0, max=1.0):
     cm = plt.get_cmap('turbo')
@@ -33,6 +27,10 @@ def get_depth_image(image, min=0.0, max=1.0):
         np.rint(cm((np.clip(np.array(image), min, max) - min) / (max - min)) * 255.0).astype(np.int8), mode="RGBA"
     )
     return img
+
+def save_depth_image(image, filename, min=0.0, max=1.0):
+    img = get_depth_image(image, min=min, max=max)
+    img.save(filename)
 
 def get_rgb_image(image, max_val):
     img = Image.fromarray(
@@ -44,42 +42,22 @@ def get_rgb_image(image, max_val):
     return img
 
 def save_rgb_image(image, max_val, filename):
-    img = Image.fromarray(
-        np.rint(
-            image / max_val * 255.0
-        ).astype(np.int8),
-        mode="RGB",
-    )
+    img = get_rgb_image(image, max_val)
     img.save(filename)
 
-def save_rgba_image(image, max_val, filename):
+def get_rgba_image(image, max_val):
     img = Image.fromarray(
         np.rint(
             image / max_val * 255.0
         ).astype(np.int8),
         mode="RGBA",
     )
-    img.save(filename)
-    
+    return img
 
-def save_rgb_image(image, max_val, filename):
-    img = Image.fromarray(
-        np.rint(
-            image / max_val * 255.0
-        ).astype(np.int8),
-        mode="RGB",
-    )
-    img.save(filename)
 
 def save_rgba_image(image, max_val, filename):
-    img = Image.fromarray(
-        np.rint(
-            image / max_val * 255.0
-        ).astype(np.int8),
-        mode="RGBA",
-    )
+    img = get_rgba_image(image, max_val)
     img.save(filename)
-
 
 ####
 
@@ -108,7 +86,7 @@ def multi_panel(images, labels, middle_width, top_border, fontsize):
 
 
 
-
+# Max Val
 
 def viz_graph(num_nodes, edges, filename, node_names=None):
     if node_names is None:
@@ -118,7 +96,7 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
     g_out.attr("node", style="filled")
     
     colors = matplotlib.cm.tab20(range(num_nodes))
-    colors = distinctipy.get_colors(nv, pastel_factor=0.7)
+    colors = distinctipy.get_colors(num_nodes, pastel_factor=0.7)
     for i in range(len(edges)):
         g_out.node(str(i), node_names[i], fillcolor=matplotlib.colors.to_hex(colors[i]))
 
@@ -135,4 +113,5 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
                 # See https://graphviz.gitlab.io/_pages/doc/info/attrs.html#a:size
                 size="{},{}!".format(max_width_px / dpi, max_height_px / dpi),
                 dpi=str(dpi))
-    g_out.render(filename, format=filename.split(".")[-1])
+    filename_prefix, filetype = filename.split(".")
+    g_out.render(filename_prefix, format=filetype)

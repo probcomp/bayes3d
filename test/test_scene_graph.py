@@ -161,6 +161,6 @@ images[0].save(
     loop=0,
 )
 
-jax3dp3.viz.viz_graph(len(edges), edges, "test.png")
+jax3dp3.viz.viz_graph(len(edges), edges, "test.png", node_names=["table", "obj_1", "obj_2","obj_3","obj_4"])
 
 from IPython import embed; embed()
