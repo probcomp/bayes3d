@@ -22,7 +22,7 @@ rays = jax3dp3.camera.camera_rays_from_params(height, width, fx, fy, cx, cy)
 
 bunny_path = os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj")
 mesh = trimesh.load(bunny_path)
-trimesh_shape = (10.0*mesh.vertices)[mesh.faces] * jnp.array([1.0, -1.0, 1.0])
+trimesh_shape = mesh.vertices[mesh.faces]
 pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))
 
 gl_renderer = jax3dp3.gl_renderer.GLRenderer(height, width, fx, fy, cx, cy, 0.001, 100.0)
