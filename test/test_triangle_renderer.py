@@ -6,6 +6,8 @@ import jax3dp3.camera
 import jax3dp3.utils
 import jax3dp3.triangle_renderer
 import jax3dp3.transforms_3d as t3d
+import jax
+import time
 import trimesh
 
 
