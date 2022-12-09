@@ -3,9 +3,6 @@
 
 # ## Cognitive Battery Introduction: Jax-3DP3
 
-# In[121]:
-
-
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -31,15 +28,9 @@ from tqdm import tqdm
 
 # 1. Initialize camera metadata and path to data:
 
-# In[130]:
-
-
-scene = "relative"
-data_path = f"/home/khaledshehada/cog_3dp3_data/{scene}_data/videos/"
+scene = "gravity"
+data_path = f"/home/khaledshehada/cog_jax3dp3_data/{scene}_data/videos/"
 num_frames = len(os.listdir(os.path.join(data_path, "frames")))
-
-
-# In[131]:
 
 
 def get_camera_intrinsics(width, height, fov):
@@ -75,16 +66,16 @@ K = jnp.array(
 
 
 # 2. Load ground-truth RGB images, depth, and segmentation data.
-# 
-
-# In[132]:
-
 
 rgb_images, depth_images, seg_maps = [], [], []
 rgb_images_pil = []
 for i in range(num_frames):
-    rgb_path = os.path.join(data_path, f"frames/frame_{i}.jpeg")
-    rgb_img = Image.open(rgb_path)
+    try:
+        rgb_path = os.path.join(data_path, f"frames/frame_{i}.jpeg")
+        rgb_img = Image.open(rgb_path)
+    except FileNotFoundError:
+        rgb_path = os.path.join(data_path, f"frames/frame_{i}.png")
+        rgb_img = Image.open(rgb_path)
     rgb_images_pil.append(rgb_img)
     rgb_images.append(np.array(rgb_img))
 
@@ -97,9 +88,6 @@ for i in range(num_frames):
 
 
 # 3. Mask the depth and segmentation images to only include the relevant part of the scene (i.e. crop to the box above table).
-
-# In[102]:
-
 
 coord_images = []  # depth data in 2d view as images
 seg_images = []  # segmentation data as images
@@ -126,18 +114,12 @@ seg_images = np.stack(seg_images)
 
 # 4. Pick a starting frame and initialize the object shapes and poses from that frame
 
-# In[103]:
-
-
 start_t = 2
 seg_img = seg_images[start_t][:, :, 2]
 
 imgs = []
 for obj_id in jnp.unique(seg_img):
     imgs.append(get_depth_image(seg_img == obj_id))
-
-
-# In[104]:
 
 
 shape_planes, shape_dims, init_poses = [], [], []
@@ -165,8 +147,6 @@ init_poses = jnp.stack(init_poses)
 
 # 5. Save the reconstructed depths to check that they align with the actual depths.
 
-# In[105]:
-
 
 def render_planes_multiobject_lambda(poses):
     return render_planes_multiobject(
@@ -180,16 +160,7 @@ reconstruction_image = render_planes_multiobject_jit(init_poses)
 save_depth_image(reconstruction_image[:, :, 2], "reconstruction.png", max=5.0)
 
 
-# In[106]:
-
-
-display(Image.open("reconstruction.png"))
-
-
 # 6. Define the liklihood methods and the proposal enumerations.
-
-# In[ ]:
-
 
 # Liklihood parameters
 r = radius = 0.01
@@ -222,10 +193,7 @@ enumerations = make_translation_grid_enumeration(-d, -d, -d, d, d, d, n, n, n)
 
 # 7. For each frame, enumerate the positions of new object poses (currently translation only), and for each object pick the pose that maximizes the 3DP3 liklihood under a uniform prior.
 
-# In[ ]:
-
-
-num_steps = num_frames
+num_steps = num_frames - start_t
 inferred_poses = []
 pose_estimates = init_poses.copy()
 for t in tqdm(range(start_t, start_t + num_steps)):
@@ -245,9 +213,6 @@ for t in tqdm(range(start_t, start_t + num_steps)):
 
 # 8. Get the reconstructed poses for each frame and save them as a gif file with the gt data
 
-# In[ ]:
-
-
 all_images = []
 for t in range(start_t, start_t + num_steps):
     rgb_viz = Image.fromarray(rgb_images[t].astype(np.int8), mode="RGB")
@@ -266,4 +231,3 @@ for t in range(start_t, start_t + num_steps):
 out_path = f"{scene}_out.gif"
 make_gif_from_pil_images(all_images, out_path)
 print("Saved output to:", out_path)
-
