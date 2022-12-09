@@ -5,7 +5,7 @@ import sys
 
 filename = sys.argv[1]
 
-scaling = 0.1
+scaling = 10.0
 swaps = np.array([1.0, 1.0, 1.0])
 
 mesh = trimesh.load(filename)

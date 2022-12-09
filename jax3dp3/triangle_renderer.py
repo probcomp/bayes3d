@@ -62,3 +62,15 @@ def render_triangles(pose, trimesh_shape, rays):
     points_final = points[jnp.arange(points.shape[0])[:, None], jnp.arange(points.shape[1])[None, :], idxs]
     points_final_final = points_final * (points_final[:,:,2] < 9000.0)[:,:,None]
     return points_final_final
+
+def render_triangles_multiobject(poses, idxs, triangles, rays):
+    points = jax.vmap(jax.vmap(lambda vertex: ray_triangle_vmap(rays, vertex), out_axes=-2), out_axes=-3) (all_vertices)
+    print(points.shape)
+    z_vals = points[:,:,:,]
+    
+    idxs = jnp.argmax(z_vals, axis=-1)
+
+    idxs = jnp.argmin(points[:,:,:,2], axis=-1)
+    points_final = points[jnp.arange(points.shape[0])[:, None], jnp.arange(points.shape[1])[None, :], idxs]
+    points_final_final = points_final * (points_final[:,:,2] < 9000.0)[:,:,None]
+    return points_final_final
