@@ -44,7 +44,7 @@ for angle in jnp.linspace(0.0, 2*jnp.pi, 10):
     camera_pose_sweep.append(pose)
 
 mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
-trimesh_shape = (10.0*mesh.vertices)[mesh.faces] * jnp.array([1.0, -1.0, 1.0])
+trimesh_shape = mesh.vertices[mesh.faces]
 
 gt_depth_images = [
     render_triangles(jnp.linalg.inv(cam_pose).dot(object_pose), trimesh_shape, identity_rays)

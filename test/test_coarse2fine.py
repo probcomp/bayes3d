@@ -7,13 +7,13 @@ import jax.numpy as jnp
 import jax
 from jax3dp3.batched_scorer import batched_scorer_parallel
 from jax3dp3.coarse_to_fine import coarse_to_fine
+from jax3dp3.enumerations import get_rotation_proposals, make_translation_grid_enumeration
+from jax3dp3.metrics import get_rot_error_from_poses, get_translation_error_from_poses
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.rendering import render_planes
-from jax3dp3.enumerations import get_rotation_proposals, make_translation_grid_enumeration
 from jax3dp3.shape import get_rectangular_prism_shape
 from jax3dp3.utils import make_centered_grid_enumeration_3d_points
-from jax3dp3.viz.img import save_depth_image, get_depth_image
-from jax3dp3.likelihood import threedp3_likelihood
+from jax3dp3.viz import save_depth_image, get_depth_image
 import time
 
 ## Camera / render setup
@@ -31,10 +31,6 @@ cx, cy = cx_cy
 max_depth = 5.0
 K = jnp.array([[fx, 0, cx], [0, fy, cy], [0,0,1]])
 
-render_planes_lambda = lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)
-render_planes_jit = jax.jit(render_planes_lambda)
-render_planes_parallel_jit = jax.jit(jax.vmap(render_planes_lambda))
-
 
 
 ## Scorer generations
@@ -43,14 +39,6 @@ def scorer(shape, pose, gt_image, r):
     rendered_image = render_planes(pose, shape, h, w, fx_fy, cx_cy)
     weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
     return weight
-
-NUM_BATCHES = 4
-def get_batched_scorer_for_shape(shape):
-    scorer_parallel = jax.vmap(partial(scorer, shape), in_axes = (0, None, None))
-    batched_scorer_parallel = partial(batched_scorer_parallel, scorer_parallel, NUM_BATCHES)
-    
-    return batched_scorer_parallel
-
 
 
 #######################
@@ -76,16 +64,16 @@ enumeration_grid_r = [get_rotation_proposals(fib_nums, rot_nums) for (fib_nums, 
 finest_r = schedule_tr[-1][0]  # 0.02
 coarsest_gridrange = schedule_tr[0][1]  # 1
 finest_grid_resolution = schedule_tr[-1][1] / schedule_tr[-1][-1]  # 0.1/10=0.01
-schedule_tr_fine = [(finest_r, coarsest_gridrange, coarsest_gridrange//finest_grid_resolution)]
+schedule_tr_fine = [(finest_r, coarsest_gridrange, int(coarsest_gridrange/finest_grid_resolution))]
 schedule_rot_fine = [schedule_rot[-1]]
 
-enumeration_likelihood_r_fine = [schedule_tr_fine[-1][0]]
-enumeration_grid_tr_fine = [make_translation_grid_enumeration(
-                        -grid_width, -grid_width, -grid_width,
-                        grid_width, grid_width, grid_width,
-                        num_grid_points,num_grid_points,num_grid_points
-                    ) for (_, grid_width, num_grid_points) in schedule_tr_fine]
-enumeration_grid_r_fine = [get_rotation_proposals(fib_nums, rot_nums) for (fib_nums, rot_nums) in schedule_rot_fine]
+# enumeration_likelihood_r_fine = [schedule_tr_fine[-1][0]]
+# enumeration_grid_tr_fine = [make_translation_grid_enumeration(
+#                         -grid_width, -grid_width, -grid_width,
+#                         grid_width, grid_width, grid_width,
+#                         num_grid_points,num_grid_points,num_grid_points
+#                     ) for (_, grid_width, num_grid_points) in schedule_tr_fine]
+# enumeration_grid_r_fine = [get_rotation_proposals(fib_nums, rot_nums) for (fib_nums, rot_nums) in schedule_rot_fine]
 
 ######
 # Setup testing (see test/test_generate_enumerations.py)
@@ -103,15 +91,6 @@ enumeration_grid_r_fine = [get_rotation_proposals(fib_nums, rot_nums) for (fib_n
 # (4096 pose proposals to test)
 ######
 
-
-
-TEST_RESULT_DICT = {shape:{"frames_tested": 0, 
-                            "true_positive": 0, 
-                            "false_positive": 0, 
-                            "false_negative":0} for shape in range(5)}
-TOTAL_TIME_ELAPSED_C2F = 0
-TOTAL_TIME_ELAPSED_FINE = 0
-
 # generate test shapes
 x0, y0, z0 = 0.0, 0.0, 1.50
 default_pose = jnp.array([
@@ -125,6 +104,7 @@ default_pose = jnp.array([
 shapes_dims = [jnp.array([0.5, 0.5, 0.5]), jnp.array([0.45, 0.5, 0.55]), jnp.array([0.40, 0.42, 0.8]), jnp.array([0.3, 0.5, 0.7]), jnp.array([0.05, 0.5, 0.5])]
 shapes = [get_rectangular_prism_shape(shape_dims) for shape_dims in shapes_dims]
 num_shapes = len(shapes)
+print(f"Testing {num_shapes} shapes")
 
 # generate test poses and corresponding gt shapes (the ith pose has (i%5)th shape)
 f_jit = jax.jit(jax.vmap(lambda t: jnp.vstack(
@@ -134,71 +114,47 @@ pose_deltas = f_jit(make_centered_grid_enumeration_3d_points(0.4, 0.4, 0.5, 3, 3
 translations = jnp.einsum("ij,ajk->aik", default_pose, pose_deltas)
 rotations = get_rotation_proposals(8,8)
 gt_test_poses = jnp.einsum("aij,bjk->abik", translations, rotations).reshape(-1, 4,4)
+print(f"Testing {len(gt_test_poses)} images (GT Poses)")
 
 
+def get_renderer(shape_id, h=h,w=w,fx_fy=fx_fy,cx_cy=cx_cy):
+    render_planes_lambda = lambda p: render_planes(p,shapes[shape_id],h,w,fx_fy,cx_cy)
+    return render_planes_lambda
 
-## Generate c2f functions to jit and run test
+def get_c2f_func(shape_id):
+    scorer_for_shape = partial(scorer, shapes[shape_id])
+    coarse_to_fine_func = partial(coarse_to_fine, scorer_for_shape, enumeration_grid_tr, enumeration_grid_r, enumeration_likelihood_r)
+    return coarse_to_fine_func
 
-coarse_to_fine_functions = []
-for shape in shapes:
-    batched_scorer_parallel = get_batched_scorer_for_shape(shape)
-    coarse_to_fine = partial(coarse_to_fine, batched_scorer_parallel)
-    coarse_to_fine_jit = jax.jit(coarse_to_fine)
-    
-    coarse_to_fine_functions.append(coarse_to_fine_jit)
+def get_predictions(shapes, gt_test_poses):   
+    min_r = 0.02
 
-for i, gt_test_pose in enumerate(gt_test_poses):
-    best_poses = np.zeros((num_shapes, 4, 4))
-    best_pose_scores = np.zeros(num_shapes)
+    test_predictions = []
 
-    gt_shape = shapes[i % num_shapes]
-    gt_test_image = render_planes_jit(gt_test_pose, gt_shape)
-    latent_pose_estimate = gt_test_pose   # TODO always center at gt?
-    # retrieve best pose hypothesis for each possible shape
-    for shape_i, shape in enumerate(shapes):
-        coarse_to_fine_jit = coarse_to_fine_functions[shape_i]
+    for i, gt_test_pose in enumerate(gt_test_poses):
+        pose_estimates = []
+        scores = []
 
-        _ = coarse_to_fine_jit(enumeration_grid_tr, enumeration_grid_r, enumeration_likelihood_r,
-                                jnp.array([
-                                [1.0, 0.0, 0.0, 0.0],   
-                                [0.0, 1.0, 0.0, 0.0],   
-                                [0.0, 0.0, 1.0, 0.0],   
-                                [0.0, 0.0, 0.0, 0.0],   
-                                ]), jnp.zeros(gt_test_image.shape))
+        gt_shape_id = i % num_shapes
+        gt_test_image = get_renderer(gt_shape_id)(gt_test_pose)
+        latent_pose_estimate = gt_test_pose   # TODO always center at gt?
+        # retrieve best pose hypothesis for each possible shape
+        for shape_i, shape in enumerate(shapes):
+            best_pose_for_shape = get_c2f_func(shape_i)(latent_pose_estimate, gt_test_image)             
+            best_pose_score_for_shape = scorer(shape, best_pose_for_shape, gt_test_image, min_r)  # best pose's likelihood at finest resolution
+            
+            pose_estimates.append(best_pose_for_shape)
+            scores.append(best_pose_score_for_shape)
 
-        start = time.time()                       
-        best_pose_estimate = coarse_to_fine_jit(enumeration_grid_tr, enumeration_grid_r, enumeration_likelihood_r, latent_pose_estimate, gt_test_image)             
-        end = time.time()
-        print(best_pose_estimate)
-        elapsed = end - start
-        TOTAL_TIME_ELAPSED_C2F += elapsed
-        print("time elapsed = ", elapsed, " FPS=", 1/elapsed)
-        best_img = render_planes_jit(best_pose_estimate)
-        # save_depth_image(best_img[:,:,2], f"c2f_out.png",max=max_depth)
+        best_shape_idx = jnp.argmax(jnp.array(scores))
+        best_pose_estimate = jnp.array(pose_estimates)[best_shape_idx]
+        test_predictions.append((best_shape_idx, best_pose_estimate))
+            
+    return test_predictions
+ 
+get_predictions_jit = jax.jit(get_predictions)
+_ = get_predictions_jit(shapes, jnp.zeros((5,4,4)))
 
-        best_poses[shape_i, :, :] = best_pose_estimate
-        best_pose_score = scorer(shape, best_pose_estimate, gt_test_image, enumeration_likelihood_r[-1])  # best pose's likelihood at finest resolution
-        best_pose_scores[shape_i] = best_pose_score
-    
-        # TODO run fine-scale enumeration for runtime comparison
-        start = time.time()                       
-        _ = coarse_to_fine_jit(enumeration_grid_tr_fine, enumeration_grid_r_fine, enumeration_likelihood_r, latent_pose_estimate, gt_test_image)             
-        end = time.time()
-        elapsed = end - start
-        TOTAL_TIME_ELAPSED_FINE += elapsed
-
-    
-    # Test accuracy: get best shape-pose pair for image
-    best_shape_for_gt_pose = jnp.argmax(best_pose_scores)
-    TEST_RESULT_DICT[i % num_shapes]["frames_tested"] += 1
-    if best_shape_for_gt_pose == (i % num_shapes):
-        TEST_RESULT_DICT[i % num_shapes]["true_positive"] += 1
-    else:
-        TEST_RESULT_DICT[i % num_shapes]["false_negative"] += 1
-        TEST_RESULT_DICT[best_shape_for_gt_pose]["false_positive"] += 1
-
-# Test runtime: 
-TIME_ELAPSED_PER_FRAME_C2F = TOTAL_TIME_ELAPSED_C2F / (num_shapes * len(gt_test_poses))
-# TODO fine-enum-only time recording
+test_predictions = get_predictions_jit(shapes, gt_test_poses)
 
 from IPython import embed; embed()

@@ -17,7 +17,7 @@ import time
 import matplotlib
 
 box_dims = jnp.array([
-    [30.0, 0.1, 20.0],
+    [27.0, 0.1, 20.0],
     [1.0, 1.0, 1.0],
     [3.0, 4.0, 0.2],
     [6.0, 6.0, 0.2],
@@ -27,7 +27,7 @@ contact_planes = jax.vmap(get_contact_planes)(box_dims)
 
 camera_pose = t3d.transform_from_rot_and_pos(
     t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]),-jnp.pi/6)[:3,:3],
-    jnp.array([0.0, -15.0, -30.0])
+    jnp.array([0.0, -18.0, -33.0])
 )
 
 poses = jnp.array([
@@ -48,10 +48,10 @@ edges = jnp.array([
 
 contact_params = jnp.array([
     [0.0, 0.0, jnp.pi/4],
-    [-8.0, 0.0, jnp.pi/4],
-    [-2.0, 4.0, jnp.pi/2],
-    [-8.0, -1.0, jnp.pi/2],
-    [7.0, -4.0, jnp.pi/2],
+    [-8.0, -2.0, jnp.pi/4],
+    [-2.0, 2.0, jnp.pi/2],
+    [-8.0, -4.0, jnp.pi/2],
+    [7.0, -7.0, jnp.pi/2],
 ])
 
 
@@ -78,7 +78,7 @@ poses = f(edges, contact_params, poses)
 
 shape_planes, shape_dims = jax.vmap(get_rectangular_prism_shape)(box_dims)
 
-min,max = 1.0, 40.0
+min,max = 1.0, 45.0
 
 h, w, fx, fy, cx, cy = (
     200,
@@ -148,7 +148,7 @@ gt_image_viz = get_depth_image(gt_image[:,:,2],  min=min,max=max)
 for idx in idxs:
     d = make_image_jit(contact_params_sweep[idx])
     images.append(
-       Image.blend(get_depth_image(d[:,:,2],  min=min, max=max), gt_image_viz, 0.5)
+       Image.blend(get_depth_image(d[:,:,2],  min=min, max=max), gt_image_viz, 0.4)
     )
 
 images[0].save("test.png")
