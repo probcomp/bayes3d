@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-
+import numpy as np
 
 def transform_from_pos(t):
     return jnp.vstack(
