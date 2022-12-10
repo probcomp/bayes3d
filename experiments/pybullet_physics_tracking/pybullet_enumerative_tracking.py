@@ -5,9 +5,8 @@ from jax3dp3.rendering import render_planes
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
-    depth_to_coords_in_camera
 )
-from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
+from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, depth_to_coords_in_camera
 from jax3dp3.distributions import gaussian_vmf
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 import time
@@ -16,7 +15,6 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 import cv2
 from jax.scipy.special import logsumexp
-from jax3dp3.viz.gif import make_gif
 
 
 data = np.load("data.npz")

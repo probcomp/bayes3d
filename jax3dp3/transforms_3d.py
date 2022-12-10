@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+from typing import Tuple
 
 def transform_from_pos(t):
     return jnp.vstack(
@@ -180,7 +181,7 @@ def depth_to_point_cloud_image(
         [vu[1] * depth_for_uv, vu[0] * depth_for_uv, depth_for_uv], axis=0
     )
     coords_in_camera = np.moveaxis(
-        np.einsum('ij,j...->i...', np.linalg.inv(intrinsics), full_vec), 0, -1
+        np.einsum('ij,j...->i...', np.linalg.inv(K), full_vec), 0, -1
     )
     return coords_in_camera
 
