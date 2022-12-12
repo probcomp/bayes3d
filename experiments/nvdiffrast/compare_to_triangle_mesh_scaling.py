@@ -24,3 +24,14 @@ num_images = 2000
 poses_all = jnp.array([pose for _ in range(num_images)])
 parallel_renderer = jax.jit(jax.vmap(lambda pose: jax3dp3.triangle_renderer.render_triangles(pose, trimesh_shape, rays)))
 parallel_renderer(poses_all)
+
+x = parallel_renderer(poses_all)
+x = parallel_renderer(poses_all)
+x = parallel_renderer(poses_all)
+new_poses = poses_all + 0.001
+start = time.time()
+x = parallel_renderer(new_poses)
+end = time.time()
+print ("Time elapsed:", end - start)
+
+print(len(x))

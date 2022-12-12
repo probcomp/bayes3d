@@ -6,7 +6,6 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-import imageio
 import os
 import numpy as np
 import torch
@@ -27,6 +26,7 @@ import jax
 import time
 import trimesh
 from jax3dp3.nv_rendering import render_depth, projection_matrix
+from jax3dp3.likelihood import threedp3_likelihood
 
 def tensor(*args, **kwargs):
     return torch.tensor(*args, device='cuda', **kwargs)
@@ -43,8 +43,8 @@ fy = 200.0
 near=0.05
 far=10.0
 
-max_depth = 6.0
-glenv = dr.RasterizeGLContext()
+max_depth = 10.0
+glenv = dr.RasterizeCudaContext()
 
 
 mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
@@ -53,7 +53,7 @@ vertices = vertices_orig.copy()
 pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 4.2]))
 view_space_vertices = t3d.apply_transform(vertices, pose)
 vertices = tensor(np.array([view_space_vertices]))
-num_images = 1000
+num_images = 1
 vertices = vertices.tile((num_images,1,1))
 triangles = tensor(mesh.faces , dtype=torch.int32)
 
@@ -63,6 +63,7 @@ triangles = tensor(mesh.faces , dtype=torch.int32)
 point_cloud = render_depth(glenv, vertices, triangles, h,w,fx,fy,cx,cy, near, far)
 start = time.time()
 point_cloud = render_depth(glenv, vertices, triangles, h,w,fx,fy,cx,cy, near, far)
+print(point_cloud[0,0,0])
 end = time.time()
 print ("Time elapsed:", end - start)
 
@@ -75,11 +76,13 @@ jax3dp3.viz.save_depth_image(np.array(depth_img.cpu()), "bunny.png",max=max_dept
 
 
 
-# import jax.numpy as jnp
+import jax.numpy as jnp
 
-# rays = jax3dp3.camera.camera_rays_from_params(h, w, fx, fy, cx, cy)
-# trimesh_shape = mesh.vertices[mesh.faces]
-# img = jax3dp3.triangle_renderer.render_triangles(pose, trimesh_shape, rays)
-# save_depth_image(img[:,:,2], "triangle.png", max=max_depth)
+rays = jax3dp3.camera.camera_rays_from_params(h, w, fx, fy, cx, cy)
+trimesh_shape = mesh.vertices[mesh.faces]
+img = jax3dp3.triangle_renderer.render_triangles(pose, trimesh_shape, rays)
+print('img[:,:,2].max():');print(img[:,:,2].max())
+print('img[:,:,2].min():');print(img[:,:,2].min())
+save_depth_image(img[:,:,2], "triangle.png", max=max_depth)
 
 from IPython import embed; embed()
