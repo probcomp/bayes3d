@@ -160,7 +160,7 @@ def get_prediction(test_idx,x):
 
 batchsize = 10
 result = jnp.array([0,0,0])
-for batch_i in range(len(gt_test_poses)//batchsize):
+for batch_i in range(2):#range(len(gt_test_poses)//batchsize):
     start = time.time()
     _, pred = jax.lax.scan(get_prediction, 0, gt_test_poses[10*batch_i : 10*(batch_i+1)])
     end = time.time()
@@ -172,5 +172,6 @@ for batch_i in range(len(gt_test_poses)//batchsize):
     # print("process time=", end-start)
 
 result
+host_callback.call(lambda x: jnp.save("predictions.npy", x), result[1:])  
 
 from IPython import embed; embed()
