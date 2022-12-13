@@ -3,6 +3,7 @@ from OpenGL.GLU import *
 from OpenGL.GL import shaders
 from OpenGL.arrays import vbo
 
+import time
 import trimesh
 import os
 import glfw
@@ -44,7 +45,7 @@ def projection_matrix(h, w, fx, fy, cx, cy, near, far):
     )
     return orth @ persp @ view
 
-height, width = 200, 200
+height, width = 120, 160
 h,w = height, width
 cx = (width-1)/2
 cy = (height-1)/2
@@ -59,8 +60,6 @@ perspective_matrix = tuple(P.T.astype('f4').reshape(-1))
 mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
 vertices_orig = np.array(mesh.vertices)
 vertices = vertices_orig.copy()
-pose = t3d.transform_from_pos(np.array([0.0, 0.0, 2.0]))
-vertices = t3d.apply_transform(vertices, pose)
 indices = np.array(mesh.faces)
 
 
@@ -105,7 +104,7 @@ glClearDepth(1.0)
 
 glDrawBuffers(1, [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1])
 
-batch_size = 10
+batch_size = 1000
 
 color_tex = glGenTextures(1)
 glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
@@ -143,16 +142,15 @@ VERTEX_SHADER = shaders.compileShader("""
 #version 430
 #extension GL_ARB_shader_draw_parameters : enable
 in vec3 in_vert;
+uniform mat4 pose_mat;
 uniform mat4 mvp;
 out int v_layer;
-out vec4 color;
+out vec4 vertex_on_object;
 void main()
 {
     v_layer = gl_DrawIDARB;
-    vec3 new_in_vert = vec3(in_vert[0], in_vert[1], in_vert[2] + v_layer);
-    vec4 position = mvp * vec4(new_in_vert, 1.0);
-    gl_Position = vec4(position[0], position[1], position[2], position[3]);
-    color = vec4(new_in_vert,1.0);
+    vertex_on_object = pose_mat * vec4(in_vert, 1.0);
+    gl_Position = mvp * vertex_on_object;
 }
 """, GL_VERTEX_SHADER)
 
@@ -161,22 +159,22 @@ GEOMETRY_SHADER = shaders.compileShader("""
 #extension GL_ARB_shader_draw_parameters : enable
 layout (triangles) in;
 layout(triangle_strip, max_vertices=3) out;
-in vec4 color[];
+in vec4 vertex_on_object[];
 in int v_layer[];
-out vec4 colorz;
+out vec4 vertex_on_object_out;
 void main()
 {
     gl_Layer =  v_layer[0];
     gl_Position = gl_in[0].gl_Position;
-    colorz = color[0];
+    vertex_on_object_out = vertex_on_object[0];
     EmitVertex();
     gl_Layer =  v_layer[0];
     gl_Position = gl_in[1].gl_Position;
-    colorz = color[1];
+    vertex_on_object_out = vertex_on_object[1];
     EmitVertex();
     gl_Layer =  v_layer[0];
     gl_Position = gl_in[2].gl_Position;
-    colorz = color[2];
+    vertex_on_object_out = vertex_on_object[2];
     EmitVertex();
 	EndPrimitive();
 }
@@ -185,11 +183,11 @@ void main()
 FRAGMENT_SHADER = shaders.compileShader("""
 #version 430
 #extension GL_ARB_shader_draw_parameters : enable
-in vec4 colorz;
+in vec4 vertex_on_object_out;
 out vec4 fragColor;
 void main()
 {
-    fragColor = vec4(colorz);
+    fragColor = vec4(vertex_on_object_out);
 }
 """, GL_FRAGMENT_SHADER)
 
@@ -210,7 +208,15 @@ glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
 
 glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
+
+pose = np.array(t3d.transform_from_pos(np.array([0.0, 0.0, 4.0])))
+pose = tuple(pose.T.astype('f4').reshape(-1))
+glUniformMatrix4fv(glGetUniformLocation(shader,"pose_mat"), 1, GL_FALSE, pose)
 glUniformMatrix4fv(glGetUniformLocation(shader,"mvp"), 1, GL_FALSE, perspective_matrix)
+
+
+start = time.time()
+
 indirect = np.array([
     [indices.shape[0]*3, batch_size, 0, 0, 0, 1]
     for _ in range(batch_size)
@@ -226,11 +232,14 @@ glMultiDrawElementsIndirect(GL_TRIANGLES,
 glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
 im = glGetTexImage(GL_TEXTURE_2D_ARRAY,  0, GL_RGBA, GL_FLOAT);
 im2 = im.reshape(batch_size, height,width, 4)
+
+end = time.time()
+print ("Time elapsed:", end - start)
+print ("FPS:", batch_size / (end - start))
+
 print(np.where(im2 > 0))
 jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=6.0)
 jax3dp3.viz.save_depth_image(im2[-1,:,:,2],"bunny3.png", max=6.0)
-
-
 
 from IPython import embed; embed()
 
