@@ -10,6 +10,7 @@ import numpy as np
 import jax3dp3.utils
 import jax3dp3
 import jax3dp3.transforms_3d as t3d
+import jax3dp3.viz
 
 
 def projection_matrix(h, w, fx, fy, cx, cy, near, far):
@@ -72,19 +73,20 @@ glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 fbo = glGenFramebuffers(1)
 glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 
+samples = 100
 color_tex = glGenTextures(1)
-glBindTexture(GL_TEXTURE_2D, color_tex)
-glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0,
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
+glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, width, height, samples, 0,
                 GL_RGBA, GL_UNSIGNED_BYTE, None)
-glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_tex, 0)
+glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color_tex, 0)
 
 depth_tex = glGenTextures(1)
-glBindTexture(GL_TEXTURE_2D, depth_tex)
-glTexImage2D.wrappedOperation(
-    GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, 
+glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
+glTexImage3D.wrappedOperation(
+    GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, width, height, samples, 0, 
     GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, None
 );
-glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_tex, 0)
+glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex, 0)
 
 
 if not glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE:
@@ -169,12 +171,37 @@ glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 glBindVertexArray(vao)
 glBindBuffer(GL_ARRAY_BUFFER, vertexPositions)
 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
-glDrawElements(GL_TRIANGLES, indices.shape[0]*3, GL_UNSIGNED_INT, None) #This line does work too!
 
-im = glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT)
-im = im.reshape(height,width,4)
+# indirect = np.array([[3, 10, 0, 0], [3, 5, 1, 0]], dtype=np.uint32)
+# glMultiDrawArraysIndirect(GL_TRIANGLES, indirect, 2, 16)
 
-import jax3dp3.viz
-jax3dp3.viz.save_depth_image(im[:,:,2],"bunny2.png", max=6.0)
+# glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, indices.shape[0]*3, 1000, 0)
+
+
+# glDrawElementsInstancedBaseVertexBaseInstance(
+#     GL_TRIANGLES,
+#     indices.shape[0]*3,
+#     GL_UNSIGNED_INT,
+#     None,
+#     1,
+#     0,
+#     0
+# )
+
+
+indirect = np.array([[indices.shape[0]*3, 1, 0, 0, 0, 0], [indices.shape[0]*3, 1, 0, 0, 0, 0]], dtype=np.uint32)
+glMultiDrawElementsIndirect(GL_TRIANGLES,
+ 	GL_UNSIGNED_INT,
+ 	indirect,
+ 	2,
+ 	indirect.dtype.itemsize * indirect.shape[1]
+)
+
+glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+
+im = glReadPixels(0, 0, width,height, GL_RGBA, GL_FLOAT)
+im = im.reshape(height,width, 4)
+jax3dp3.viz.save_depth_image(im[:,:,3],"bunny2.png", max=6.0)
 
 from IPython import embed; embed()
