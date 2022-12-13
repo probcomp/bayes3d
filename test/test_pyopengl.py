@@ -75,26 +75,26 @@ glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 
 glDrawBuffers(1, [GL_COLOR_ATTACHMENT0])
 
-samples = 10
+batch_size = 1
 
 depth_tex = glGenTextures(1)
+glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
+glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex, 0)
+glTexImage3D.wrappedOperation(
+    GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, width, height, batch_size, 0, 
+    GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, None
+);
 
 color_tex = glGenTextures(1)
 glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
 glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color_tex, 0)
-glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, width, height, samples, 0,
+glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, width, height, batch_size, 0,
                 GL_RGBA, GL_UNSIGNED_BYTE, None)
 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
 
-# glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
-# glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex, 0)
-# glTexImage3D.wrappedOperation(
-#     GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, width, height, samples, 0, 
-#     GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, None
-# );
 
 
 
@@ -157,9 +157,10 @@ out vec4 color;
 out int v_layer;
 void main()
 {
-    gl_Position = mvp * vec4(in_vert, 1.0);
-    color = gl_Position;
     v_layer = gl_DrawIDARB;
+    vec3 new_in_vert = vec3(in_vert[0], in_vert[1], in_vert[2] + v_layer);
+    gl_Position = mvp * vec4(new_in_vert, 1.0);
+    color = gl_Position;
 }
 """, GL_VERTEX_SHADER)
 
@@ -214,46 +215,31 @@ glUniformMatrix4fv(glGetUniformLocation(shader,"mvp"), 1, GL_FALSE, perspective_
 #glDrawArrays(GL_TRIANGLES, 0, 3) #This line still works
 
 
-glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 glBindVertexArray(vao)
 glBindBuffer(GL_ARRAY_BUFFER, vertexPositions)
 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
 
-# indirect = np.array([[3, 10, 0, 0], [3, 5, 1, 0]], dtype=np.uint32)
-# glMultiDrawArraysIndirect(GL_TRIANGLES, indirect, 2, 16)
-
-# glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, indices.shape[0]*3, 1000, 0)
-
-
-# glDrawElementsInstancedBaseVertexBaseInstance(
-#     GL_TRIANGLES,
-#     indices.shape[0]*3,
-#     GL_UNSIGNED_INT,
-#     None,
-#     1,
-#     0,
-#     0
-# )
-
+glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
 
 indirect = np.array([
-    [indices.shape[0]*3, samples, 0, 0, 0, 1]
-    for _ in range(samples)
+    [indices.shape[0]*3, batch_size, 0, 0, 0, 1]
+    for _ in range(batch_size)
     ], dtype=np.uint32)
 glMultiDrawElementsIndirect(GL_TRIANGLES,
  	GL_UNSIGNED_INT,
  	indirect,
- 	samples,
+ 	batch_size,
  	indirect.dtype.itemsize * indirect.shape[1]
 )
 
 
 glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
 im = glGetTexImage(GL_TEXTURE_2D_ARRAY,  0, GL_RGBA, GL_FLOAT);
-im2 = im.reshape(samples, height,width, 4)
+im2 = im.reshape(batch_size, height,width, 4)
 print(np.where(im2 > 0))
 jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=6.0)
-jax3dp3.viz.save_depth_image(im2[1,:,:,2],"bunny3.png", max=6.0)
+jax3dp3.viz.save_depth_image(im2[-1,:,:,2],"bunny3.png", max=6.0)
 
 
 # im = glReadPixels(0, 0, width,height, GL_RGBA, GL_FLOAT)
