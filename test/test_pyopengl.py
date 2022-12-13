@@ -64,29 +64,38 @@ window = glfw.create_window(width, height, "hidden window", None, None)
 # Make the window's context current
 glfw.make_context_current(window)
 
-glDisable(GL_CULL_FACE)
 glEnable(GL_DEPTH_TEST)  # https://www.khronos.org/opengles/sdk/docs/man/xhtml/glEnable.xml
-glClearColor(0., 0., 0., 1.0)
+glDepthFunc(GL_LESS)
 glClearDepth(1.0)
+# glClearColor(0., 0., 0., 1.0)
 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
 fbo = glGenFramebuffers(1)
 glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 
-samples = 100
-color_tex = glGenTextures(1)
-glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
-glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, width, height, samples, 0,
-                GL_RGBA, GL_UNSIGNED_BYTE, None)
-glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color_tex, 0)
+glDrawBuffers(1, [GL_COLOR_ATTACHMENT0])
+
+samples = 10
 
 depth_tex = glGenTextures(1)
-glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
-glTexImage3D.wrappedOperation(
-    GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, width, height, samples, 0, 
-    GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, None
-);
-glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex, 0)
+
+color_tex = glGenTextures(1)
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
+glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color_tex, 0)
+glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, width, height, samples, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, None)
+glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+
+# glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
+# glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex, 0)
+# glTexImage3D.wrappedOperation(
+#     GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, width, height, samples, 0, 
+#     GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, None
+# );
+
 
 
 if not glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE:
@@ -95,30 +104,6 @@ if not glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE:
 glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
 
-#Now create the shaders
-VERTEX_SHADER = shaders.compileShader("""
-#version 440
-in vec3 in_vert;
-uniform mat4 mvp;
-out vec4 color;
-void main()
-{
-    gl_Position = mvp * vec4(in_vert, 1.0);
-    color = gl_Position;
-}
-""", GL_VERTEX_SHADER)
-
-FRAGMENT_SHADER = shaders.compileShader("""
-#version 440
-out vec4 fragColor;
-in vec4 color;
-void main()
-{
-    fragColor = vec4(color);
-}
-""", GL_FRAGMENT_SHADER)
-
-shader = shaders.compileProgram(VERTEX_SHADER, FRAGMENT_SHADER)
 
 mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
 vertices_orig = np.array(mesh.vertices)
@@ -135,6 +120,7 @@ indices = np.array(mesh.faces)
 
 vertices = np.array(vertices, dtype='f')
 indices = np.array(indices, dtype=np.int32)
+
 
 
 vao = glGenVertexArrays(1)
@@ -159,6 +145,67 @@ glBindVertexArray(0)
 glEnable(GL_DEPTH_TEST)
 glClearColor(0, 0, 0, 1)
 glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
+
+
+#Now create the shaders
+VERTEX_SHADER = shaders.compileShader("""
+#version 430
+#extension GL_ARB_shader_draw_parameters : enable
+in vec3 in_vert;
+uniform mat4 mvp;
+out vec4 color;
+out int v_layer;
+void main()
+{
+    gl_Position = mvp * vec4(in_vert, 1.0);
+    color = gl_Position;
+    v_layer = gl_DrawIDARB;
+}
+""", GL_VERTEX_SHADER)
+
+GEOMETRY_SHADER = shaders.compileShader("""
+#version 430
+#extension GL_ARB_shader_draw_parameters : enable
+layout (triangles) in;
+layout(triangle_strip, max_vertices=3) out;
+in vec4 color[];
+in int v_layer[];
+out vec4 colorz;
+void main()
+{
+    gl_Layer =  v_layer[0];
+    gl_Position = gl_in[0].gl_Position;
+    colorz = color[0];
+    EmitVertex();
+
+    gl_Layer =  v_layer[0];
+    gl_Position = gl_in[1].gl_Position;
+    colorz = color[1];
+    EmitVertex();
+
+    gl_Layer =  v_layer[0];
+    gl_Position = gl_in[2].gl_Position;
+    colorz = color[2];
+    EmitVertex();
+
+	EndPrimitive();
+
+}
+""", GL_GEOMETRY_SHADER)
+
+FRAGMENT_SHADER = shaders.compileShader("""
+#version 430
+#extension GL_ARB_shader_draw_parameters : enable
+out vec4 fragColor;
+in vec4 colorz;
+void main()
+{
+    fragColor = vec4(colorz);
+}
+""", GL_FRAGMENT_SHADER)
+
+shader = shaders.compileProgram(VERTEX_SHADER, GEOMETRY_SHADER, FRAGMENT_SHADER)
+
 
 glUseProgram(shader)
 
@@ -189,19 +236,34 @@ glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
 # )
 
 
-indirect = np.array([[indices.shape[0]*3, 1, 0, 0, 0, 0], [indices.shape[0]*3, 1, 0, 0, 0, 0]], dtype=np.uint32)
+indirect = np.array([
+    [indices.shape[0]*3, samples, 0, 0, 0, 1]
+    for _ in range(samples)
+    ], dtype=np.uint32)
 glMultiDrawElementsIndirect(GL_TRIANGLES,
  	GL_UNSIGNED_INT,
  	indirect,
- 	2,
+ 	samples,
  	indirect.dtype.itemsize * indirect.shape[1]
 )
 
-glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
+im = glGetTexImage(GL_TEXTURE_2D_ARRAY,  0, GL_RGBA, GL_FLOAT);
+im2 = im.reshape(samples, height,width, 4)
+print(np.where(im2 > 0))
+jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=6.0)
+jax3dp3.viz.save_depth_image(im2[1,:,:,2],"bunny3.png", max=6.0)
 
 
-im = glReadPixels(0, 0, width,height, GL_RGBA, GL_FLOAT)
-im = im.reshape(height,width, 4)
-jax3dp3.viz.save_depth_image(im[:,:,3],"bunny2.png", max=6.0)
+# im = glReadPixels(0, 0, width,height, GL_RGBA, GL_FLOAT)
+# im = im[:,:,:]
+# jax3dp3.viz.save_depth_image(im[:,:,2],"bunny2.png", max=6.0)
+
+
 
 from IPython import embed; embed()
+
+
+
+
