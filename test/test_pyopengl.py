@@ -71,23 +71,24 @@ glClearDepth(1.0)
 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
 fbo = glGenFramebuffers(1)
+
 glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 
-glDrawBuffers(1, [GL_COLOR_ATTACHMENT0])
+glDrawBuffers(1, [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1])
 
-batch_size = 1
-
-depth_tex = glGenTextures(1)
-glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
-glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depth_tex, 0)
-glTexImage3D.wrappedOperation(
-    GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, width, height, batch_size, 0, 
-    GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, None
-);
+batch_size = 10
 
 color_tex = glGenTextures(1)
 glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
 glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color_tex, 0)
+
+depth_tex = glGenTextures(1)
+glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
+glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, depth_tex, 0)
+
+
+
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
 glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, width, height, batch_size, 0,
                 GL_RGBA, GL_UNSIGNED_BYTE, None)
 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
@@ -95,8 +96,13 @@ glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
 
+glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
+glTexImage3D.wrappedOperation(
+    GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, width, height, batch_size, 0, 
+    GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, None
+);
 
-
+# glDrawBuffers(1, [GL_COLOR_ATTACHMENT0])
 
 if not glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE:
     print('framebuffer binding failed')
@@ -153,14 +159,15 @@ VERTEX_SHADER = shaders.compileShader("""
 #extension GL_ARB_shader_draw_parameters : enable
 in vec3 in_vert;
 uniform mat4 mvp;
-out vec4 color;
 out int v_layer;
+out vec4 color;
 void main()
 {
     v_layer = gl_DrawIDARB;
     vec3 new_in_vert = vec3(in_vert[0], in_vert[1], in_vert[2] + v_layer);
-    gl_Position = mvp * vec4(new_in_vert, 1.0);
-    color = gl_Position;
+    vec4 position = mvp * vec4(new_in_vert, 1.0);
+    gl_Position = vec4(position[0], position[1], position[2], position[3]);
+    color = vec4(new_in_vert,1.0);
 }
 """, GL_VERTEX_SHADER)
 
@@ -197,8 +204,8 @@ void main()
 FRAGMENT_SHADER = shaders.compileShader("""
 #version 430
 #extension GL_ARB_shader_draw_parameters : enable
-out vec4 fragColor;
 in vec4 colorz;
+out vec4 fragColor;
 void main()
 {
     fragColor = vec4(colorz);
@@ -240,6 +247,16 @@ im2 = im.reshape(batch_size, height,width, 4)
 print(np.where(im2 > 0))
 jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=6.0)
 jax3dp3.viz.save_depth_image(im2[-1,:,:,2],"bunny3.png", max=6.0)
+
+
+glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
+im = glGetTexImage(GL_TEXTURE_2D_ARRAY,  0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT_24_8);
+im2 = im.reshape(batch_size, height,width, 4)
+print(np.where(im2 > 0))
+jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=6.0)
+jax3dp3.viz.save_depth_image(im2[-1,:,:,2],"bunny3.png", max=6.0)
+
+# jax3dp3.viz.save_depth_image(im2[0,:,:,1],"bunny2.png", max=6.0)
 
 
 # im = glReadPixels(0, 0, width,height, GL_RGBA, GL_FLOAT)
