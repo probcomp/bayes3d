@@ -56,6 +56,25 @@ far = 100.0
 P = projection_matrix(h, w, fx, fy, cx, cy, near, far)
 perspective_matrix = tuple(P.T.astype('f4').reshape(-1))
 
+mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
+vertices_orig = np.array(mesh.vertices)
+vertices = vertices_orig.copy()
+pose = t3d.transform_from_pos(np.array([0.0, 0.0, 2.0]))
+vertices = t3d.apply_transform(vertices, pose)
+indices = np.array(mesh.faces)
+
+
+# vertices = np.array([
+#     [0.0,0.0,3.0],[3.0,0.0,3.0],[0.0,2.0,3.0], [-3.0,-3.0,8.0]
+#     ], dtype='f')
+# indices = np.array([[0,1,2], [1,2,3]], dtype=np.int32)
+
+vertices = np.array(vertices, dtype='f')
+# vertices = np.concatenate([vertices, np.ones((vertices.shape[0],1),dtype='f')], axis=-1)
+assert vertices.shape[1] == 3
+indices = np.array(indices, dtype=np.int32)
+
+
 glfw.init()
 # Set window hint NOT visible
 glfw.window_hint(glfw.VISIBLE, False)
@@ -64,15 +83,25 @@ window = glfw.create_window(width, height, "hidden window", None, None)
 # Make the window's context current
 glfw.make_context_current(window)
 
+fbo = glGenFramebuffers(1)
+glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+
+vao = glGenVertexArrays(1)
+glBindVertexArray(vao)
+
+vertexPositions = glGenBuffers(1)
+glBindBuffer(GL_ARRAY_BUFFER, vertexPositions)
+glBufferData(GL_ARRAY_BUFFER, vertices, GL_DYNAMIC_DRAW)
+glVertexAttribPointer(0, 3, GL_FLOAT, False, 0, None)
+glEnableVertexAttribArray(0)
+
+indexPositions = glGenBuffers(1)
+glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
+glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_DYNAMIC_DRAW)
+
 glEnable(GL_DEPTH_TEST)  # https://www.khronos.org/opengles/sdk/docs/man/xhtml/glEnable.xml
 glDepthFunc(GL_LESS)
 glClearDepth(1.0)
-# glClearColor(0., 0., 0., 1.0)
-glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-
-fbo = glGenFramebuffers(1)
-
-glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 
 glDrawBuffers(1, [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1])
 
@@ -85,7 +114,6 @@ glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color_tex, 0)
 depth_tex = glGenTextures(1)
 glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
 glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, depth_tex, 0)
-
 
 
 glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
@@ -107,50 +135,7 @@ glTexImage3D.wrappedOperation(
 if not glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE:
     print('framebuffer binding failed')
     exit()
-glBindFramebuffer(GL_FRAMEBUFFER, 0)
-
-
-
-mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
-vertices_orig = np.array(mesh.vertices)
-vertices = vertices_orig.copy()
-pose = t3d.transform_from_pos(np.array([0.0, 0.0, 2.0]))
-vertices = t3d.apply_transform(vertices, pose)
-indices = np.array(mesh.faces)
-
-
-# vertices = np.array([
-#     [0.0,0.0,3.0],[3.0,0.0,3.0],[0.0,2.0,3.0], [-3.0,-3.0,8.0]
-#     ], dtype='f')
-# indices = np.array([[0,1,2], [1,2,3]], dtype=np.int32)
-
-vertices = np.array(vertices, dtype='f')
-indices = np.array(indices, dtype=np.int32)
-
-
-
-vao = glGenVertexArrays(1)
-glBindVertexArray(vao)
-
-vertexPositions = glGenBuffers(1)
-glBindBuffer(GL_ARRAY_BUFFER, vertexPositions)
-glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW)
-glVertexAttribPointer(0, 3, GL_FLOAT, False, 0, None)
-glEnableVertexAttribArray(0)
-
-indexPositions = glGenBuffers(1)
-glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
-glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW)
-
-glBindBuffer(GL_ARRAY_BUFFER, 0)
-glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
-glBindVertexArray(0)
-
-
-
-glEnable(GL_DEPTH_TEST)
-glClearColor(0, 0, 0, 1)
-glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
+# glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
 
 #Now create the shaders
@@ -185,19 +170,15 @@ void main()
     gl_Position = gl_in[0].gl_Position;
     colorz = color[0];
     EmitVertex();
-
     gl_Layer =  v_layer[0];
     gl_Position = gl_in[1].gl_Position;
     colorz = color[1];
     EmitVertex();
-
     gl_Layer =  v_layer[0];
     gl_Position = gl_in[2].gl_Position;
     colorz = color[2];
     EmitVertex();
-
 	EndPrimitive();
-
 }
 """, GL_GEOMETRY_SHADER)
 
@@ -214,13 +195,14 @@ void main()
 
 shader = shaders.compileProgram(VERTEX_SHADER, GEOMETRY_SHADER, FRAGMENT_SHADER)
 
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
+glFramebufferTexture(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0, color_tex, 0)
+
 
 glUseProgram(shader)
 
-glUniformMatrix4fv(glGetUniformLocation(shader,"mvp"), 1, GL_FALSE, perspective_matrix)
-
-#glDrawArrays(GL_TRIANGLES, 0, 3) #This line still works
-
+glViewport(0, 0, width, height);
+glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
 
 glBindVertexArray(vao)
 glBindBuffer(GL_ARRAY_BUFFER, vertexPositions)
@@ -228,7 +210,7 @@ glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
 
 glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
-
+glUniformMatrix4fv(glGetUniformLocation(shader,"mvp"), 1, GL_FALSE, perspective_matrix)
 indirect = np.array([
     [indices.shape[0]*3, batch_size, 0, 0, 0, 1]
     for _ in range(batch_size)
@@ -247,21 +229,6 @@ im2 = im.reshape(batch_size, height,width, 4)
 print(np.where(im2 > 0))
 jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=6.0)
 jax3dp3.viz.save_depth_image(im2[-1,:,:,2],"bunny3.png", max=6.0)
-
-
-glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
-im = glGetTexImage(GL_TEXTURE_2D_ARRAY,  0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT_24_8);
-im2 = im.reshape(batch_size, height,width, 4)
-print(np.where(im2 > 0))
-jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=6.0)
-jax3dp3.viz.save_depth_image(im2[-1,:,:,2],"bunny3.png", max=6.0)
-
-# jax3dp3.viz.save_depth_image(im2[0,:,:,1],"bunny2.png", max=6.0)
-
-
-# im = glReadPixels(0, 0, width,height, GL_RGBA, GL_FLOAT)
-# im = im[:,:,:]
-# jax3dp3.viz.save_depth_image(im[:,:,2],"bunny2.png", max=6.0)
 
 
 
