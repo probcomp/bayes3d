@@ -95,9 +95,7 @@ images = [gt_depth_image]
 labels = [f"GT:{shape_labels[gt_shape_idx]}"]
 
 latent_pose = gt_pose
-for shape_i, shape in enumerate(shapes):
-    # tr_idx, rot_idx, score = preds[num_shapes*0 + shape_i], preds[num_shapes*1 + shape_i], preds[num_shapes*2 + shape_i] 
-    
+for shape_i, shape in enumerate(shapes):  
     pred_pose = preds[shape_i*16:(shape_i+1)*16].reshape(4,4)
     score = preds[16*shape_i+shape_i]
     
