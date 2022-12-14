@@ -12,3 +12,4 @@ graphviz
 distinctipy
 moderngl
 trimesh
+ninja
