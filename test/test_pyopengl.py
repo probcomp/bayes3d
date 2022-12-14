@@ -3,6 +3,7 @@ from OpenGL.GLU import *
 from OpenGL.GL import shaders
 from OpenGL.arrays import vbo
 
+import time
 import trimesh
 import os
 import glfw
@@ -10,6 +11,7 @@ import numpy as np
 import jax3dp3.utils
 import jax3dp3
 import jax3dp3.transforms_3d as t3d
+import jax3dp3.viz
 
 
 def projection_matrix(h, w, fx, fy, cx, cy, near, far):
@@ -43,7 +45,11 @@ def projection_matrix(h, w, fx, fy, cx, cy, near, far):
     )
     return orth @ persp @ view
 
+<<<<<<< HEAD
 height, width = 200, 200
+=======
+height, width = 120, 160
+>>>>>>> 0e5a0281ecfded5026e109846f3a365d6c9ce577
 h,w = height, width
 cx = (width-1)/2
 cy = (height-1)/2
@@ -55,6 +61,26 @@ far = 100.0
 P = projection_matrix(h, w, fx, fy, cx, cy, near, far)
 perspective_matrix = tuple(P.T.astype('f4').reshape(-1))
 
+<<<<<<< HEAD
+=======
+mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
+vertices_orig = np.array(mesh.vertices)
+vertices = vertices_orig.copy()
+indices = np.array(mesh.faces)
+
+
+# vertices = np.array([
+#     [0.0,0.0,3.0],[3.0,0.0,3.0],[0.0,2.0,3.0], [-3.0,-3.0,8.0]
+#     ], dtype='f')
+# indices = np.array([[0,1,2], [1,2,3]], dtype=np.int32)
+
+vertices = np.array(vertices, dtype='f')
+# vertices = np.concatenate([vertices, np.ones((vertices.shape[0],1),dtype='f')], axis=-1)
+assert vertices.shape[1] == 3
+indices = np.array(indices, dtype=np.int32)
+
+
+>>>>>>> 0e5a0281ecfded5026e109846f3a365d6c9ce577
 glfw.init()
 # Set window hint NOT visible
 glfw.window_hint(glfw.VISIBLE, False)
@@ -63,6 +89,7 @@ window = glfw.create_window(width, height, "hidden window", None, None)
 # Make the window's context current
 glfw.make_context_current(window)
 
+<<<<<<< HEAD
 glDisable(GL_CULL_FACE)
 glEnable(GL_DEPTH_TEST)  # https://www.khronos.org/opengles/sdk/docs/man/xhtml/glEnable.xml
 glClearColor(0., 0., 0., 1.0)
@@ -86,36 +113,122 @@ glTexImage2D(
 );
 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_tex, 0)
 
+=======
+fbo = glGenFramebuffers(1)
+glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+
+vao = glGenVertexArrays(1)
+glBindVertexArray(vao)
+
+vertexPositions = glGenBuffers(1)
+glBindBuffer(GL_ARRAY_BUFFER, vertexPositions)
+glBufferData(GL_ARRAY_BUFFER, vertices, GL_DYNAMIC_DRAW)
+glVertexAttribPointer(0, 3, GL_FLOAT, False, 0, None)
+glEnableVertexAttribArray(0)
+
+indexPositions = glGenBuffers(1)
+glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
+glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_DYNAMIC_DRAW)
+
+glEnable(GL_DEPTH_TEST)  # https://www.khronos.org/opengles/sdk/docs/man/xhtml/glEnable.xml
+glDepthFunc(GL_LESS)
+glClearDepth(1.0)
+
+glDrawBuffers(1, [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1])
+
+batch_size = 1000
+
+color_tex = glGenTextures(1)
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
+glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color_tex, 0)
+
+depth_tex = glGenTextures(1)
+glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
+glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, depth_tex, 0)
+
+
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
+glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, width, height, batch_size, 0,
+                GL_RGBA, GL_UNSIGNED_BYTE, None)
+glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+
+glBindTexture(GL_TEXTURE_2D_ARRAY, depth_tex)
+glTexImage3D.wrappedOperation(
+    GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, width, height, batch_size, 0, 
+    GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, None
+);
+
+# glDrawBuffers(1, [GL_COLOR_ATTACHMENT0])
+>>>>>>> 0e5a0281ecfded5026e109846f3a365d6c9ce577
 
 if not glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE:
     print('framebuffer binding failed')
     exit()
+<<<<<<< HEAD
 glBindFramebuffer(GL_FRAMEBUFFER, 0)
+=======
+# glBindFramebuffer(GL_FRAMEBUFFER, 0)
+>>>>>>> 0e5a0281ecfded5026e109846f3a365d6c9ce577
 
 
 #Now create the shaders
 VERTEX_SHADER = shaders.compileShader("""
-#version 440
+#version 430
+#extension GL_ARB_shader_draw_parameters : enable
 in vec3 in_vert;
+uniform mat4 pose_mat;
 uniform mat4 mvp;
-out vec4 color;
+out int v_layer;
+out vec4 vertex_on_object;
 void main()
 {
-    gl_Position = mvp * vec4(in_vert, 1.0);
-    color = gl_Position;
+    v_layer = gl_DrawIDARB;
+    vertex_on_object = pose_mat * vec4(in_vert, 1.0);
+    gl_Position = mvp * vertex_on_object;
 }
 """, GL_VERTEX_SHADER)
 
-FRAGMENT_SHADER = shaders.compileShader("""
-#version 440
-out vec4 fragColor;
-in vec4 color;
+GEOMETRY_SHADER = shaders.compileShader("""
+#version 430
+#extension GL_ARB_shader_draw_parameters : enable
+layout (triangles) in;
+layout(triangle_strip, max_vertices=3) out;
+in vec4 vertex_on_object[];
+in int v_layer[];
+out vec4 vertex_on_object_out;
 void main()
 {
-    fragColor = vec4(color);
+    gl_Layer =  v_layer[0];
+    gl_Position = gl_in[0].gl_Position;
+    vertex_on_object_out = vertex_on_object[0];
+    EmitVertex();
+    gl_Layer =  v_layer[0];
+    gl_Position = gl_in[1].gl_Position;
+    vertex_on_object_out = vertex_on_object[1];
+    EmitVertex();
+    gl_Layer =  v_layer[0];
+    gl_Position = gl_in[2].gl_Position;
+    vertex_on_object_out = vertex_on_object[2];
+    EmitVertex();
+	EndPrimitive();
+}
+""", GL_GEOMETRY_SHADER)
+
+FRAGMENT_SHADER = shaders.compileShader("""
+#version 430
+#extension GL_ARB_shader_draw_parameters : enable
+in vec4 vertex_on_object_out;
+out vec4 fragColor;
+void main()
+{
+    fragColor = vec4(vertex_on_object_out);
 }
 """, GL_FRAGMENT_SHADER)
 
+<<<<<<< HEAD
 shader = shaders.compileProgram(VERTEX_SHADER, FRAGMENT_SHADER)
 
 mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
@@ -124,17 +237,27 @@ vertices = vertices_orig.copy()
 pose = t3d.transform_from_pos(np.array([0.0, 0.0, 2.0]))
 vertices = t3d.apply_transform(vertices, pose)
 indices = np.array(mesh.faces)
+=======
+shader = shaders.compileProgram(VERTEX_SHADER, GEOMETRY_SHADER, FRAGMENT_SHADER)
+>>>>>>> 0e5a0281ecfded5026e109846f3a365d6c9ce577
 
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
+glFramebufferTexture(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0, color_tex, 0)
 
+<<<<<<< HEAD
 # vertices = np.array([
 #     [0.0,0.0,3.0],[3.0,0.0,3.0],[0.0,2.0,3.0], [-3.0,-3.0,8.0]
 #     ], dtype='f')
 # indices = np.array([[0,1,2], [1,2,3]], dtype=np.int32)
+=======
+>>>>>>> 0e5a0281ecfded5026e109846f3a365d6c9ce577
 
-vertices = np.array(vertices, dtype='f')
-indices = np.array(indices, dtype=np.int32)
+glUseProgram(shader)
 
+glViewport(0, 0, width, height);
+glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
 
+<<<<<<< HEAD
 vao = glGenVertexArrays(1)
 glBindVertexArray(vao)
 
@@ -152,29 +275,62 @@ glBindBuffer(GL_ARRAY_BUFFER, 0)
 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
 glBindVertexArray(0)
 
+=======
+glBindVertexArray(vao)
+glBindBuffer(GL_ARRAY_BUFFER, vertexPositions)
+glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
+>>>>>>> 0e5a0281ecfded5026e109846f3a365d6c9ce577
 
+glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
 
-glEnable(GL_DEPTH_TEST)
-glClearColor(0, 0, 0, 1)
-glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
-
-glUseProgram(shader)
-
+pose = np.array(t3d.transform_from_pos(np.array([0.0, 0.0, 4.0])))
+pose = tuple(pose.T.astype('f4').reshape(-1))
+glUniformMatrix4fv(glGetUniformLocation(shader,"pose_mat"), 1, GL_FALSE, pose)
 glUniformMatrix4fv(glGetUniformLocation(shader,"mvp"), 1, GL_FALSE, perspective_matrix)
 
-#glDrawArrays(GL_TRIANGLES, 0, 3) #This line still works
+
+start = time.time()
+
+indirect = np.array([
+    [indices.shape[0]*3, batch_size, 0, 0, 0, 1]
+    for _ in range(batch_size)
+    ], dtype=np.uint32)
+glMultiDrawElementsIndirect(GL_TRIANGLES,
+ 	GL_UNSIGNED_INT,
+ 	indirect,
+ 	batch_size,
+ 	indirect.dtype.itemsize * indirect.shape[1]
+)
 
 
+<<<<<<< HEAD
 glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 glBindVertexArray(vao)
 glBindBuffer(GL_ARRAY_BUFFER, vertexPositions)
 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
 glDrawElements(GL_TRIANGLES, indices.shape[0]*3, GL_UNSIGNED_INT, None) #This line does work too!
+=======
+glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
+im = glGetTexImage(GL_TEXTURE_2D_ARRAY,  0, GL_RGBA, GL_FLOAT);
+im2 = im.reshape(batch_size, height,width, 4)
+>>>>>>> 0e5a0281ecfded5026e109846f3a365d6c9ce577
 
-im = glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT)
-im = im.reshape(height,width,4)
+end = time.time()
+print ("Time elapsed:", end - start)
+print ("FPS:", batch_size / (end - start))
 
+<<<<<<< HEAD
 import jax3dp3.viz
 jax3dp3.viz.save_depth_image(im[:,:,2],"bunny2.png", max=6.0)
+=======
+print(np.where(im2 > 0))
+jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=6.0)
+jax3dp3.viz.save_depth_image(im2[-1,:,:,2],"bunny3.png", max=6.0)
+>>>>>>> 0e5a0281ecfded5026e109846f3a365d6c9ce577
 
 from IPython import embed; embed()
+
+
+
+

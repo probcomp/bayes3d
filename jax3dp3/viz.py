@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 import matplotlib
-import graphviz
-import distinctipy
+# import graphviz
+# import distinctipy
 
 
 def make_gif_from_pil_images(images, filename):

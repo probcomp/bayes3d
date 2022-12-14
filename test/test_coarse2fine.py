@@ -49,7 +49,8 @@ def scorer(shape, pose, gt_image, r):
 #####################
 
 # tuples of (radius, width of gridding, num gridpoints)
-schedule_tr = [(0.5, 1, 10), (0.25, 0.5, 10), (0.1, 0.2, 10), (0.02, 0.1, 10)]
+# schedule_tr = [(0.5, 1, 10), (0.25, 0.5, 10), (0.1, 0.2, 10), (0.02, 0.1, 10)]
+schedule_tr = [(0.5, 1, 20), (0.25, 0.25, 10), (0.1, 0.1, 10), (0.02, 0.05, 5)]
 schedule_rot = [(10, 10), (10, 10), (20, 20), (30,30)]
 
 enumeration_likelihood_r = [sched[0] for sched in schedule_tr]
@@ -86,14 +87,15 @@ default_pose = jnp.array([
     [0.0, 0.0, 1.0, z0],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
-)
+) # for test case generation
 
-shapes_dims = jnp.array([jnp.array([0.5, 0.5, 0.5]), jnp.array([0.45, 0.5, 0.55]), jnp.array([0.40, 0.42, 0.8]), jnp.array([0.3, 0.5, 0.7]), jnp.array([0.05, 0.5, 0.5])])
+shapes_dims = jnp.array([jnp.array([0.5, 0.5, 0.5]), jnp.array([0.45, 0.5, 0.55]), jnp.array([0.40, 0.42, 0.8]), jnp.array([0.3, 0.5, 0.7]), jnp.array([0.1, 0.5, 0.5])])
 shapes = [get_rectangular_prism_shape(shape_dims) for shape_dims in shapes_dims]
 num_shapes = len(shapes_dims)
+all_shape_idxs = jnp.arange(num_shapes)
 print(f"Testing {num_shapes} shapes")
 
-# generate test poses and corresponding gt shapes (the ith pose has (i%5)th shape)
+# generate test poses and corresponding gt shapes (the ith pose has (i%num_shapes)th shape)
 f_jit = jax.jit(jax.vmap(lambda t: jnp.vstack(
                 [jnp.hstack([jnp.eye(3), t.reshape(3,-1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]))
              )
@@ -101,6 +103,9 @@ pose_deltas = f_jit(make_centered_grid_enumeration_3d_points(0.4, 0.4, 0.5, 3, 3
 translations = jnp.einsum("ij,ajk->aik", default_pose, pose_deltas)
 rotations = get_rotation_proposals(8,8)
 gt_test_poses = jnp.einsum("aij,bjk->abik", translations, rotations).reshape(-1, 4,4) 
+
+gt_test_poses = gt_test_poses[::16]  # test a little subset
+
 print(f"Testing {len(gt_test_poses)} images (GT Poses)")
 
 # generate test images
@@ -120,30 +125,25 @@ def get_c2f_func(shape_id):
     coarse_to_fine_func = partial(coarse_to_fine_pose_and_weights, scorer_for_shape, enumeration_grid_tr, enumeration_grid_r, enumeration_likelihood_r)
     return coarse_to_fine_func
 
-def save_with_jit(x):
-  host_callback.call(lambda x: jnp.save("test_result/"+str(time.time()).split(".")[0]+'.npy', x), x)   # save with timestamp postfix
-
 def get_prediction(test_idx,x):
     gt_test_pose, gt_test_image = gt_test_poses[test_idx], gt_test_images[test_idx]
     latent_pose_estimate = gt_test_pose   # TODO always center at gt?
 
     # retrieve best pose hypothesis for each possible shape
-    def _get_best_score_for_shape(shape_i, x):
-        best_tr_idx_for_shape, best_rot_idx_for_shape, best_pose_score_for_shape = get_c2f_func(shape_i)(latent_pose_estimate, gt_test_image)             
+    pose_estimator = lambda shape_idx: get_c2f_func(shape_idx)(latent_pose_estimate, gt_test_image) 
+    best_pose_for_shape, best_pose_score_for_shape = jax.vmap(pose_estimator, in_axes=(0,))(all_shape_idxs)  
 
-        return shape_i + 1, jnp.array([best_tr_idx_for_shape, best_rot_idx_for_shape, best_pose_score_for_shape])  # return pose idx, best score
-    _, best_pose_and_scores = jax.lax.scan(_get_best_score_for_shape, 0, shapes)
+    best_shape_idx = jnp.argmax(best_pose_score_for_shape)  # get highest-score shape
 
-    best_shape_idx = jnp.argmax(best_pose_and_scores[:, -1])  # get highest-score shape
-    
-    pred = jnp.array([best_shape_idx, *best_pose_and_scores[best_shape_idx]])
-    
+    # pred = jnp.array([best_shape_idx, *best_pose_and_scores[best_shape_idx]])  #return best
+    pred = jnp.array([*best_pose_for_shape.ravel(), *best_pose_score_for_shape.ravel(), best_shape_idx])   
+
     # save_with_jit(pred)
     
     return test_idx+1, pred
 
 batchsize = 12
-result = jnp.array([jnp.inf, jnp.inf, jnp.inf, jnp.inf])
+result = jnp.array([jnp.inf] * (17*num_shapes + 1))
 for batch_i in range(len(gt_test_poses)//batchsize):
     start = time.time()
     _, pred = jax.lax.scan(get_prediction, 0, gt_test_poses[batchsize*batch_i : batchsize*(batch_i+1)])
@@ -155,7 +155,7 @@ for batch_i in range(len(gt_test_poses)//batchsize):
     # end = time.time()
     # print("process time=", end-start)
 
-with open('predictions.npy', 'wb') as f:
+with open('predictions_all.npy', 'wb') as f:
     jnp.save(f, result[1:])
 
 with open('gt_test_poses.npy', 'wb') as f:
