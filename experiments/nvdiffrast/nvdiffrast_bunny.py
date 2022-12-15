@@ -79,7 +79,7 @@ def get_idx(a,b,c):
 print(rast_reshaped[a,b,c,:])
 idx = get_idx(a,b,c)
 print(rast[idx:idx+5])
-jax3dp3.viz.save_depth_image(rast_reshaped[0,:,:,2].cpu().numpy(), "bunny.png",max=10.0)
+jax3dp3.viz.save_depth_image(rast_reshaped[30,:,:,2].cpu().numpy(), "bunny.png",max=10.0)
 jax3dp3.viz.save_depth_image((rast_reshaped[0,:,:,2] > 0).cpu().numpy(), "bunny2.png",max=50.0)
 
 

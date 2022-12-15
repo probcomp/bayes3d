@@ -406,150 +406,69 @@ void RasterizeGLStateWrapper::releaseContext(void)
 
 
 
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const std::vector<float>& proj, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const std::vector<float>& proj, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, int width, int height, int depth)
 {
-    // Only copy inputs if we are on first iteration of depth peeling or not doing it at all.
-    if (peeling_idx < 1)
+    if (triPtr)
     {
-        if (triPtr)
-        {
-            // Copy both position and triangle buffers.
-            void* glPosPtr = NULL;
-            void* glTriPtr = NULL;
-            size_t posBytes = 0;
-            size_t triBytes = 0;
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(2, &s.cudaPosBuffer, stream));
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glTriPtr, &triBytes, s.cudaTriBuffer));
-            NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
-            NVDR_CHECK(triBytes >= triCount * sizeof(int32_t), "mapped GL triangle buffer size mismatch");
-            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glTriPtr, triPtr, triCount * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream));
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
-        }
-        else
-        {
-            // Copy position buffer only. Triangles are already copied and known to be constant.
-            void* glPosPtr = NULL;
-            size_t posBytes = 0;
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPosBuffer, stream));
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
-            NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
-            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPosBuffer, stream));
-        }
-    }
-
-    // Select program based on whether we have a depth peeling input or not.
-    if (peeling_idx < 1)
-    {
-        // Normal case: No peeling, or peeling disabled.
-        NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
+        // Copy both position and triangle buffers.
+        void* glPosPtr = NULL;
+        void* glTriPtr = NULL;
+        size_t posBytes = 0;
+        size_t triBytes = 0;
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(2, &s.cudaPosBuffer, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glTriPtr, &triBytes, s.cudaTriBuffer));
+        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
+        NVDR_CHECK(triBytes >= triCount * sizeof(int32_t), "mapped GL triangle buffer size mismatch");
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glTriPtr, triPtr, triCount * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
     }
     else
     {
-        // If we don't have a third buffer yet, create one.
-        if (!s.cudaPrevOutBuffer)
-        {
-            NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glPrevOutBuffer));
-            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPrevOutBuffer, s.glPrevOutBuffer, GL_TEXTURE_3D, cudaGraphicsRegisterFlagsReadOnly));
-        }
-
-        // Swap the GL buffers.
-        GLuint glTempBuffer = s.glPrevOutBuffer;
-        s.glPrevOutBuffer = s.glColorBuffer[0];
-        s.glColorBuffer[0] = glTempBuffer;
-
-        // Swap the Cuda buffers.
-        cudaGraphicsResource_t cudaTempBuffer = s.cudaPrevOutBuffer;
-        s.cudaPrevOutBuffer = s.cudaColorBuffer[0];
-        s.cudaColorBuffer[0] = cudaTempBuffer;
-
-        // Bind the new output buffer.
-        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[0]));
-        NVDR_CHECK_GL_ERROR(glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, s.glColorBuffer[0], 0));
-
-        // Bind old buffer as the input texture.
-        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glPrevOutBuffer));
-
-        // Activate the correct program.
-        NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgramDP));
+        // Copy position buffer only. Triangles are already copied and known to be constant.
+        void* glPosPtr = NULL;
+        size_t posBytes = 0;
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPosBuffer, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
+        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPosBuffer, stream));
     }
+
+    NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
 
     // Set viewport, clear color buffer(s) and depth/stencil buffer.
     NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
     NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
 
-    // // If outputting bary differentials, set resolution uniform
-    // if (s.enableDB)
-    //     NVDR_CHECK_GL_ERROR(glUniform2f(0, 2.f / (float)width, 2.f / (float)height));
 
-    // // Set the dummy uniform if depth modification workaround is active.
-    // if (s.enableZModify)
-    //     NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
-
-    // Render the meshes.
-    if (depth == 1 && !rangesPtr)
+    // Populate a buffer for draw commands and execute it.
+    std::vector<GLDrawCmd> drawCmdBuffer(depth);
+    // Fill in range array to instantiate the same triangles for each output layer.
+    // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
+    // the first dimension in addressing the triangle array.
+    for (int i=0; i < depth; i++)
     {
-        // Trivial case.
-        NVDR_CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, triCount, GL_UNSIGNED_INT, 0));
+        GLDrawCmd& cmd = drawCmdBuffer[i];
+        cmd.firstIndex    = 0;
+        cmd.count         = triCount;
+        cmd.baseVertex    = vtxPerInstance * i;
+        cmd.baseInstance  = 0;
+        cmd.instanceCount = 1;
     }
-    else
-    {
-        // Populate a buffer for draw commands and execute it.
-        std::vector<GLDrawCmd> drawCmdBuffer(depth);
 
-        if (!rangesPtr)
-        {
-            // Fill in range array to instantiate the same triangles for each output layer.
-            // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
-            // the first dimension in addressing the triangle array.
-            for (int i=0; i < depth; i++)
-            {
-                GLDrawCmd& cmd = drawCmdBuffer[i];
-                cmd.firstIndex    = 0;
-                cmd.count         = triCount;
-                cmd.baseVertex    = vtxPerInstance * i;
-                cmd.baseInstance  = 0;
-                cmd.instanceCount = 1;
-            }
-        }
-        else
-        {
-            // Fill in the range array according to user-given ranges. Triangle IDs point
-            // to the input triangle array, NOT index within range, so they correspond to
-            // the first dimension in addressing the triangle array.
-            for (int i=0, j=0; i < depth; i++)
-            {
-                GLDrawCmd& cmd = drawCmdBuffer[i];
-                int first = rangesPtr[j++];
-                int count = rangesPtr[j++];
-                NVDR_CHECK(first >= 0 && count >= 0, "range contains negative values");
-                NVDR_CHECK((first + count) * 3 <= triCount, "range extends beyond end of triangle buffer");
-                cmd.firstIndex    = first * 3;
-                cmd.count         = count * 3;
-                cmd.baseVertex    = 0;
-                cmd.baseInstance  = first;
-                cmd.instanceCount = 1;
-            }
-        }
-
-        for(int i=0; i < 4*4; i++){
-            std::cout << proj[i] << std::endl;
-        }
-        // std::cout << glGetString(GL_VERSION) << " " << std::endl;
-        // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
-        glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
-        
+    for(int i=0; i < 4*4; i++){
+        std::cout << proj[i] << std::endl;
+    }
+    // std::cout << glGetString(GL_VERSION) << " " << std::endl;
+    // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
+    glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
     
-        // Draw!
-        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
-    }
+
+    // Draw!
+    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
+
 }
 
 //------------------------------------------------------------------------
@@ -557,7 +476,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
 
 void threedp3_likelihood(float *pos, float time, int width, int height, int depth);
 
-std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int peeling_idx)
+std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -565,10 +484,9 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
 
     // Check inputs.
     NVDR_CHECK_DEVICE(pos, tri);
-    NVDR_CHECK_CPU(ranges);
-    NVDR_CHECK_CONTIGUOUS(pos, tri, ranges);
+    NVDR_CHECK_CONTIGUOUS(pos, tri);
     NVDR_CHECK_F32(pos);
-    NVDR_CHECK_I32(tri, ranges);
+    NVDR_CHECK_I32(tri);
 
     // Check that GL context was created for the correct GPU.
     NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
@@ -583,14 +501,13 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
     else
     {
         NVDR_CHECK(pos.sizes().size() == 2 && pos.size(0) > 0 && pos.size(1) == 4, "range mode - pos must have shape [>0, 4]");
-        NVDR_CHECK(ranges.sizes().size() == 2 && ranges.size(0) > 0 && ranges.size(1) == 2, "range mode - ranges must have shape [>0, 2]");
     }
     NVDR_CHECK(tri.sizes().size() == 2 && tri.size(0) > 0 && tri.size(1) == 3, "tri must have shape [>0, 3]");
 
     // Get output shape.
     int height = std::get<0>(resolution);
     int width  = std::get<1>(resolution);
-    int depth  = instance_mode ? pos.size(0) : ranges.size(0);
+    int depth  = pos.size(0);
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
 
     // Get position and triangle buffer sizes in int32/float32.
@@ -615,10 +532,9 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
 
     // Copy input data to GL and render.
     const float* posPtr = pos.data_ptr<float>();
-    const int32_t* rangesPtr = instance_mode ? 0 : ranges.data_ptr<int32_t>(); // This is in CPU memory.
     const int32_t* triPtr = tri.data_ptr<int32_t>();
     int vtxPerInstance = instance_mode ? pos.size(1) : 0;
-    rasterizeRender(NVDR_CTX_PARAMS, s, stream, proj, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
+    rasterizeRender(NVDR_CTX_PARAMS, s, stream, proj, posPtr, posCount, vtxPerInstance, triPtr, triCount, width, height, depth);
 
     unsigned int bytes = depth*height*width*4*sizeof(float);
 
