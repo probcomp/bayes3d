@@ -64,6 +64,8 @@ proj_list = list(proj.cpu().numpy().reshape(-1))
 print(proj_list)
 view_space_vertices_h = torch.concatenate([vertices, torch.ones((*vertices.shape[:-1],1) , device='cuda')],axis=-1)
 clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
+
+dr.load_vertices(glenv, proj_list, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
 dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
 start = time.time()
 rast, _ = dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)

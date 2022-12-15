@@ -6,5 +6,5 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-from .ops import RasterizeGLContext, get_log_level, set_log_level, rasterize
-__all__ = ["RasterizeGLContext", "get_log_level", "set_log_level", "rasterize"]
+from .ops import RasterizeGLContext, get_log_level, set_log_level, rasterize, load_vertices
+__all__ = ["RasterizeGLContext", "get_log_level", "set_log_level", "rasterize", "load_vertices"]

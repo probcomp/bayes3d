@@ -405,36 +405,9 @@ void RasterizeGLStateWrapper::releaseContext(void)
 }
 
 
-
 void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const std::vector<float>& proj, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, int width, int height, int depth)
 {
-    if (triPtr)
-    {
-        // Copy both position and triangle buffers.
-        void* glPosPtr = NULL;
-        void* glTriPtr = NULL;
-        size_t posBytes = 0;
-        size_t triBytes = 0;
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(2, &s.cudaPosBuffer, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glTriPtr, &triBytes, s.cudaTriBuffer));
-        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
-        NVDR_CHECK(triBytes >= triCount * sizeof(int32_t), "mapped GL triangle buffer size mismatch");
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glTriPtr, triPtr, triCount * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
-    }
-    else
-    {
-        // Copy position buffer only. Triangles are already copied and known to be constant.
-        void* glPosPtr = NULL;
-        size_t posBytes = 0;
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPosBuffer, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
-        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPosBuffer, stream));
-    }
+    // loadVertices(NVDR_CTX_PARAMS, s, stream, proj, posPtr, posCount, vtxPerInstance, triPtr, triCount, width, height, depth);
 
     NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
 
@@ -475,6 +448,93 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
 // Forward op (OpenGL).
 
 void threedp3_likelihood(float *pos, float time, int width, int height, int depth);
+
+void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution)
+{
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    RasterizeGLState& s = *stateWrapper.pState;
+
+    // Check inputs.
+    NVDR_CHECK_DEVICE(pos, tri);
+    NVDR_CHECK_CONTIGUOUS(pos, tri);
+    NVDR_CHECK_F32(pos);
+    NVDR_CHECK_I32(tri);
+
+    // Check that GL context was created for the correct GPU.
+    NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
+
+    // Determine number of outputs
+    int num_outputs = s.enableDB ? 2 : 1;
+
+    // Determine instance mode and check input dimensions.
+    bool instance_mode = pos.sizes().size() > 2;
+    if (instance_mode)
+        NVDR_CHECK(pos.sizes().size() == 3 && pos.size(0) > 0 && pos.size(1) > 0 && pos.size(2) == 4, "instance mode - pos must have shape [>0, >0, 4]");
+    else
+    {
+        NVDR_CHECK(pos.sizes().size() == 2 && pos.size(0) > 0 && pos.size(1) == 4, "range mode - pos must have shape [>0, 4]");
+    }
+    NVDR_CHECK(tri.sizes().size() == 2 && tri.size(0) > 0 && tri.size(1) == 3, "tri must have shape [>0, 3]");
+
+    // Get output shape.
+    int height = std::get<0>(resolution);
+    int width  = std::get<1>(resolution);
+    int depth  = pos.size(0);
+    NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
+
+    // Get position and triangle buffer sizes in int32/float32.
+    int posCount = 4 * pos.size(0) * (instance_mode ? pos.size(1) : 1);
+    int triCount = 3 * tri.size(0);
+
+    // Set the GL context unless manual context.
+    if (stateWrapper.automatic)
+        setGLContext(s.glctx);
+
+    // Resize all buffers.
+    bool changes = false;
+    rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, changes, posCount, triCount, width, height, depth);
+    if (changes)
+    {
+#ifdef _WIN32
+        // Workaround for occasional blank first frame on Windows.
+        releaseGLContext();
+        setGLContext(s.glctx);
+#endif
+    }
+
+    const float* posPtr = pos.data_ptr<float>();
+    const int32_t* triPtr = tri.data_ptr<int32_t>();
+    int vtxPerInstance = instance_mode ? pos.size(1) : 0;
+
+    if (triPtr)
+    {
+        // Copy both position and triangle buffers.
+        void* glPosPtr = NULL;
+        void* glTriPtr = NULL;
+        size_t posBytes = 0;
+        size_t triBytes = 0;
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(2, &s.cudaPosBuffer, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glTriPtr, &triBytes, s.cudaTriBuffer));
+        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
+        NVDR_CHECK(triBytes >= triCount * sizeof(int32_t), "mapped GL triangle buffer size mismatch");
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glTriPtr, triPtr, triCount * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
+    }
+    else
+    {
+        // Copy position buffer only. Triangles are already copied and known to be constant.
+        void* glPosPtr = NULL;
+        size_t posBytes = 0;
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPosBuffer, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
+        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPosBuffer, stream));
+    }
+}
 
 std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution)
 {
@@ -520,7 +580,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
 
     // Resize all buffers.
     bool changes = false;
-    rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, changes, posCount, triCount, width, height, depth);
+    // rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, changes, posCount, triCount, width, height, depth);
     if (changes)
     {
 #ifdef _WIN32
@@ -596,6 +656,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         .def("release_context", &RasterizeGLStateWrapper::releaseContext);
 
     // Ops.
+    m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
     m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
 }
 
