@@ -39,5 +39,5 @@ def render_depth(glenv, vertices, triangles, h,w,fx,fy,cx,cy, near, far):
     proj = projection_matrix(h, w, fx, fy, cx, cy, near, far)
     view_space_vertices_h = torch.concatenate([vertices, torch.ones((*vertices.shape[:-1],1) , device='cuda')],axis=-1)
     clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
-    rast, _ = dr.rasterize(glenv, clip_space_vertices, triangles, resolution=[h,w], grad_db=False)
+    rast, _ = dr.rasterize(glenv, proj, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
     return rast

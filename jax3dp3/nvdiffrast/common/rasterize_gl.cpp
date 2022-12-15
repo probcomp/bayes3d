@@ -9,6 +9,7 @@
 #include "rasterize_gl.h"
 #include "glutil.h"
 #include <vector>
+#include <iostream>
 #define STRINGIFY_SHADER_SOURCE(x) #x
 
 //------------------------------------------------------------------------
@@ -125,192 +126,60 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         "#extension GL_ARB_shader_draw_parameters : enable\n"
         STRINGIFY_SHADER_SOURCE(
             layout(location = 0) in vec4 in_pos;
+            uniform mat4 mvp;
             out int v_layer;
             out int v_offset;
             void main()
             {
                 int layer = gl_DrawIDARB;
-                gl_Position = in_pos;
+                gl_Position = mvp * in_pos;
                 v_layer = layer;
                 v_offset = gl_BaseInstanceARB; // Sneak in TriID offset here.
             }
         )
     );
 
-    // Geometry and fragment shaders depend on if bary differential output is enabled or not.
-    if (s.enableDB)
-    {
-        // Set up geometry shader. Calculation of per-pixel bary differentials is based on:
-        //           u = (u/w) / (1/w)
-        //   --> du/dX = d((u/w) / (1/w))/dX
-        //   --> du/dX = [d(u/w)/dX - u*d(1/w)/dX] * w
-        // and we know both d(u/w)/dX and d(1/w)/dX are constant over triangle.
-        compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
-            "#version 430\n"
-            STRINGIFY_SHADER_SOURCE(
-                layout(triangles) in;
-                layout(triangle_strip, max_vertices=3) out;
-                layout(location = 0) uniform vec2 vp_scale;
-                in int v_layer[];
-                in int v_offset[];
-                out vec4 var_uvzw;
-                out vec4 var_db;
-                void main()
-                {
-                    // Plane equations for bary differentials.
-                    float w0 = gl_in[0].gl_Position.w;
-                    float w1 = gl_in[1].gl_Position.w;
-                    float w2 = gl_in[2].gl_Position.w;
-                    vec2 p0 = gl_in[0].gl_Position.xy;
-                    vec2 p1 = gl_in[1].gl_Position.xy;
-                    vec2 p2 = gl_in[2].gl_Position.xy;
-                    vec2 e0 = p0*w2 - p2*w0;
-                    vec2 e1 = p1*w2 - p2*w1;
-                    float a = e0.x*e1.y - e0.y*e1.x;
+    // Geometry shader without bary differential output.
+    compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
+        "#version 330\n"
+        STRINGIFY_SHADER_SOURCE(
+            layout(triangles) in;
+            layout(triangle_strip, max_vertices=3) out;
+            in int v_layer[];
+            in int v_offset[];
+            out vec4 var_uvzw;
+            void main()
+            {
+                int layer_id = v_layer[0];
+                int prim_id = gl_PrimitiveIDIn + v_offset[0];
 
-                    // Clamp area to an epsilon to avoid arbitrarily high bary differentials.
-                    float eps = 1e-6f; // ~1 pixel in 1k x 1k image.
-                    float ca = (abs(a) >= eps) ? a : (a < 0.f) ? -eps : eps; // Clamp with sign.
-                    float ia = 1.f / ca; // Inverse area.
+                gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); EmitVertex();
+                gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); EmitVertex();
+                gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); EmitVertex();
+            }
+        )
+    );
 
-                    vec2 ascl = ia * vp_scale;
-                    float dudx =  e1.y * ascl.x;
-                    float dudy = -e1.x * ascl.y;
-                    float dvdx = -e0.y * ascl.x;
-                    float dvdy =  e0.x * ascl.y;
-
-                    float duwdx = w2 * dudx;
-                    float dvwdx = w2 * dvdx;
-                    float duvdx = w0 * dudx + w1 * dvdx;
-                    float duwdy = w2 * dudy;
-                    float dvwdy = w2 * dvdy;
-                    float duvdy = w0 * dudy + w1 * dvdy;
-
-                    vec4 db0 = vec4(duvdx - dvwdx, duvdy - dvwdy, dvwdx, dvwdy);
-                    vec4 db1 = vec4(duwdx, duwdy, duvdx - duwdx, duvdy - duwdy);
-                    vec4 db2 = vec4(duwdx, duwdy, dvwdx, dvwdy);
-
-                    int layer_id = v_layer[0];
-                    int prim_id = gl_PrimitiveIDIn + v_offset[0];
-
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_db = db0; EmitVertex();
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_db = db1; EmitVertex();
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_db = db2; EmitVertex();
-                }
+    // Fragment shader without bary differential output.
+    compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
+        "#version 430\n"
+        STRINGIFY_SHADER_SOURCE(
+            in vec4 var_uvzw;
+            layout(location = 0) out vec4 out_raster;
+            IF_ZMODIFY(
+                layout(location = 1) uniform float in_dummy;
             )
-        );
-
-        // Set up fragment shader.
-        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
-            "#version 430\n"
-            STRINGIFY_SHADER_SOURCE(
-                in vec4 var_uvzw;
-                in vec4 var_db;
-                layout(location = 0) out vec4 out_raster;
-                layout(location = 1) out vec4 out_db;
-                IF_ZMODIFY(
-                    layout(location = 1) uniform float in_dummy;
-                )
-                void main()
-                {
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
-                    out_db = var_db * var_uvzw.w;
-                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
-                }
-            )
-        );
-
-        // Set up fragment shader for depth peeling.
-        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
-            "#version 430\n"
-            STRINGIFY_SHADER_SOURCE(
-                in vec4 var_uvzw;
-                in vec4 var_db;
-                layout(binding = 0) uniform sampler2DArray out_prev;
-                layout(location = 0) out vec4 out_raster;
-                layout(location = 1) out vec4 out_db;
-                IF_ZMODIFY(
-                    layout(location = 1) uniform float in_dummy;
-                )
-                void main()
-                {
-                    vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
-                    float depth_new = var_uvzw.z / var_uvzw.w;
-                    if (prev.w == 0 || depth_new <= prev.z)
-                        discard;
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, depth_new, float(gl_PrimitiveID + 1));
-                    out_db = var_db * var_uvzw.w;
-                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
-                }
-            )
-        );
-    }
-    else
-    {
-        // Geometry shader without bary differential output.
-        compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
-            "#version 330\n"
-            STRINGIFY_SHADER_SOURCE(
-                layout(triangles) in;
-                layout(triangle_strip, max_vertices=3) out;
-                in int v_layer[];
-                in int v_offset[];
-                out vec4 var_uvzw;
-                void main()
-                {
-                    int layer_id = v_layer[0];
-                    int prim_id = gl_PrimitiveIDIn + v_offset[0];
-
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); EmitVertex();
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); EmitVertex();
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); EmitVertex();
-                }
-            )
-        );
-
-        // Fragment shader without bary differential output.
-        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
-            "#version 430\n"
-            STRINGIFY_SHADER_SOURCE(
-                in vec4 var_uvzw;
-                layout(location = 0) out vec4 out_raster;
-                IF_ZMODIFY(
-                    layout(location = 1) uniform float in_dummy;
-                )
-                void main()
-                {
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
-                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
-                }
-            )
-        );
-
-        // Depth peeling variant of fragment shader.
-        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
-            "#version 430\n"
-            STRINGIFY_SHADER_SOURCE(
-                in vec4 var_uvzw;
-                layout(binding = 0) uniform sampler2DArray out_prev;
-                layout(location = 0) out vec4 out_raster;
-                IF_ZMODIFY(
-                    layout(location = 1) uniform float in_dummy;
-                )
-                void main()
-                {
-                    vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
-                    float depth_new = var_uvzw.z / var_uvzw.w;
-                    if (prev.w == 0 || depth_new <= prev.z)
-                        discard;
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
-                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
-                }
-            )
-        );
-    }
+            void main()
+            {
+                out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+                IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
+            }
+        )
+    );
 
     // Finalize programs.
     constructGLProgram(NVDR_CTX_PARAMS, &s.glProgram, s.glVertexShader, s.glGeometryShader, s.glFragmentShader);
-    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgramDP, s.glVertexShader, s.glGeometryShader, s.glFragmentShaderDP);
+    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgramDP, s.glVertexShader, s.glGeometryShader, s.glFragmentShader);
 
     // Construct main fbo and bind permanently.
     NVDR_CHECK_GL_ERROR(glGenFramebuffers(1, &s.glFBO));
@@ -429,7 +298,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     }
 }
 
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const float* projPtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
 {
     // Only copy inputs if we are on first iteration of depth peeling or not doing it at all.
     if (peeling_idx < 1)
@@ -562,6 +431,11 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
             }
         }
 
+        std::cout << glGetString(GL_VERSION) << " " << std::endl;
+        // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
+        glUniform4fv(0, 1, projPtr);
+        
+    
         // Draw!
         NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
     }

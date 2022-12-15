@@ -242,9 +242,9 @@ class RasterizeGLContext:
 
 class _rasterize_func(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, raster_ctx, pos, tri, resolution, ranges, grad_db, peeling_idx):
+    def forward(ctx, raster_ctx, proj, pos, tri, resolution, ranges, grad_db, peeling_idx):
         if isinstance(raster_ctx, RasterizeGLContext):
-            out, out_db = _get_plugin(gl=True).rasterize_fwd_gl(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
+            out, out_db = _get_plugin(gl=True).rasterize_fwd_gl(raster_ctx.cpp_wrapper, proj, pos, tri, resolution, ranges, peeling_idx)
         else:
             out, out_db = _get_plugin().rasterize_fwd_cuda(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
         ctx.save_for_backward(pos, tri, out)
@@ -261,7 +261,7 @@ class _rasterize_func(torch.autograd.Function):
         return None, g_pos, None, None, None, None, None
 
 # Op wrapper.
-def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
+def rasterize(glctx, proj, pos, tri, resolution, ranges=None, grad_db=True):
     '''Rasterize triangles.
 
     All input tensors must be contiguous and reside in GPU memory except for
@@ -308,7 +308,7 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
         return RuntimeError("Cannot call rasterize() during depth peeling operation, use rasterize_next_layer() instead")
 
     # Instantiate the function.
-    return _rasterize_func.apply(glctx, pos, tri, resolution, ranges, grad_db, -1)
+    return _rasterize_func.apply(glctx, proj, pos, tri, resolution, ranges, grad_db, -1)
 
 #----------------------------------------------------------------------------
 # Depth peeler context manager for rasterizing multiple depth layers.

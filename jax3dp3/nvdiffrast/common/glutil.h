@@ -6,7 +6,9 @@
 // distribution of this software and related documentation without an express
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
+
 #pragma once
+
 
 //------------------------------------------------------------------------
 // Windows-specific headers and types.
