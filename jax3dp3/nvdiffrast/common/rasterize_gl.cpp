@@ -126,13 +126,12 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         "#extension GL_ARB_shader_draw_parameters : enable\n"
         STRINGIFY_SHADER_SOURCE(
             layout(location = 0) in vec4 in_pos;
-            uniform mat4 mvp;
             out int v_layer;
             out int v_offset;
             void main()
             {
                 int layer = gl_DrawIDARB;
-                gl_Position = mvp * in_pos;
+                gl_Position = in_pos;
                 v_layer = layer;
                 v_offset = gl_BaseInstanceARB; // Sneak in TriID offset here.
             }
@@ -431,7 +430,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
             }
         }
 
-        std::cout << glGetString(GL_VERSION) << " " << std::endl;
+        // std::cout << glGetString(GL_VERSION) << " " << std::endl;
         // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
         // glUniform4fv(0, 1, projPtr);
         
