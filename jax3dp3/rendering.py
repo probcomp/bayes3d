@@ -31,13 +31,13 @@ def render_cloud_at_pose(input_cloud, pose, h, w, fx_fy, cx_cy, pixel_smudge):
     return point_cloud[a]
 
 
-def render_planes(pose, shape, h,w, fx_fy, cx_cy):
+def render_planes(pose, shape, h,w, fx, fy, cx, cy):
     shape_planes, shape_dimensions = shape
     plane_poses = jnp.einsum("ij,ajk",pose, shape_planes)
 
     r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
     pixel_coords = jnp.stack([r,c],axis=-1)
-    pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
+    pixel_coords_dir = jnp.concatenate([(pixel_coords - jnp.array([cx,cy])) / jnp.array([fx,fy]), jnp.ones((h,w,1))],axis=-1)
 
     denoms = jnp.einsum("ijk,ak->ija", pixel_coords_dir , plane_poses[:,:3,2])
     numerators = jnp.einsum("...k,...k", 
