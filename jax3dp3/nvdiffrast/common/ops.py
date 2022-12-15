@@ -58,11 +58,9 @@ def _get_plugin(gl=False):
     # List of source files.
     if gl:
         source_files = [
-            '../common/common.cpp',
-            '../common/glutil.cpp',
-            '../common/rasterize_gl.cpp',
-            'torch_bindings_gl.cpp',
-            'torch_rasterize_gl.cpp',
+            'common.cpp',
+            'glutil.cpp',
+            'rasterize_gl.cpp',
             'likelihood.cu',
         ]
     else:

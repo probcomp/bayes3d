@@ -50,11 +50,5 @@ struct RasterizeGLState // Must be initializable by memset to zero.
 //------------------------------------------------------------------------
 // Shared C++ code prototypes.
 
-void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceIdx);
-void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, int posCount, int triCount, int width, int height, int depth);
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const float* projPtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx);
-void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth);
-void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s);
-
 //------------------------------------------------------------------------
 #endif // !(defined(NVDR_TORCH) && defined(__CUDACC__))

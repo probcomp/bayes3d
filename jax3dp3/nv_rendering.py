@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import torch
-import jax3dp3.nvdiffrast.torch as dr
+# import jax3dp3.nvdiffrast.torch as dr
 
 def projection_matrix(h, w, fx, fy, cx, cy, near, far):
     # transform from cv2 camera coordinates to opengl (flipping sign of y and z)
@@ -35,9 +35,9 @@ def projection_matrix(h, w, fx, fy, cx, cy, near, far):
     return orth @ persp @ view
 
 
-def render_depth(glenv, vertices, triangles, h,w,fx,fy,cx,cy, near, far):
-    proj = projection_matrix(h, w, fx, fy, cx, cy, near, far)
-    view_space_vertices_h = torch.concatenate([vertices, torch.ones((*vertices.shape[:-1],1) , device='cuda')],axis=-1)
-    clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
-    rast, _ = dr.rasterize(glenv, proj, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
-    return rast
+# def render_depth(glenv, vertices, triangles, h,w,fx,fy,cx,cy, near, far):
+#     proj = projection_matrix(h, w, fx, fy, cx, cy, near, far)
+#     view_space_vertices_h = torch.concatenate([vertices, torch.ones((*vertices.shape[:-1],1) , device='cuda')],axis=-1)
+#     clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
+#     rast, _ = dr.rasterize(glenv, proj, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
+#     return rast

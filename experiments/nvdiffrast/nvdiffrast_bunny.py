@@ -9,7 +9,7 @@
 import os
 import numpy as np
 import torch
-import jax3dp3.nvdiffrast.torch as dr
+import jax3dp3.nvdiffrast.common as dr
 import sys
 import trimesh
 import jax3dp3.utils
@@ -25,7 +25,7 @@ import jax3dp3.transforms_3d as t3d
 import jax
 import time
 import trimesh
-from jax3dp3.nv_rendering import render_depth, projection_matrix
+from jax3dp3.nv_rendering import projection_matrix
 from jax3dp3.likelihood import threedp3_likelihood
 
 def tensor(*args, **kwargs):
@@ -53,17 +53,20 @@ vertices = vertices_orig.copy()
 pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 3.2]))
 view_space_vertices = t3d.apply_transform(vertices, pose)
 vertices = tensor(np.array([view_space_vertices]))
-num_images = 10
+num_images = 1000
 vertices = vertices.tile((num_images,1,1))
 triangles = tensor(mesh.faces , dtype=torch.int32)
 
 
 start = time.time()
 proj = projection_matrix(h, w, fx, fy, cx, cy, near, far)
+proj_list = list(proj.cpu().numpy().reshape(-1))
+print(proj_list)
 view_space_vertices_h = torch.concatenate([vertices, torch.ones((*vertices.shape[:-1],1) , device='cuda')],axis=-1)
 clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
+dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
 start = time.time()
-rast, _ = dr.rasterize(glenv, proj, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
+rast, _ = dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
 end = time.time()
 print ("Time elapsed:", end - start)
 

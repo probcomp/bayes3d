@@ -8,6 +8,15 @@
 
 #include "rasterize_gl.h"
 #include "glutil.h"
+#include "torch_common.inl"
+#include "torch_types.h"
+#include "common.h"
+#include <tuple>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <vector>
+
+
 #include <vector>
 #include <iostream>
 #define STRINGIFY_SHADER_SOURCE(x) #x
@@ -124,20 +133,16 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     compileGLShader(NVDR_CTX_PARAMS, s, &s.glVertexShader, GL_VERTEX_SHADER,
         "#version 330\n"
         "#extension GL_ARB_shader_draw_parameters : enable\n"
+        "#extension GL_ARB_explicit_uniform_location : enable\n"
         STRINGIFY_SHADER_SOURCE(
+            layout(location = 0) uniform mat4 mvp;
             in vec4 in_vert;
             out int v_layer;
             out vec4 vertex_on_object;
             void main()
             {
-                mat4 mvp = mat4(
-                    2.50, 0.0, 0.0, 0.0,
-                    0.0, 3.333333, 0.0, 0.0,
-                    5.960464477539063e-08, 5.960464477539063e-08, 1.0100502967834473,1.0,
-                    0.0, 0.0, -0.10050251334905624, 0.0
-                );
                 v_layer = gl_DrawIDARB;
-                vertex_on_object = vec4(in_vert);
+                vertex_on_object = vec4(in_vert[0], in_vert[1], in_vert[2] + 0.1 * v_layer, in_vert[3]);
                 gl_Position = mvp * vertex_on_object;
             }
         )
@@ -305,7 +310,103 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     }
 }
 
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const float* projPtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
+void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth)
+{
+    // Copy color buffers to output tensors.
+    cudaArray_t array = 0;
+    cudaChannelFormatDesc arrayDesc = {};   // For error checking.
+    cudaExtent arrayExt = {};               // For error checking.
+    int num_outputs = s.enableDB ? 2 : 1;
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(num_outputs, s.cudaColorBuffer, stream));
+    for (int i=0; i < num_outputs; i++)
+    {
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[i], 0, 0));
+        NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
+        NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
+        NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
+        NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= depth, "CUDA mapped array extent mismatch");
+        cudaMemcpy3DParms p = {0};
+        p.srcArray = array;
+        p.dstPtr.ptr = outputPtr[i];
+        p.dstPtr.pitch = width * 4 * sizeof(float);
+        p.dstPtr.xsize = width;
+        p.dstPtr.ysize = height;
+        p.extent.width = width;
+        p.extent.height = height;
+        p.extent.depth = depth;
+        p.kind = cudaMemcpyDeviceToDevice;
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
+    }
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(num_outputs, s.cudaColorBuffer, stream));
+}
+
+void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s)
+{
+    int num_outputs = s.enableDB ? 2 : 1;
+
+    if (s.cudaPosBuffer)
+    {
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPosBuffer));
+        s.cudaPosBuffer = 0;
+    }
+
+    if (s.cudaTriBuffer)
+    {
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaTriBuffer));
+        s.cudaTriBuffer = 0;
+    }
+
+    for (int i=0; i < num_outputs; i++)
+    {
+        if (s.cudaColorBuffer[i])
+        {
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaColorBuffer[i]));
+            s.cudaColorBuffer[i] = 0;
+        }
+    }
+
+    if (s.cudaPrevOutBuffer)
+    {
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPrevOutBuffer));
+        s.cudaPrevOutBuffer = 0;
+    }
+}
+
+
+
+RasterizeGLStateWrapper::RasterizeGLStateWrapper(bool enableDB, bool automatic_, int cudaDeviceIdx_)
+{
+    pState = new RasterizeGLState();
+    automatic = automatic_;
+    cudaDeviceIdx = cudaDeviceIdx_;
+    memset(pState, 0, sizeof(RasterizeGLState));
+    pState->enableDB = enableDB ? 1 : 0;
+    rasterizeInitGLContext(NVDR_CTX_PARAMS, *pState, cudaDeviceIdx_);
+    releaseGLContext();
+}
+
+RasterizeGLStateWrapper::~RasterizeGLStateWrapper(void)
+{
+    setGLContext(pState->glctx);
+    rasterizeReleaseBuffers(NVDR_CTX_PARAMS, *pState);
+    releaseGLContext();
+    destroyGLContext(pState->glctx);
+    delete pState;
+}
+
+void RasterizeGLStateWrapper::setContext(void)
+{
+    setGLContext(pState->glctx);
+}
+
+void RasterizeGLStateWrapper::releaseContext(void)
+{
+    releaseGLContext();
+}
+
+
+
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const std::vector<float>& proj, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
 {
     // Only copy inputs if we are on first iteration of depth peeling or not doing it at all.
     if (peeling_idx < 1)
@@ -438,9 +539,12 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
             }
         }
 
+        for(int i=0; i < 4*4; i++){
+            std::cout << proj[i] << std::endl;
+        }
         // std::cout << glGetString(GL_VERSION) << " " << std::endl;
         // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
-        // glUniform4fv(0, 1, projPtr);
+        glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
         
     
         // Draw!
@@ -448,66 +552,137 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
     }
 }
 
-void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth)
+//------------------------------------------------------------------------
+// Forward op (OpenGL).
+
+void threedp3_likelihood(float *pos, float time, int width, int height, int depth);
+
+std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int peeling_idx)
 {
-    // Copy color buffers to output tensors.
-    cudaArray_t array = 0;
-    cudaChannelFormatDesc arrayDesc = {};   // For error checking.
-    cudaExtent arrayExt = {};               // For error checking.
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    RasterizeGLState& s = *stateWrapper.pState;
+
+    // Check inputs.
+    NVDR_CHECK_DEVICE(pos, tri);
+    NVDR_CHECK_CPU(ranges);
+    NVDR_CHECK_CONTIGUOUS(pos, tri, ranges);
+    NVDR_CHECK_F32(pos);
+    NVDR_CHECK_I32(tri, ranges);
+
+    // Check that GL context was created for the correct GPU.
+    NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
+
+    // Determine number of outputs
     int num_outputs = s.enableDB ? 2 : 1;
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(num_outputs, s.cudaColorBuffer, stream));
-    for (int i=0; i < num_outputs; i++)
+
+    // Determine instance mode and check input dimensions.
+    bool instance_mode = pos.sizes().size() > 2;
+    if (instance_mode)
+        NVDR_CHECK(pos.sizes().size() == 3 && pos.size(0) > 0 && pos.size(1) > 0 && pos.size(2) == 4, "instance mode - pos must have shape [>0, >0, 4]");
+    else
     {
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[i], 0, 0));
-        NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
-        NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
-        NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
-        NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= depth, "CUDA mapped array extent mismatch");
-        cudaMemcpy3DParms p = {0};
-        p.srcArray = array;
-        p.dstPtr.ptr = outputPtr[i];
-        p.dstPtr.pitch = width * 4 * sizeof(float);
-        p.dstPtr.xsize = width;
-        p.dstPtr.ysize = height;
-        p.extent.width = width;
-        p.extent.height = height;
-        p.extent.depth = depth;
-        p.kind = cudaMemcpyDeviceToDevice;
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
+        NVDR_CHECK(pos.sizes().size() == 2 && pos.size(0) > 0 && pos.size(1) == 4, "range mode - pos must have shape [>0, 4]");
+        NVDR_CHECK(ranges.sizes().size() == 2 && ranges.size(0) > 0 && ranges.size(1) == 2, "range mode - ranges must have shape [>0, 2]");
     }
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(num_outputs, s.cudaColorBuffer, stream));
+    NVDR_CHECK(tri.sizes().size() == 2 && tri.size(0) > 0 && tri.size(1) == 3, "tri must have shape [>0, 3]");
+
+    // Get output shape.
+    int height = std::get<0>(resolution);
+    int width  = std::get<1>(resolution);
+    int depth  = instance_mode ? pos.size(0) : ranges.size(0);
+    NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
+
+    // Get position and triangle buffer sizes in int32/float32.
+    int posCount = 4 * pos.size(0) * (instance_mode ? pos.size(1) : 1);
+    int triCount = 3 * tri.size(0);
+
+    // Set the GL context unless manual context.
+    if (stateWrapper.automatic)
+        setGLContext(s.glctx);
+
+    // Resize all buffers.
+    bool changes = false;
+    rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, changes, posCount, triCount, width, height, depth);
+    if (changes)
+    {
+#ifdef _WIN32
+        // Workaround for occasional blank first frame on Windows.
+        releaseGLContext();
+        setGLContext(s.glctx);
+#endif
+    }
+
+    // Copy input data to GL and render.
+    const float* posPtr = pos.data_ptr<float>();
+    const int32_t* rangesPtr = instance_mode ? 0 : ranges.data_ptr<int32_t>(); // This is in CPU memory.
+    const int32_t* triPtr = tri.data_ptr<int32_t>();
+    int vtxPerInstance = instance_mode ? pos.size(1) : 0;
+    rasterizeRender(NVDR_CTX_PARAMS, s, stream, proj, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
+
+    unsigned int bytes = depth*height*width*4*sizeof(float);
+
+    float* outputPtr[2];
+    outputPtr[1] = NULL;
+
+    float *da;
+    cudaMalloc((void**)&da, bytes);
+
+    float likelihood;
+    cudaMalloc((void**)&da, bytes);
+
+    outputPtr[0] = da;
+    rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, depth);
+
+    // float* ha = (float*)malloc(bytes);
+    // cudaMemcpy(ha, da, bytes, cudaMemcpyDeviceToHost);
+    // std::cout << "ha[0] : " << ha[0] << std::endl;
+    // std::cout << "ha[1] : " << ha[1] << std::endl;
+    // std::cout << "ha[2] : " << ha[2] << std::endl;
+    // std::cout << "ha[3] : " << ha[3] << std::endl;
+    // std::cout << "ha[4] : " << ha[4] << std::endl;
+
+    std::cout << height << " " << width << " " << depth << " !!" << std::endl;
+
+    dim3 blockSize(depth, 1, 1);
+    dim3 gridSize(height,width, 1);
+    float r = 4.0;
+    void* args[] = {&da, &r, &width, &height, &depth};
+    // cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
+
+
+    // Allocate output tensors.
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::Tensor out = torch::empty({depth* height * width * 4}, opts);
+    torch::Tensor out_db = torch::empty({depth, height, width, s.enableDB ? 4 : 0}, opts);
+    
+    cudaMemcpy(out.data_ptr<float>(), da, bytes, cudaMemcpyDeviceToDevice);
+
+
+    // float* outputPtr2[2];
+    // outputPtr2[0] = out.data_ptr<float>();
+    // outputPtr2[1] = NULL;
+
+    // rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr2, width, height, depth);
+
+    // Done. Release GL context and return.
+    if (stateWrapper.automatic)
+        releaseGLContext();
+
+    return std::tuple<torch::Tensor, torch::Tensor>(out, out_db);
 }
 
-void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s)
-{
-    int num_outputs = s.enableDB ? 2 : 1;
 
-    if (s.cudaPosBuffer)
-    {
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPosBuffer));
-        s.cudaPosBuffer = 0;
-    }
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    // State classes.
+    pybind11::class_<RasterizeGLStateWrapper>(m, "RasterizeGLStateWrapper").def(pybind11::init<bool, bool, int>())
+        .def("set_context",     &RasterizeGLStateWrapper::setContext)
+        .def("release_context", &RasterizeGLStateWrapper::releaseContext);
 
-    if (s.cudaTriBuffer)
-    {
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaTriBuffer));
-        s.cudaTriBuffer = 0;
-    }
-
-    for (int i=0; i < num_outputs; i++)
-    {
-        if (s.cudaColorBuffer[i])
-        {
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaColorBuffer[i]));
-            s.cudaColorBuffer[i] = 0;
-        }
-    }
-
-    if (s.cudaPrevOutBuffer)
-    {
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPrevOutBuffer));
-        s.cudaPrevOutBuffer = 0;
-    }
+    // Ops.
+    m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
 }
 
 //------------------------------------------------------------------------
+
+
