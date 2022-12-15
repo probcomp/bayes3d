@@ -45,14 +45,14 @@ def projection_matrix(h, w, fx, fy, cx, cy, near, far):
     )
     return orth @ persp @ view
 
-height, width = 120, 160
-h,w = height, width
-cx = (width-1)/2
-cy = (height-1)/2
+h, w = 120,160
+height, width = h,w
+cx = (w-1)/2
+cy = (h-1)/2
 fx = 200.0
 fy = 200.0
-near = 0.001
-far = 100.0
+near=0.05
+far=10.0
 
 P = projection_matrix(h, w, fx, fy, cx, cy, near, far)
 perspective_matrix = tuple(P.T.astype('f4').reshape(-1))
@@ -209,7 +209,7 @@ glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexPositions)
 glBindFramebuffer(GL_FRAMEBUFFER, fbo)
 glBindTexture(GL_TEXTURE_2D_ARRAY, color_tex)
 
-pose = np.array(t3d.transform_from_pos(np.array([0.0, 0.0, 4.0])))
+pose = np.array(t3d.transform_from_pos(np.array([0.0, 0.0, 3.2])))
 pose = tuple(pose.T.astype('f4').reshape(-1))
 glUniformMatrix4fv(glGetUniformLocation(shader,"pose_mat"), 1, GL_FALSE, pose)
 glUniformMatrix4fv(glGetUniformLocation(shader,"mvp"), 1, GL_FALSE, perspective_matrix)
@@ -238,7 +238,7 @@ print ("Time elapsed:", end - start)
 print ("FPS:", batch_size / (end - start))
 
 print(np.where(im2 > 0))
-jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=6.0)
+jax3dp3.viz.save_depth_image(im2[0,:,:,2],"bunny2.png", max=10.0)
 jax3dp3.viz.save_depth_image(im2[-1,:,:,2],"bunny3.png", max=6.0)
 
 from IPython import embed; embed()

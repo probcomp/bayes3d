@@ -125,15 +125,20 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         "#version 330\n"
         "#extension GL_ARB_shader_draw_parameters : enable\n"
         STRINGIFY_SHADER_SOURCE(
-            layout(location = 0) in vec4 in_pos;
+            in vec4 in_vert;
             out int v_layer;
-            out int v_offset;
+            out vec4 vertex_on_object;
             void main()
             {
-                int layer = gl_DrawIDARB;
-                gl_Position = in_pos;
-                v_layer = layer;
-                v_offset = gl_BaseInstanceARB; // Sneak in TriID offset here.
+                mat4 mvp = mat4(
+                    2.50, 0.0, 0.0, 0.0,
+                    0.0, 3.333333, 0.0, 0.0,
+                    5.960464477539063e-08, 5.960464477539063e-08, 1.0100502967834473,1.0,
+                    0.0, 0.0, -0.10050251334905624, 0.0
+                );
+                v_layer = gl_DrawIDARB;
+                vertex_on_object = vec4(in_vert);
+                gl_Position = mvp * vertex_on_object;
             }
         )
     );
@@ -142,19 +147,26 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
         "#version 330\n"
         STRINGIFY_SHADER_SOURCE(
-            layout(triangles) in;
+            layout (triangles) in;
             layout(triangle_strip, max_vertices=3) out;
+            in vec4 vertex_on_object[];
             in int v_layer[];
-            in int v_offset[];
-            out vec4 var_uvzw;
+            out vec4 vertex_on_object_out;
             void main()
             {
-                int layer_id = v_layer[0];
-                int prim_id = gl_PrimitiveIDIn + v_offset[0];
-
-                gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); EmitVertex();
-                gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); EmitVertex();
-                gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); EmitVertex();
+                gl_Layer =  v_layer[0];
+                gl_Position = gl_in[0].gl_Position;
+                vertex_on_object_out = vertex_on_object[0];
+                EmitVertex();
+                gl_Layer =  v_layer[0];
+                gl_Position = gl_in[1].gl_Position;
+                vertex_on_object_out = vertex_on_object[1];
+                EmitVertex();
+                gl_Layer =  v_layer[0];
+                gl_Position = gl_in[2].gl_Position;
+                vertex_on_object_out = vertex_on_object[2];
+                EmitVertex();
+                EndPrimitive();
             }
         )
     );
@@ -163,15 +175,11 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
         "#version 430\n"
         STRINGIFY_SHADER_SOURCE(
-            in vec4 var_uvzw;
-            layout(location = 0) out vec4 out_raster;
-            IF_ZMODIFY(
-                layout(location = 1) uniform float in_dummy;
-            )
+            in vec4 vertex_on_object_out;
+            out vec4 fragColor;
             void main()
             {
-                out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
-                IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
+                fragColor = vec4(vertex_on_object_out);
             }
         )
     );
@@ -376,13 +384,13 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
     NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
     NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
 
-    // If outputting bary differentials, set resolution uniform
-    if (s.enableDB)
-        NVDR_CHECK_GL_ERROR(glUniform2f(0, 2.f / (float)width, 2.f / (float)height));
+    // // If outputting bary differentials, set resolution uniform
+    // if (s.enableDB)
+    //     NVDR_CHECK_GL_ERROR(glUniform2f(0, 2.f / (float)width, 2.f / (float)height));
 
-    // Set the dummy uniform if depth modification workaround is active.
-    if (s.enableZModify)
-        NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
+    // // Set the dummy uniform if depth modification workaround is active.
+    // if (s.enableZModify)
+    //     NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
 
     // Render the meshes.
     if (depth == 1 && !rangesPtr)

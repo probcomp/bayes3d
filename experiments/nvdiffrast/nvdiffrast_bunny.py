@@ -57,13 +57,13 @@ num_images = 10
 vertices = vertices.tile((num_images,1,1))
 triangles = tensor(mesh.faces , dtype=torch.int32)
 
-point_cloud = render_depth(glenv, vertices, triangles, h,w,fx,fy,cx,cy, near, far)
 
 start = time.time()
 proj = projection_matrix(h, w, fx, fy, cx, cy, near, far)
 view_space_vertices_h = torch.concatenate([vertices, torch.ones((*vertices.shape[:-1],1) , device='cuda')],axis=-1)
 clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
-rast, _ = dr.rasterize(glenv, proj, clip_space_vertices, triangles, resolution=[h,w], grad_db=False)
+start = time.time()
+rast, _ = dr.rasterize(glenv, proj, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
 end = time.time()
 print ("Time elapsed:", end - start)
 
@@ -76,7 +76,7 @@ def get_idx(a,b,c):
 print(rast_reshaped[a,b,c,:])
 idx = get_idx(a,b,c)
 print(rast[idx:idx+5])
-jax3dp3.viz.save_depth_image(rast_reshaped[0,:,:,0].cpu().numpy(), "bunny.png",max=50.0)
+jax3dp3.viz.save_depth_image(rast_reshaped[0,:,:,2].cpu().numpy(), "bunny.png",max=10.0)
 jax3dp3.viz.save_depth_image((rast_reshaped[0,:,:,2] > 0).cpu().numpy(), "bunny2.png",max=50.0)
 
 

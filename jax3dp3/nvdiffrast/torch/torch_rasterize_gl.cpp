@@ -143,7 +143,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
     dim3 gridSize(height,width, 1);
     float r = 4.0;
     void* args[] = {&da, &r, &width, &height, &depth};
-    cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
+    // cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
 
     // Allocate output tensors.
