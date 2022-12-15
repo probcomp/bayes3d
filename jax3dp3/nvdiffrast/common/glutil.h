@@ -53,6 +53,7 @@ struct GLContext
 //------------------------------------------------------------------------
 #define GL_GLEXT_LEGACY
 #include <GL/gl.h>
+#include <GL/glu.h>
 #include <cuda_gl_interop.h>
 
 // Constants.

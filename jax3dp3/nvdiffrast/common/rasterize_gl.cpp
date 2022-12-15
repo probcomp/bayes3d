@@ -433,7 +433,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
 
         std::cout << glGetString(GL_VERSION) << " " << std::endl;
         // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
-        glUniform4fv(0, 1, projPtr);
+        // glUniform4fv(0, 1, projPtr);
         
     
         // Draw!
