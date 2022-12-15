@@ -8,7 +8,6 @@
 
 import os
 import numpy as np
-import torch
 import jax3dp3.nvdiffrast.common as dr
 import sys
 import trimesh
@@ -52,9 +51,9 @@ vertices_orig = np.array(mesh.vertices)
 vertices = vertices_orig.copy()
 pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 3.2]))
 view_space_vertices = t3d.apply_transform(vertices, pose)
-vertices = tensor(np.array([view_space_vertices]))
-num_images = 1000
-vertices = vertices.tile((num_images,1,1))
+vertices = tensor(np.array(view_space_vertices))
+num_images = 5
+# vertices = vertices.tile((num_images,1,1))
 triangles = tensor(mesh.faces , dtype=torch.int32)
 
 
@@ -63,26 +62,26 @@ proj = projection_matrix(h, w, fx, fy, cx, cy, near, far)
 proj_list = list(proj.cpu().numpy().reshape(-1))
 print(proj_list)
 view_space_vertices_h = torch.concatenate([vertices, torch.ones((*vertices.shape[:-1],1) , device='cuda')],axis=-1)
-clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
+# clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
 
-dr.load_vertices(glenv, proj_list, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
-dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
+dr.load_vertices(glenv, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
+dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
 start = time.time()
-rast, _ = dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, resolution=[h,w], grad_db=False)
+rast, _ = dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
 end = time.time()
 print ("Time elapsed:", end - start)
 
 rast_reshaped = rast.reshape(num_images, h, w, 4)
 
-a,b,c = 9,111,80
-def get_idx(a,b,c):
-    return a * (h*w*4) + b * (w*4) + c*4
+# a,b,c = 9,111,80
+# def get_idx(a,b,c):
+#     return a * (h*w*4) + b * (w*4) + c*4
 
-print(rast_reshaped[a,b,c,:])
-idx = get_idx(a,b,c)
-print(rast[idx:idx+5])
-jax3dp3.viz.save_depth_image(rast_reshaped[30,:,:,2].cpu().numpy(), "bunny.png",max=10.0)
-jax3dp3.viz.save_depth_image((rast_reshaped[0,:,:,2] > 0).cpu().numpy(), "bunny2.png",max=50.0)
+# print(rast_reshaped[a,b,c,:])
+# idx = get_idx(a,b,c)
+# print(rast[idx:idx+5])
+jax3dp3.viz.save_depth_image(rast_reshaped[2,:,:,0].cpu().numpy(), "bunny.png",max=10.0)
+jax3dp3.viz.save_depth_image((rast_reshaped[2,:,:,2] > 0).cpu().numpy(), "bunny2.png",max=50.0)
 
 
 print(rast_reshaped.shape)

@@ -405,7 +405,7 @@ void RasterizeGLStateWrapper::releaseContext(void)
 }
 
 
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const std::vector<float>& proj, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, int width, int height, int depth)
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const std::vector<float>& proj, int triCount, int width, int height, int depth)
 {
     // loadVertices(NVDR_CTX_PARAMS, s, stream, proj, posPtr, posCount, vtxPerInstance, triPtr, triCount, width, height, depth);
 
@@ -426,7 +426,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
         GLDrawCmd& cmd = drawCmdBuffer[i];
         cmd.firstIndex    = 0;
         cmd.count         = triCount;
-        cmd.baseVertex    = vtxPerInstance * i;
+        cmd.baseVertex    = 0;
         cmd.baseInstance  = 0;
         cmd.instanceCount = 1;
     }
@@ -449,7 +449,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
 
 void threedp3_likelihood(float *pos, float time, int width, int height, int depth);
 
-void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution)
+void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, int depth, std::tuple<int, int> resolution)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -465,26 +465,18 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper,  const std::vector
     NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
 
     // Determine number of outputs
-    int num_outputs = s.enableDB ? 2 : 1;
 
     // Determine instance mode and check input dimensions.
-    bool instance_mode = pos.sizes().size() > 2;
-    if (instance_mode)
-        NVDR_CHECK(pos.sizes().size() == 3 && pos.size(0) > 0 && pos.size(1) > 0 && pos.size(2) == 4, "instance mode - pos must have shape [>0, >0, 4]");
-    else
-    {
-        NVDR_CHECK(pos.sizes().size() == 2 && pos.size(0) > 0 && pos.size(1) == 4, "range mode - pos must have shape [>0, 4]");
-    }
+    NVDR_CHECK(pos.sizes().size() == 2 && pos.size(0) > 0 && pos.size(1) == 4, "range mode - pos must have shape [>0, 4]");
     NVDR_CHECK(tri.sizes().size() == 2 && tri.size(0) > 0 && tri.size(1) == 3, "tri must have shape [>0, 3]");
 
     // Get output shape.
     int height = std::get<0>(resolution);
     int width  = std::get<1>(resolution);
-    int depth  = pos.size(0);
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
 
     // Get position and triangle buffer sizes in int32/float32.
-    int posCount = 4 * pos.size(0) * (instance_mode ? pos.size(1) : 1);
+    int posCount = 4 * pos.size(0);
     int triCount = 3 * tri.size(0);
 
     // Set the GL context unless manual context.
@@ -505,38 +497,25 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper,  const std::vector
 
     const float* posPtr = pos.data_ptr<float>();
     const int32_t* triPtr = tri.data_ptr<int32_t>();
-    int vtxPerInstance = instance_mode ? pos.size(1) : 0;
+    int vtxPerInstance = pos.size(1);
 
-    if (triPtr)
-    {
-        // Copy both position and triangle buffers.
-        void* glPosPtr = NULL;
-        void* glTriPtr = NULL;
-        size_t posBytes = 0;
-        size_t triBytes = 0;
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(2, &s.cudaPosBuffer, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glTriPtr, &triBytes, s.cudaTriBuffer));
-        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
-        NVDR_CHECK(triBytes >= triCount * sizeof(int32_t), "mapped GL triangle buffer size mismatch");
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glTriPtr, triPtr, triCount * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
-    }
-    else
-    {
-        // Copy position buffer only. Triangles are already copied and known to be constant.
-        void* glPosPtr = NULL;
-        size_t posBytes = 0;
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPosBuffer, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
-        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPosBuffer, stream));
-    }
+    // Copy both position and triangle buffers.
+    void* glPosPtr = NULL;
+    void* glTriPtr = NULL;
+    size_t posBytes = 0;
+    size_t triBytes = 0;
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(2, &s.cudaPosBuffer, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glTriPtr, &triBytes, s.cudaTriBuffer));
+    NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
+    NVDR_CHECK(triBytes >= triCount * sizeof(int32_t), "mapped GL triangle buffer size mismatch");
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glTriPtr, triPtr, triCount * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
+
 }
 
-std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution)
+std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, int depth, std::tuple<int, int> resolution)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -551,27 +530,13 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
     // Check that GL context was created for the correct GPU.
     NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
 
-    // Determine number of outputs
-    int num_outputs = s.enableDB ? 2 : 1;
-
-    // Determine instance mode and check input dimensions.
-    bool instance_mode = pos.sizes().size() > 2;
-    if (instance_mode)
-        NVDR_CHECK(pos.sizes().size() == 3 && pos.size(0) > 0 && pos.size(1) > 0 && pos.size(2) == 4, "instance mode - pos must have shape [>0, >0, 4]");
-    else
-    {
-        NVDR_CHECK(pos.sizes().size() == 2 && pos.size(0) > 0 && pos.size(1) == 4, "range mode - pos must have shape [>0, 4]");
-    }
-    NVDR_CHECK(tri.sizes().size() == 2 && tri.size(0) > 0 && tri.size(1) == 3, "tri must have shape [>0, 3]");
-
     // Get output shape.
     int height = std::get<0>(resolution);
     int width  = std::get<1>(resolution);
-    int depth  = pos.size(0);
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
 
     // Get position and triangle buffer sizes in int32/float32.
-    int posCount = 4 * pos.size(0) * (instance_mode ? pos.size(1) : 1);
+    int posCount = 4 * pos.size(0);
     int triCount = 3 * tri.size(0);
 
     // Set the GL context unless manual context.
@@ -593,8 +558,8 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
     // Copy input data to GL and render.
     const float* posPtr = pos.data_ptr<float>();
     const int32_t* triPtr = tri.data_ptr<int32_t>();
-    int vtxPerInstance = instance_mode ? pos.size(1) : 0;
-    rasterizeRender(NVDR_CTX_PARAMS, s, stream, proj, posPtr, posCount, vtxPerInstance, triPtr, triCount, width, height, depth);
+    int vtxPerInstance = pos.size(1);
+    rasterizeRender(NVDR_CTX_PARAMS, s, stream, proj, triCount, width, height, depth);
 
     unsigned int bytes = depth*height*width*4*sizeof(float);
 
@@ -604,8 +569,8 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
     float *da;
     cudaMalloc((void**)&da, bytes);
 
-    float likelihood;
-    cudaMalloc((void**)&da, bytes);
+    // float likelihood;
+    // cudaMalloc((void**)&da, bytes);
 
     outputPtr[0] = da;
     rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, depth);
@@ -624,7 +589,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
     dim3 gridSize(height,width, 1);
     float r = 4.0;
     void* args[] = {&da, &r, &width, &height, &depth};
-    // cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
+    cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
 
     // Allocate output tensors.
