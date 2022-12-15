@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import torch
-import nvdiffrast.torch as dr
+import jax3dp3.nvdiffrast.torch as dr
 
 def projection_matrix(h, w, fx, fy, cx, cy, near, far):
     # transform from cv2 camera coordinates to opengl (flipping sign of y and z)
