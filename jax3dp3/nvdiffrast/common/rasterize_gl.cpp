@@ -268,7 +268,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     // Resize framebuffer?
     if (width > s.width || height > s.height || depth > s.depth)
     {
-        int num_outputs = s.enableDB ? 2 : 1;
+        int num_outputs = 1;
         if (s.cudaColorBuffer[0])
             for (int i=0; i < num_outputs; i++)
                 NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaColorBuffer[i]));
@@ -285,7 +285,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
         s.depth  = (depth > s.depth) ? depth : s.depth;
         s.width  = ROUND_UP(s.width, 32);
         s.height = ROUND_UP(s.height, 32);
-        LOG(INFO) << "Increasing frame buffer size to (width, height, depth) = (" << s.width << ", " << s.height << ", " << s.depth << ")";
+        std::cout << "Increasing frame buffer size to (width, height, depth) = (" << s.width << ", " << s.height << ", " << s.depth << ")" << std::endl;
 
         // Allocate color buffers.
         for (int i=0; i < num_outputs; i++)
@@ -431,14 +431,13 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  c
         cmd.instanceCount = 1;
     }
 
-    for(int i=0; i < 4*4; i++){
-        std::cout << proj[i] << std::endl;
-    }
+    // for(int i=0; i < 4*4; i++){
+    //     std::cout << proj[i] << std::endl;
+    // }
     // std::cout << glGetString(GL_VERSION) << " " << std::endl;
     // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
     glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
     
-
     // Draw!
     NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
 
@@ -594,10 +593,9 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
 
     // Allocate output tensors.
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    torch::Tensor out = torch::empty({depth* height * width * 4}, opts);
-    torch::Tensor out_db = torch::empty({depth, height, width, s.enableDB ? 4 : 0}, opts);
+    torch::Tensor out = torch::empty({depth}, opts);
     
-    cudaMemcpy(out.data_ptr<float>(), da, bytes, cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out.data_ptr<float>(), da, sizeof(float)*depth, cudaMemcpyDeviceToDevice);
 
 
     // float* outputPtr2[2];
@@ -610,7 +608,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
     if (stateWrapper.automatic)
         releaseGLContext();
 
-    return std::tuple<torch::Tensor, torch::Tensor>(out, out_db);
+    return std::tuple<torch::Tensor, torch::Tensor>(out, out);
 }
 
 

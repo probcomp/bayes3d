@@ -8,7 +8,7 @@ __global__ void threedp3_likelihood(float *pos, float time, int width, int heigh
     int j = blockIdx.x;
     int k = blockIdx.y;
 
-    int filter_size = 10;
+    int filter_size = 5;
 
     int counter = 0;
     for(int new_j=j-filter_size; new_j <= j+filter_size; new_j++){

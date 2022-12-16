@@ -35,7 +35,7 @@ def zeros(size):
     return torch.zeros(size, device='cuda')
 
 
-h, w = 120,160
+h, w = 200,200
 cx = (w-1)/2
 cy = (h-1)/2
 fx = 200.0
@@ -53,7 +53,7 @@ vertices = vertices_orig.copy()
 pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 3.2]))
 view_space_vertices = t3d.apply_transform(vertices, pose)
 vertices = tensor(np.array(view_space_vertices))
-num_images = 1000
+num_images = 4000
 # vertices = vertices.tile((num_images,1,1))
 triangles = tensor(mesh.faces , dtype=torch.int32)
 
@@ -65,6 +65,7 @@ print(proj_list)
 view_space_vertices_h = torch.concatenate([vertices, torch.ones((*vertices.shape[:-1],1) , device='cuda')],axis=-1)
 # clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
 
+
 dr.load_vertices(glenv, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
 dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
 start = time.time()
@@ -72,7 +73,9 @@ rast, _ = dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, num_i
 end = time.time()
 print ("Time elapsed:", end - start)
 
-rast_reshaped = rast.reshape(num_images, h, w, 4)
+from IPython import embed; embed()
+
+# rast_reshaped = rast.reshape(num_images, h, w, 4)
 
 # a,b,c = 9,111,80
 # def get_idx(a,b,c):
@@ -81,11 +84,11 @@ rast_reshaped = rast.reshape(num_images, h, w, 4)
 # print(rast_reshaped[a,b,c,:])
 # idx = get_idx(a,b,c)
 # print(rast[idx:idx+5])
-jax3dp3.viz.save_depth_image(rast_reshaped[2,:,:,0].cpu().numpy(), "bunny.png",max=10.0)
-jax3dp3.viz.save_depth_image((rast_reshaped[2,:,:,2] > 0).cpu().numpy(), "bunny2.png",max=50.0)
+# jax3dp3.viz.save_depth_image(rast_reshaped[2,:,:,0].cpu().numpy(), "bunny.png",max=10.0)
+# jax3dp3.viz.save_depth_image((rast_reshaped[2,:,:,2] > 0).cpu().numpy(), "bunny2.png",max=50.0)
 
 
-print(rast_reshaped.shape)
+# print(rast_reshaped.shape)
 
 from IPython import embed; embed()
 
