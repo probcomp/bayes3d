@@ -14,11 +14,11 @@ import cv2
 from jax3dp3.likelihood import threedp3_likelihood
 import jax3dp3.viz
 
-h, w, fx_fy, cx_cy = (
+h, w, fx,fy, cx,cy = (
     300,
     300,
-    jnp.array([200.0, 200.0]),
-    jnp.array([150.0, 150.0]),
+    200.0,200.0,
+    150.0,150.0
 )
 r = 0.1
 outlier_prob = 0.01
@@ -51,15 +51,15 @@ print("gt_poses.shape", gt_poses.shape)
 
 shape = get_cube_shape(0.5)
 
-render_planes_jit = jax.jit(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy))
-render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)))
+render_planes_jit = jax.jit(lambda p: render_planes(p,shape,h,w,fx,fy,cx,cy))
+render_planes_parallel_jit = jax.jit(jax.vmap(lambda p: render_planes(p,shape,h,w,fx,fy,cx,cy)))
 gt_images = render_planes_parallel_jit(gt_poses)
 print("gt_images.shape", gt_images.shape)
 print((gt_images[0,:,:,-1] > 0 ).sum())
 
 key = jax.random.PRNGKey(3)
 def scorer(x, obs):
-    rendered_image = render_planes(x, shape,h,w,fx_fy,cx_cy)
+    rendered_image = render_planes(x, shape,h,w,fx,fy,cx,cy)
     weight = threedp3_likelihood(obs, rendered_image, r, outlier_prob)
     return weight
 
