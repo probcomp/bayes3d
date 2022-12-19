@@ -215,7 +215,7 @@ class RasterizeGLContext:
 # def load_vertices(glctx, proj, pos, tri, resolution, ranges=None, grad_db=True):
 #     return _get_plugin(gl=True).load_vertices(glctx.cpp_wrapper, pos, tri)
 
-def rasterize(glctx, proj, pos, tri, depth, resolution, ranges=None, grad_db=True):
+def rasterize(glctx, pose, proj, pos, tri, depth, resolution, ranges=None, grad_db=True):
     '''Rasterize triangles.
 
     All input tensors must be contiguous and reside in GPU memory except for
@@ -262,7 +262,7 @@ def rasterize(glctx, proj, pos, tri, depth, resolution, ranges=None, grad_db=Tru
         return RuntimeError("Cannot call rasterize() during depth peeling operation, use rasterize_next_layer() instead")
 
     # Instantiate the function.
-    return _get_plugin(gl=True).rasterize_fwd_gl(glctx.cpp_wrapper, proj, pos, tri, depth, resolution)
+    return _get_plugin(gl=True).rasterize_fwd_gl(glctx.cpp_wrapper, pose, proj, pos, tri, depth, resolution)
 
 
 def load_vertices(glctx, proj, pos, tri, depth, resolution, ranges=None, grad_db=True):

@@ -33,6 +33,7 @@ struct RasterizeGLState // Must be initializable by memset to zero.
     GLuint                  glVAO;
     GLuint                  glTriBuffer;
     GLuint                  glPosBuffer;
+    GLuint                  glPoseTexture;
     GLuint                  glProgram;
     GLuint                  glProgramDP;
     GLuint                  glVertexShader;

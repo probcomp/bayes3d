@@ -41,11 +41,10 @@ cy = (h-1)/2
 fx = 200.0
 fy = 200.0
 near=0.05
-far=10.0
+far=30.0
 
-max_depth = 10.0
+max_depth = 30.0
 glenv = dr.RasterizeGLContext(output_db=False)
-
 
 mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
 vertices_orig = np.array(mesh.vertices)
@@ -53,7 +52,7 @@ vertices = vertices_orig.copy()
 pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 3.2]))
 view_space_vertices = t3d.apply_transform(vertices, pose)
 vertices = tensor(np.array(view_space_vertices))
-num_images = 4000
+num_images = 1024
 # vertices = vertices.tile((num_images,1,1))
 triangles = tensor(mesh.faces , dtype=torch.int32)
 
@@ -65,13 +64,22 @@ print(proj_list)
 view_space_vertices_h = torch.concatenate([vertices, torch.ones((*vertices.shape[:-1],1) , device='cuda')],axis=-1)
 # clip_space_vertices = torch.einsum("ij,abj->abi", proj, view_space_vertices_h).contiguous()
 
-
+pose = np.array([np.eye(4) for _ in range(1024)])
+pose[:,:3,3] = np.array([-1.0, -1.0, 3.0])
+pose[:,2,3] = np.linspace(1.0, 10.0, 1024)
+pose_list = list(pose.reshape(-1))
+# pose = [0.0 for _ in range(16)]
 dr.load_vertices(glenv, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
-dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
+dr.rasterize(glenv, pose_list, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
 start = time.time()
-rast, _ = dr.rasterize(glenv, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
+rast, _ = dr.rasterize(glenv, pose_list, proj_list, view_space_vertices_h, triangles, num_images,resolution=[h,w], grad_db=False)
 end = time.time()
 print ("Time elapsed:", end - start)
+
+rast_reshaped = rast.reshape(num_images, h, w, 4)
+jax3dp3.viz.save_depth_image(rast_reshaped[0,:,:,2].cpu().numpy(), "bunny.png",max=10.0)
+jax3dp3.viz.save_depth_image(rast_reshaped[-1,:,:,2].cpu().numpy(), "bunny2.png",max=20.0)
+
 
 from IPython import embed; embed()
 
@@ -90,7 +98,7 @@ from IPython import embed; embed()
 
 # print(rast_reshaped.shape)
 
-from IPython import embed; embed()
+# from IPython import embed; embed()
 
 # depth = rast_reshaped[:,:,:,2]
 # neg_mask = depth == 0

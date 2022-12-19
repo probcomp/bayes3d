@@ -139,10 +139,39 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             in vec4 in_vert;
             out int v_layer;
             out vec4 vertex_on_object;
+            uniform sampler2D texture;
             void main()
             {
                 v_layer = gl_DrawIDARB;
-                vertex_on_object = vec4(in_vert[0], in_vert[1], in_vert[2] + 0.1 * v_layer, in_vert[3]);
+                vec4 v1 = vec4(
+                    texelFetch(texture, ivec2(0, v_layer), 0).r,
+                    texelFetch(texture, ivec2(4, v_layer), 0).r,
+                    texelFetch(texture, ivec2(8, v_layer), 0).r,
+                    texelFetch(texture, ivec2(12, v_layer), 0).r
+                );
+                vec4 v2 = vec4(
+                    texelFetch(texture, ivec2(1, v_layer), 0).r,
+                    texelFetch(texture, ivec2(5, v_layer), 0).r,
+                    texelFetch(texture, ivec2(9, v_layer), 0).r,
+                    texelFetch(texture, ivec2(13, v_layer), 0).r
+                );
+                vec4 v3 = vec4(
+                    texelFetch(texture, ivec2(2, v_layer), 0).r,
+                    texelFetch(texture, ivec2(6, v_layer), 0).r,
+                    texelFetch(texture, ivec2(10, v_layer), 0).r,
+                    texelFetch(texture, ivec2(14, v_layer), 0).r
+                );
+                vec4 v4 = vec4(
+                    texelFetch(texture, ivec2(3, v_layer), 0).r,
+                    texelFetch(texture, ivec2(7, v_layer), 0).r,
+                    texelFetch(texture, ivec2(11, v_layer), 0).r,
+                    texelFetch(texture, ivec2(15, v_layer), 0).r
+                );
+
+                mat4 pose_mat = mat4(
+                    v1,v2,v3,v4
+                );
+                vertex_on_object = pose_mat * in_vert;
                 gl_Position = mvp * vertex_on_object;
             }
         )
@@ -404,45 +433,6 @@ void RasterizeGLStateWrapper::releaseContext(void)
     releaseGLContext();
 }
 
-
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream,  const std::vector<float>& proj, int triCount, int width, int height, int depth)
-{
-    // loadVertices(NVDR_CTX_PARAMS, s, stream, proj, posPtr, posCount, vtxPerInstance, triPtr, triCount, width, height, depth);
-
-    NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
-
-    // Set viewport, clear color buffer(s) and depth/stencil buffer.
-    NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
-    NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
-
-
-    // Populate a buffer for draw commands and execute it.
-    std::vector<GLDrawCmd> drawCmdBuffer(depth);
-    // Fill in range array to instantiate the same triangles for each output layer.
-    // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
-    // the first dimension in addressing the triangle array.
-    for (int i=0; i < depth; i++)
-    {
-        GLDrawCmd& cmd = drawCmdBuffer[i];
-        cmd.firstIndex    = 0;
-        cmd.count         = triCount;
-        cmd.baseVertex    = 0;
-        cmd.baseInstance  = 0;
-        cmd.instanceCount = 1;
-    }
-
-    // for(int i=0; i < 4*4; i++){
-    //     std::cout << proj[i] << std::endl;
-    // }
-    // std::cout << glGetString(GL_VERSION) << " " << std::endl;
-    // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
-    glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
-    
-    // Draw!
-    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
-
-}
-
 //------------------------------------------------------------------------
 // Forward op (OpenGL).
 
@@ -514,12 +504,20 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper,  const std::vector
 
 }
 
-std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, int depth, std::tuple<int, int> resolution)
+std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  std::vector<float>& pose, const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, int depth, std::tuple<int, int> resolution)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
 
+    NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPoseTexture));
+    NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, s.glPoseTexture));
+    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 16, 1024, 0, GL_RED, GL_FLOAT, &pose[0]));
+    NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+    NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+    NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+    NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+        
     // Check inputs.
     NVDR_CHECK_DEVICE(pos, tri);
     NVDR_CHECK_CONTIGUOUS(pos, tri);
@@ -558,7 +556,40 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
     const float* posPtr = pos.data_ptr<float>();
     const int32_t* triPtr = tri.data_ptr<int32_t>();
     int vtxPerInstance = pos.size(1);
-    rasterizeRender(NVDR_CTX_PARAMS, s, stream, proj, triCount, width, height, depth);
+
+
+    NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
+
+    // Set viewport, clear color buffer(s) and depth/stencil buffer.
+    NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
+    NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
+
+
+    // Populate a buffer for draw commands and execute it.
+    std::vector<GLDrawCmd> drawCmdBuffer(depth);
+    // Fill in range array to instantiate the same triangles for each output layer.
+    // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
+    // the first dimension in addressing the triangle array.
+    for (int i=0; i < depth; i++)
+    {
+        GLDrawCmd& cmd = drawCmdBuffer[i];
+        cmd.firstIndex    = 0;
+        cmd.count         = triCount;
+        cmd.baseVertex    = 0;
+        cmd.baseInstance  = 0;
+        cmd.instanceCount = 1;
+    }
+
+    // for(int i=0; i < 4*4; i++){
+    //     std::cout << proj[i] << std::endl;
+    // }
+    // std::cout << glGetString(GL_VERSION) << " " << std::endl;
+    // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
+    glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
+    
+    // Draw!
+    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
+
 
     unsigned int bytes = depth*height*width*4*sizeof(float);
 
@@ -584,19 +615,19 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
 
     std::cout << height << " " << width << " " << depth << " !!" << std::endl;
 
-    dim3 blockSize(depth, 1, 1);
-    dim3 gridSize(height,width, 1);
-    float r = 4.0;
-    void* args[] = {&da, &r, &width, &height, &depth};
-    cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
+    // dim3 blockSize(depth, 1, 1);
+    // dim3 gridSize(height,width, 1);
+    // float r = 4.0;
+    // void* args[] = {&da, &r, &width, &height, &depth};
+    // cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
 
     // Allocate output tensors.
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    torch::Tensor out = torch::empty({depth}, opts);
+    torch::Tensor out = torch::empty({depth*height*width*4}, opts);
     
-    cudaMemcpy(out.data_ptr<float>(), da, sizeof(float)*depth, cudaMemcpyDeviceToDevice);
-
+    cudaMemcpy(out.data_ptr<float>(), da, sizeof(float)*depth*height*width*4, cudaMemcpyDeviceToDevice);
+    cudaFreeAsync(da, stream);
 
     // float* outputPtr2[2];
     // outputPtr2[0] = out.data_ptr<float>();

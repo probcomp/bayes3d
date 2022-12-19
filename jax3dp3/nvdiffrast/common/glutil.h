@@ -76,6 +76,7 @@ struct GLContext
 #define GL_MAJOR_VERSION                 0x821B
 #define GL_MINOR_VERSION                 0x821C
 #define GL_RGBA32F                       0x8814
+#define GL_R32F                       0x822E
 #define GL_TEXTURE_2D_ARRAY              0x8C1A
 #endif
 #ifndef GL_VERSION_3_2
