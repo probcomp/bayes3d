@@ -215,101 +215,14 @@ class RasterizeGLContext:
 # def load_vertices(glctx, proj, pos, tri, resolution, ranges=None, grad_db=True):
 #     return _get_plugin(gl=True).load_vertices(glctx.cpp_wrapper, pos, tri)
 
-def rasterize(glctx, pose, proj, pos, tri, depth, resolution, ranges=None, grad_db=True):
-    '''Rasterize triangles.
-
-    All input tensors must be contiguous and reside in GPU memory except for
-    the `ranges` tensor that, if specified, has to reside in CPU memory. The
-    output tensors will be contiguous and reside in GPU memory.
-
-    Args:
-        glctx: Rasterizer context of type `RasterizeGLContext` or `RasterizeCudaContext`.
-        pos: Vertex position tensor with dtype `torch.float32`. To enable range
-             mode, this tensor should have a 2D shape [num_vertices, 4]. To enable
-             instanced mode, use a 3D shape [minibatch_size, num_vertices, 4].
-        tri: Triangle tensor with shape [num_triangles, 3] and dtype `torch.int32`.
-        resolution: Output resolution as integer tuple (height, width).
-        ranges: In range mode, tensor with shape [minibatch_size, 2] and dtype
-                `torch.int32`, specifying start indices and counts into `tri`.
-                Ignored in instanced mode.
-        grad_db: Propagate gradients of image-space derivatives of barycentrics
-                 into `pos` in backward pass. Ignored if using an OpenGL context that
-                 was not configured to output image-space derivatives.
-
-    Returns:
-        A tuple of two tensors. The first output tensor has shape [minibatch_size,
-        height, width, 4] and contains the main rasterizer output in order (u, v, z/w,
-        triangle_id). If the OpenGL context was configured to output image-space
-        derivatives of barycentrics, the second output tensor will also have shape
-        [minibatch_size, height, width, 4] and contain said derivatives in order
-        (du/dX, du/dY, dv/dX, dv/dY). Otherwise it will be an empty tensor with shape
-        [minibatch_size, height, width, 0].
-    '''
-    assert isinstance(glctx, RasterizeGLContext)
-    assert grad_db is True or grad_db is False
-    grad_db = grad_db and glctx.output_db
-
-    # Sanitize inputs.
-    assert isinstance(pos, torch.Tensor) and isinstance(tri, torch.Tensor)
-    resolution = tuple(resolution)
-    if ranges is None:
-        ranges = torch.empty(size=(0, 2), dtype=torch.int32, device='cpu')
-    else:
-        assert isinstance(ranges, torch.Tensor)
-
-    # Check that context is not currently reserved for depth peeling.
-    if glctx.active_depth_peeler is not None:
-        return RuntimeError("Cannot call rasterize() during depth peeling operation, use rasterize_next_layer() instead")
-
+def rasterize(glctx, pose, proj, height, width, num_images):
     # Instantiate the function.
-    return _get_plugin(gl=True).rasterize_fwd_gl(glctx.cpp_wrapper, pose, proj, pos, tri, depth, resolution)
+    obs = _get_plugin(gl=True).rasterize_fwd_gl(glctx.cpp_wrapper, pose, proj, height, width, num_images)
+    obs = obs.reshape(num_images, height, width, 4)
+    return obs
 
+def load_obs_image(glctx, data, height, width):
+    return _get_plugin(gl=True).load_obs_image(glctx.cpp_wrapper, data, height, width)
 
-def load_vertices(glctx, proj, pos, tri, depth, resolution, ranges=None, grad_db=True):
-    '''Rasterize triangles.
-
-    All input tensors must be contiguous and reside in GPU memory except for
-    the `ranges` tensor that, if specified, has to reside in CPU memory. The
-    output tensors will be contiguous and reside in GPU memory.
-
-    Args:
-        glctx: Rasterizer context of type `RasterizeGLContext` or `RasterizeCudaContext`.
-        pos: Vertex position tensor with dtype `torch.float32`. To enable range
-             mode, this tensor should have a 2D shape [num_vertices, 4]. To enable
-             instanced mode, use a 3D shape [minibatch_size, num_vertices, 4].
-        tri: Triangle tensor with shape [num_triangles, 3] and dtype `torch.int32`.
-        resolution: Output resolution as integer tuple (height, width).
-        ranges: In range mode, tensor with shape [minibatch_size, 2] and dtype
-                `torch.int32`, specifying start indices and counts into `tri`.
-                Ignored in instanced mode.
-        grad_db: Propagate gradients of image-space derivatives of barycentrics
-                 into `pos` in backward pass. Ignored if using an OpenGL context that
-                 was not configured to output image-space derivatives.
-
-    Returns:
-        A tuple of two tensors. The first output tensor has shape [minibatch_size,
-        height, width, 4] and contains the main rasterizer output in order (u, v, z/w,
-        triangle_id). If the OpenGL context was configured to output image-space
-        derivatives of barycentrics, the second output tensor will also have shape
-        [minibatch_size, height, width, 4] and contain said derivatives in order
-        (du/dX, du/dY, dv/dX, dv/dY). Otherwise it will be an empty tensor with shape
-        [minibatch_size, height, width, 0].
-    '''
-    assert isinstance(glctx, RasterizeGLContext)
-    assert grad_db is True or grad_db is False
-    grad_db = grad_db and glctx.output_db
-
-    # Sanitize inputs.
-    assert isinstance(pos, torch.Tensor) and isinstance(tri, torch.Tensor)
-    resolution = tuple(resolution)
-    if ranges is None:
-        ranges = torch.empty(size=(0, 2), dtype=torch.int32, device='cpu')
-    else:
-        assert isinstance(ranges, torch.Tensor)
-
-    # Check that context is not currently reserved for depth peeling.
-    if glctx.active_depth_peeler is not None:
-        return RuntimeError("Cannot call rasterize() during depth peeling operation, use rasterize_next_layer() instead")
-
-    # Instantiate the function.
-    return _get_plugin(gl=True).load_vertices_fwd(glctx.cpp_wrapper, proj, pos, tri, depth, resolution)
+def load_vertices(glctx, pos, tri, height, width, num_images):
+    return _get_plugin(gl=True).load_vertices_fwd(glctx.cpp_wrapper, pos, tri, height, width, num_images)

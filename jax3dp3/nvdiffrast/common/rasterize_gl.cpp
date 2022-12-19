@@ -436,9 +436,9 @@ void RasterizeGLStateWrapper::releaseContext(void)
 //------------------------------------------------------------------------
 // Forward op (OpenGL).
 
-void threedp3_likelihood(float *pos, float time, int width, int height, int depth);
+void threedp3_likelihood(float *pos, float *obs_image, float r, int width, int height, int depth);
 
-void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper,  const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, int depth, std::tuple<int, int> resolution)
+void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, int height, int width, int depth)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -460,8 +460,6 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper,  const std::vector
     NVDR_CHECK(tri.sizes().size() == 2 && tri.size(0) > 0 && tri.size(1) == 3, "tri must have shape [>0, 3]");
 
     // Get output shape.
-    int height = std::get<0>(resolution);
-    int width  = std::get<1>(resolution);
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
 
     // Get position and triangle buffer sizes in int32/float32.
@@ -504,9 +502,16 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper,  const std::vector
 
 }
 
-std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  std::vector<float>& pose, const std::vector<float>& proj, torch::Tensor pos, torch::Tensor tri, int depth, std::tuple<int, int> resolution)
+void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_image, int height, int width){
+    RasterizeGLState& s = *stateWrapper.pState;
+    unsigned int bytes = height*width*4*sizeof(float);
+    cudaMalloc((void**)&s.obs_image, bytes);
+    cudaMemcpy(s.obs_image, obs_image.data_ptr<float>(),  bytes, cudaMemcpyDeviceToDevice);
+}
+
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  std::vector<float>& pose, const std::vector<float>& proj, int height, int width, int num_images)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
+    // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
 
@@ -518,46 +523,11 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
         
-    // Check inputs.
-    NVDR_CHECK_DEVICE(pos, tri);
-    NVDR_CHECK_CONTIGUOUS(pos, tri);
-    NVDR_CHECK_F32(pos);
-    NVDR_CHECK_I32(tri);
-
-    // Check that GL context was created for the correct GPU.
-    NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
-
-    // Get output shape.
-    int height = std::get<0>(resolution);
-    int width  = std::get<1>(resolution);
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
-
-    // Get position and triangle buffer sizes in int32/float32.
-    int posCount = 4 * pos.size(0);
-    int triCount = 3 * tri.size(0);
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
         setGLContext(s.glctx);
-
-    // Resize all buffers.
-    bool changes = false;
-    // rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, changes, posCount, triCount, width, height, depth);
-    if (changes)
-    {
-#ifdef _WIN32
-        // Workaround for occasional blank first frame on Windows.
-        releaseGLContext();
-        setGLContext(s.glctx);
-#endif
-    }
-
-    // Copy input data to GL and render.
-    const float* posPtr = pos.data_ptr<float>();
-    const int32_t* triPtr = tri.data_ptr<int32_t>();
-    int vtxPerInstance = pos.size(1);
-
-
     NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
 
     // Set viewport, clear color buffer(s) and depth/stencil buffer.
@@ -566,80 +536,54 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_gl(RasterizeGLStateWrappe
 
 
     // Populate a buffer for draw commands and execute it.
-    std::vector<GLDrawCmd> drawCmdBuffer(depth);
+    std::vector<GLDrawCmd> drawCmdBuffer(num_images);
     // Fill in range array to instantiate the same triangles for each output layer.
     // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
     // the first dimension in addressing the triangle array.
-    for (int i=0; i < depth; i++)
+    for (int i=0; i < num_images; i++)
     {
         GLDrawCmd& cmd = drawCmdBuffer[i];
         cmd.firstIndex    = 0;
-        cmd.count         = triCount;
+        cmd.count         = s.triCount;
         cmd.baseVertex    = 0;
         cmd.baseInstance  = 0;
         cmd.instanceCount = 1;
     }
 
-    // for(int i=0; i < 4*4; i++){
-    //     std::cout << proj[i] << std::endl;
-    // }
-    // std::cout << glGetString(GL_VERSION) << " " << std::endl;
-    // NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
     glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
     
     // Draw!
-    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
+    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], num_images, sizeof(GLDrawCmd)));
 
-
-    unsigned int bytes = depth*height*width*4*sizeof(float);
-
+    unsigned int bytes = num_images*height*width*4*sizeof(float);
     float* outputPtr[2];
     outputPtr[1] = NULL;
-
     float *da;
     cudaMalloc((void**)&da, bytes);
-
-    // float likelihood;
-    // cudaMalloc((void**)&da, bytes);
-
     outputPtr[0] = da;
-    rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, depth);
+    rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, num_images);
 
-    // float* ha = (float*)malloc(bytes);
-    // cudaMemcpy(ha, da, bytes, cudaMemcpyDeviceToHost);
-    // std::cout << "ha[0] : " << ha[0] << std::endl;
-    // std::cout << "ha[1] : " << ha[1] << std::endl;
-    // std::cout << "ha[2] : " << ha[2] << std::endl;
-    // std::cout << "ha[3] : " << ha[3] << std::endl;
-    // std::cout << "ha[4] : " << ha[4] << std::endl;
+    dim3 blockSize(num_images, 1, 1);
+    dim3 gridSize(height,width, 1);
+    float r = 4.0;
+    void* args[] = {&da, &s.obs_image, &r, &width, &height, &num_images};
+    std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
-    std::cout << height << " " << width << " " << depth << " !!" << std::endl;
-
-    // dim3 blockSize(depth, 1, 1);
-    // dim3 gridSize(height,width, 1);
-    // float r = 4.0;
-    // void* args[] = {&da, &r, &width, &height, &depth};
-    // cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
-
+    std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
 
     // Allocate output tensors.
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    torch::Tensor out = torch::empty({depth*height*width*4}, opts);
+    torch::Tensor out = torch::empty({num_images*height*width*4}, opts);
     
-    cudaMemcpy(out.data_ptr<float>(), da, sizeof(float)*depth*height*width*4, cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out.data_ptr<float>(), da, sizeof(float)*num_images*height*width*4, cudaMemcpyDeviceToDevice);
     cudaFreeAsync(da, stream);
-
-    // float* outputPtr2[2];
-    // outputPtr2[0] = out.data_ptr<float>();
-    // outputPtr2[1] = NULL;
-
-    // rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr2, width, height, depth);
 
     // Done. Release GL context and return.
     if (stateWrapper.automatic)
         releaseGLContext();
 
-    return std::tuple<torch::Tensor, torch::Tensor>(out, out);
+    return out;
 }
 
 
@@ -651,6 +595,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
     // Ops.
     m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
+    m.def("load_obs_image", &load_obs_image, "rasterize forward op (opengl)");
     m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
 }
 
