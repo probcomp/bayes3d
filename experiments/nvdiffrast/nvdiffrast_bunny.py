@@ -50,7 +50,7 @@ mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
 vertices_orig = np.array(mesh.vertices)
 vertices = vertices_orig.copy()
 vertices = tensor(np.array(vertices,dtype="f"))
-num_images = 1024*6
+num_images = 1024*10
 # vertices = vertices.tile((num_images,1,1))
 triangles = tensor(mesh.faces , dtype=torch.int32)
 
@@ -75,16 +75,13 @@ dr.load_vertices(glenv, view_space_vertices_h, triangles, h,w)
 # rast = dr.rasterize(glenv, pose_list, proj_list, h,w, num_images)
 start = time.time()
 rast = dr.rasterize(glenv, pose_list, proj_list, h,w)
-print(rast[0])
 end = time.time()
 print ("Time elapsed:", end - start)
-
-
 print("here")
 jax3dp3.viz.save_depth_image(rast[0,:,:,2].cpu().numpy(), "bunny.png",max=50.0)
 jax3dp3.viz.save_depth_image(rast[-1,:,:,2].cpu().numpy(), "bunny2.png",max=50.0)
 
-# dr.load_obs_image(glenv, rast[0,:,:,:])
+dr.load_obs_image(glenv, rast[0,:,:,:])
 # rast = dr.rasterize(glenv, pose_list, proj_list, h,w)
 
 # jax3dp3.viz.save_depth_image(rast[1,:,:,-1].cpu().numpy(), "bunny_count.png",max=121.0)

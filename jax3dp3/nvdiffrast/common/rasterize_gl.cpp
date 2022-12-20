@@ -457,19 +457,26 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
+    std::cout << "crash 1"<< std::endl;;
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
         setGLContext(s.glctx);
 
-    int num_total_poses = pose.size(0);
+    uint num_total_poses = pose.size(0);
     int sub_total_poses = 1024;
 
     size_t pose_bytes = sub_total_poses*16*sizeof(float);
     const float* posePtr = pose.data_ptr<float>();
+    std::cout << "crash 2"<< std::endl;;
 
+    std::cout << num_total_poses << std::endl;
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    torch::Tensor output_torch_tensor = torch::empty({num_total_poses*height*width*4}, opts);
+    // std::cout << v << std::endl;
+    torch::Tensor output_torch_tensor = torch::empty({num_total_poses,height,width,4}, opts);
+
+
+    std::cout << "crash 3"<< std::endl;;
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
@@ -488,6 +495,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 
+    std::cout << "crash 2"<< std::endl;;
 
     std::vector<GLDrawCmd> drawCmdBuffer(sub_total_poses);
     for (int i=0; i < sub_total_poses; i++)
@@ -539,7 +547,6 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
 
         // Draw!
         NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], sub_total_poses, sizeof(GLDrawCmd)));
-        std::cout << "loop iteration " << start_pose_idx << std::endl;
 
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, s.cudaColorBuffer, stream));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
@@ -553,10 +560,8 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         p.extent.height = height;
         p.extent.depth = sub_total_poses;
         p.kind = cudaMemcpyDeviceToDevice;
-        std::cout << "loop iteration " << start_pose_idx << std::endl;
         NVDR_CHECK_CUDA_ERROR(cudaMemcpy3D(&p));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
-        std::cout << "loop iteration " << start_pose_idx << std::endl;
     }
     std::cout << "after loop " << std::endl;
 
