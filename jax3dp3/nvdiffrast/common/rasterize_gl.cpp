@@ -453,6 +453,7 @@ void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_im
 
 torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, int height, int width)
 {
+    std::cout << "start rasterize "<< std::endl;;
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
@@ -462,7 +463,9 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         setGLContext(s.glctx);
 
     int num_total_poses = pose.size(0);
-    size_t pose_bytes = 1024*16*sizeof(float);
+    int sub_total_poses = 1024;
+
+    size_t pose_bytes = sub_total_poses*16*sizeof(float);
     const float* posePtr = pose.data_ptr<float>();
 
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
@@ -471,33 +474,23 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
         setGLContext(s.glctx);
+
     NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
     glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
-
-    // Set viewport, clear color buffer(s) and depth/stencil buffer.
-    NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
-    NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
 
     if (s.cudaPoseTexture)
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPoseTexture));
     NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPoseTexture));
     NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, s.glPoseTexture));
-    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 16, 1024, 0, GL_RED, GL_FLOAT, 0));
+    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 16, sub_total_poses, 0, GL_RED, GL_FLOAT, 0));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
-    cudaArray_t pose_array = 0;
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
-    NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(pose_array, 0, 0, posePtr, pose_bytes, cudaMemcpyDeviceToDevice));
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
 
-
-    std::vector<GLDrawCmd> drawCmdBuffer(num_total_poses);
-    for (int i=0; i < num_total_poses; i++)
+    std::vector<GLDrawCmd> drawCmdBuffer(sub_total_poses);
+    for (int i=0; i < sub_total_poses; i++)
     {
         GLDrawCmd& cmd = drawCmdBuffer[i];
         cmd.firstIndex    = 0;
@@ -507,9 +500,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         cmd.instanceCount = 1;
     }
 
-    
-    // Draw!
-    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], num_total_poses, sizeof(GLDrawCmd)));
+    std::cout << "image_bytes"<< std::endl;;
 
     unsigned int image_bytes = num_total_poses*height*width*4*sizeof(float);
     float *output_image_cuda;
@@ -522,21 +513,52 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, s.cudaColorBuffer, stream));
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
     NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
-    NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
+    NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch!!");
     NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
-    NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= num_total_poses, "CUDA mapped array extent mismatch");
-    cudaMemcpy3DParms p = {0};
-    p.srcArray = array;
-    p.dstPtr.ptr = output_image_cuda;
-    p.dstPtr.pitch = width * 4 * sizeof(float);
-    p.dstPtr.xsize = width;
-    p.dstPtr.ysize = height;
-    p.extent.width = width;
-    p.extent.height = height;
-    p.extent.depth = num_total_poses;
-    p.kind = cudaMemcpyDeviceToDevice;
-    NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
+    // NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= num_total_poses, "CUDA mapped array extent mismatch!!");
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
+
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
+    cudaArray_t pose_array = 0;
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+    std::cout << "before loop"<< std::endl;;
+
+    for(int start_pose_idx=0; start_pose_idx < num_total_poses; start_pose_idx+=sub_total_poses)
+    {
+        std::cout << "loop iteration " << start_pose_idx << std::endl;
+        // Set viewport, clear color buffer(s) and depth/stencil buffer.
+        NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
+        NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
+
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(pose_array, 0, 0, posePtr + start_pose_idx*16, pose_bytes, cudaMemcpyDeviceToDevice));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+
+        // Draw!
+        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], sub_total_poses, sizeof(GLDrawCmd)));
+        std::cout << "loop iteration " << start_pose_idx << std::endl;
+
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, s.cudaColorBuffer, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
+        cudaMemcpy3DParms p = {0};
+        p.srcArray = array;
+        p.dstPtr.ptr = output_image_cuda + start_pose_idx*height*width*4;
+        p.dstPtr.pitch = width * 4 * sizeof(float);
+        p.dstPtr.xsize = width;
+        p.dstPtr.ysize = height;
+        p.extent.width = width;
+        p.extent.height = height;
+        p.extent.depth = sub_total_poses;
+        p.kind = cudaMemcpyDeviceToDevice;
+        std::cout << "loop iteration " << start_pose_idx << std::endl;
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3D(&p));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
+        std::cout << "loop iteration " << start_pose_idx << std::endl;
+    }
+    std::cout << "after loop " << std::endl;
 
     // dim3 blockSize(num_images, 1, 1);
     // dim3 gridSize(height,width, 1);
@@ -549,9 +571,13 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
 
     cudaMemcpy(output_torch_tensor.data_ptr<float>(), output_image_cuda, image_bytes, cudaMemcpyDeviceToDevice);
 
+    std::cout << "after loop2 " << std::endl;
+
+
     // Done. Release GL context and return.
     if (stateWrapper.automatic)
         releaseGLContext();
+    std::cout << "after loop3 " << std::endl;
 
     return output_torch_tensor;
 }
