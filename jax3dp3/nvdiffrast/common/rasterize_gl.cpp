@@ -265,110 +265,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     // Create texture name for previous output buffer (depth peeling).
     NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPrevOutBuffer));
 }
-
-void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, int posCount, int triCount, int width, int height, int depth)
-{
-    changes = false;
-
-    // Resize vertex buffer?
-    if (posCount > s.posCount)
-    {
-        if (s.cudaPosBuffer)
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPosBuffer));
-        s.posCount = (posCount > 64) ? ROUND_UP_BITS(posCount, 2) : 64;
-        LOG(INFO) << "Increasing position buffer size to " << s.posCount << " float32";
-        NVDR_CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, s.posCount * sizeof(float), NULL, GL_DYNAMIC_DRAW));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterBuffer(&s.cudaPosBuffer, s.glPosBuffer, cudaGraphicsRegisterFlagsWriteDiscard));
-        changes = true;
-    }
-
-    // Resize triangle buffer?
-    if (triCount > s.triCount)
-    {
-        if (s.cudaTriBuffer)
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaTriBuffer));
-        s.triCount = (triCount > 64) ? ROUND_UP_BITS(triCount, 2) : 64;
-        LOG(INFO) << "Increasing triangle buffer size to " << s.triCount << " int32";
-        NVDR_CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, s.triCount * sizeof(int32_t), NULL, GL_DYNAMIC_DRAW));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterBuffer(&s.cudaTriBuffer, s.glTriBuffer, cudaGraphicsRegisterFlagsWriteDiscard));
-        changes = true;
-    }
-
-    // Resize framebuffer?
-    if (width > s.width || height > s.height || depth > s.depth)
-    {
-        int num_outputs = 1;
-        if (s.cudaColorBuffer[0])
-            for (int i=0; i < num_outputs; i++)
-                NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaColorBuffer[i]));
-
-        if (s.cudaPrevOutBuffer)
-        {
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPrevOutBuffer));
-            s.cudaPrevOutBuffer = 0;
-        }
-
-        // New framebuffer size.
-        s.width  = (width > s.width) ? width : s.width;
-        s.height = (height > s.height) ? height : s.height;
-        s.depth  = (depth > s.depth) ? depth : s.depth;
-        s.width  = ROUND_UP(s.width, 32);
-        s.height = ROUND_UP(s.height, 32);
-        std::cout << "Increasing frame buffer size to (width, height, depth) = (" << s.width << ", " << s.height << ", " << s.depth << ")" << std::endl;
-
-        // Allocate color buffers.
-        for (int i=0; i < num_outputs; i++)
-        {
-            NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
-            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-        }
-
-        // Allocate depth/stencil buffer.
-        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glDepthStencilBuffer));
-        NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, s.width, s.height, s.depth, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0));
-
-        // (Re-)register all GL buffers into Cuda.
-        for (int i=0; i < num_outputs; i++)
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaColorBuffer[i], s.glColorBuffer[i], GL_TEXTURE_3D, cudaGraphicsRegisterFlagsReadOnly));
-
-        changes = true;
-    }
-}
-
-void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth)
-{
-    // Copy color buffers to output tensors.
-    cudaArray_t array = 0;
-    cudaChannelFormatDesc arrayDesc = {};   // For error checking.
-    cudaExtent arrayExt = {};               // For error checking.
-    int num_outputs = s.enableDB ? 2 : 1;
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(num_outputs, s.cudaColorBuffer, stream));
-    for (int i=0; i < num_outputs; i++)
-    {
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[i], 0, 0));
-        NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
-        NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
-        NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
-        NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= depth, "CUDA mapped array extent mismatch");
-        cudaMemcpy3DParms p = {0};
-        p.srcArray = array;
-        p.dstPtr.ptr = outputPtr[i];
-        p.dstPtr.pitch = width * 4 * sizeof(float);
-        p.dstPtr.xsize = width;
-        p.dstPtr.ysize = height;
-        p.extent.width = width;
-        p.extent.height = height;
-        p.extent.depth = depth;
-        p.kind = cudaMemcpyDeviceToDevice;
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
-    }
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(num_outputs, s.cudaColorBuffer, stream));
-}
-
 void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s)
 {
     int num_outputs = s.enableDB ? 2 : 1;
@@ -471,16 +367,61 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
         setGLContext(s.glctx);
 
     // Resize all buffers.
-    bool changes = false;
-    rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, changes, posCount, triCount, width, height, depth);
-    if (changes)
+
+    // Resize vertex buffer?
+    if (s.cudaPosBuffer)
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPosBuffer));
+    s.posCount = (posCount > 64) ? ROUND_UP_BITS(posCount, 2) : 64;
+    LOG(INFO) << "Increasing position buffer size to " << s.posCount << " float32";
+    NVDR_CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, s.posCount * sizeof(float), NULL, GL_DYNAMIC_DRAW));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterBuffer(&s.cudaPosBuffer, s.glPosBuffer, cudaGraphicsRegisterFlagsWriteDiscard));
+
+    // Resize triangle buffer?
+    if (s.cudaTriBuffer)
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaTriBuffer));
+    s.triCount = (triCount > 64) ? ROUND_UP_BITS(triCount, 2) : 64;
+    LOG(INFO) << "Increasing triangle buffer size to " << s.triCount << " int32";
+    NVDR_CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, s.triCount * sizeof(int32_t), NULL, GL_DYNAMIC_DRAW));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterBuffer(&s.cudaTriBuffer, s.glTriBuffer, cudaGraphicsRegisterFlagsWriteDiscard));
+
+    int num_outputs = 1;
+    if (s.cudaColorBuffer[0])
+        for (int i=0; i < num_outputs; i++)
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaColorBuffer[i]));
+
+    if (s.cudaPrevOutBuffer)
     {
-#ifdef _WIN32
-        // Workaround for occasional blank first frame on Windows.
-        releaseGLContext();
-        setGLContext(s.glctx);
-#endif
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPrevOutBuffer));
+        s.cudaPrevOutBuffer = 0;
     }
+
+    // New framebuffer size.
+    s.width  = (width > s.width) ? width : s.width;
+    s.height = (height > s.height) ? height : s.height;
+    s.depth  = (depth > s.depth) ? depth : s.depth;
+    s.width  = ROUND_UP(s.width, 32);
+    s.height = ROUND_UP(s.height, 32);
+    std::cout << "Increasing frame buffer size to (width, height, depth) = (" << s.width << ", " << s.height << ", " << s.depth << ")" << std::endl;
+
+    // Allocate color buffers.
+    for (int i=0; i < num_outputs; i++)
+    {
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
+        NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+    }
+
+    // Allocate depth/stencil buffer.
+    NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glDepthStencilBuffer));
+    NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, s.width, s.height, s.depth, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0));
+
+    // (Re-)register all GL buffers into Cuda.
+    for (int i=0; i < num_outputs; i++)
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaColorBuffer[i], s.glColorBuffer[i], GL_TEXTURE_3D, cudaGraphicsRegisterFlagsReadOnly));
+
 
     const float* posPtr = pos.data_ptr<float>();
     const int32_t* triPtr = tri.data_ptr<int32_t>();
@@ -561,7 +502,33 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  std::vect
     float *da;
     cudaMalloc((void**)&da, bytes);
     outputPtr[0] = da;
-    rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, num_images);
+
+    // Copy color buffers to output tensors.
+    cudaArray_t array = 0;
+    cudaChannelFormatDesc arrayDesc = {};   // For error checking.
+    cudaExtent arrayExt = {};               // For error checking.
+    int num_outputs = s.enableDB ? 2 : 1;
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(num_outputs, s.cudaColorBuffer, stream));
+    for (int i=0; i < num_outputs; i++)
+    {
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[i], 0, 0));
+        NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
+        NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
+        NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
+        NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= num_images, "CUDA mapped array extent mismatch");
+        cudaMemcpy3DParms p = {0};
+        p.srcArray = array;
+        p.dstPtr.ptr = outputPtr[i];
+        p.dstPtr.pitch = width * 4 * sizeof(float);
+        p.dstPtr.xsize = width;
+        p.dstPtr.ysize = height;
+        p.extent.width = width;
+        p.extent.height = height;
+        p.extent.depth = num_images;
+        p.kind = cudaMemcpyDeviceToDevice;
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
+    }
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(num_outputs, s.cudaColorBuffer, stream));
 
     dim3 blockSize(num_images, 1, 1);
     dim3 gridSize(height,width, 1);
