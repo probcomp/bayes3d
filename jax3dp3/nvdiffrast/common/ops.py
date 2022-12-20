@@ -154,7 +154,7 @@ def set_log_level(level):
 #----------------------------------------------------------------------------
 
 class RasterizeGLContext:
-    def __init__(self, output_db=True, mode='automatic', device=None):
+    def __init__(self, output_db=False, mode='automatic', device=None):
         '''Create a new OpenGL rasterizer context.
 
         Creating an OpenGL context is a slow operation so you should usually reuse the same
@@ -218,11 +218,12 @@ class RasterizeGLContext:
 def rasterize(glctx, pose, proj, height, width, likelihood):
     # Instantiate the function.
     obs = _get_plugin(gl=True).rasterize_fwd_gl(glctx.cpp_wrapper, pose, proj, height, width, likelihood)
-    if likelihood:
-        return obs
-    else:
-        obs = obs.reshape(pose.shape[0], height, width, 4)
-        return obs
+    return obs
+    # if likelihood:
+    #     return obs
+    # else:
+    #     obs = obs.reshape(pose.shape[0], height, width, 4)
+    #     return obs
 
 def load_obs_image(glctx, data):
     return _get_plugin(gl=True).load_obs_image(glctx.cpp_wrapper, data)

@@ -9,9 +9,10 @@ from jax3dp3.utils import (
     
 )
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, transform_from_pos, depth_to_coords_in_camera
+
 from jax.scipy.stats.multivariate_normal import logpdf
 from jax.scipy.special import logsumexp
-from jax3dp3.enumerations import fibonacci_sphere, geodesicHopf_select_axis
+
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 from jax3dp3.viz import save_depth_image
 import jax3dp3.transforms_3d as t3d
@@ -19,6 +20,9 @@ import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
 import jax3dp3.distributions
+from jax3dp3.enumerations import fibonacci_sphere, geodesicHopf_select_axis
+from jax3dp3.enumerations import make_translation_grid_enumeration, make_rotation_grid_enumeration
+
 import matplotlib.pyplot as plt
 import cv2
 from jax3dp3.enumerations import make_translation_grid_enumeration, make_rotation_grid_enumeration

@@ -333,7 +333,7 @@ void RasterizeGLStateWrapper::releaseContext(void)
 //------------------------------------------------------------------------
 // Forward op (OpenGL).
 
-void threedp3_likelihood(float *pos, float *obs_image, float r, int width, int height, int depth);
+void threedp3_likelihood(float *pos, float *latent_points, float *obs_image, float r, int width, int height, int depth);
 
 void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, int height, int width)
 {
@@ -553,27 +553,29 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         p.dstPtr.ysize = height;
         p.extent.width = width;
         p.extent.height = height;
-        p.extent.depth = sub_total_poses;
+        p.extent.depth = std::min(num_total_poses-start_pose_idx, sub_total_poses);
         p.kind = cudaMemcpyDeviceToDevice;
         NVDR_CHECK_CUDA_ERROR(cudaMemcpy3D(&p));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
     }
 
+    dim3 blockSize(1024, 1, 1);
+    dim3 gridSize(height,width, 1);
+    float r = 0.1;
+    torch::Tensor num_latent_points = output_torch_tensor.index({"...", 3}).sum({1,2});
+    std::cout << num_latent_points.sizes() << std::endl;
+    float *output_ptr = output_torch_tensor.data_ptr<float>();
+    float *num_latent_points_ptr = num_latent_points.data_ptr<float>();
+    void* args[] = {&output_ptr, &num_latent_points_ptr, &s.obs_image, &r, &width, &height, &num_total_poses};
+    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
-    // if(likelihood){
-    //     dim3 blockSize(1024, num_total_poses/4, 1);
-    //     dim3 gridSize(height,width, 1);
-    //     float r = 4.0;
-    //     void* args[] = {&output_image_cuda , &s.obs_image, &r, &width, &height, &num_total_poses};
-    //     // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
-    //     cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
+    // output_torch_tensor = torch::empty({num_total_poses}, opts);
+    // cudaMemcpy(output_torch_tensor.data_ptr<float>(), output_image_cuda, num_total_poses*4, cudaMemcpyDeviceToDevice);
 
-    //     // output_torch_tensor = torch::empty({num_total_poses}, opts);
-    //     // cudaMemcpy(output_torch_tensor.data_ptr<float>(), output_image_cuda, num_total_poses*4, cudaMemcpyDeviceToDevice);
-
-    //     torch::Tensor prev_tensor = torch::empty({num_total_poses,height,width,4}, opts);
-    //     cudaMemcpy(prev_tensor.data_ptr<float>(), output_image_cuda, image_bytes, cudaMemcpyDeviceToDevice);
-    //     output_torch_tensor = torch::sum(prev_tensor, std::vector<int64_t>({1,2,3}));
+    // torch::Tensor prev_tensor = torch::empty({num_total_poses,height,width,4}, opts);
+    // cudaMemcpy(prev_tensor.data_ptr<float>(), output_image_cuda, image_bytes, cudaMemcpyDeviceToDevice);
+    // output_torch_tensor = torch::sum(prev_tensor, std::vector<int64_t>({1,2,3}));
     // }
     // else{
     //     output_torch_tensor = torch::empty({num_total_poses,height,width,4}, opts);
