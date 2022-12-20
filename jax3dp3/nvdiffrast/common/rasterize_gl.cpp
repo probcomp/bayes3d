@@ -334,8 +334,9 @@ void RasterizeGLStateWrapper::releaseContext(void)
 
 void threedp3_likelihood(float *pos, float *obs_image, float r, int width, int height, int depth);
 
-void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, int height, int width, int depth)
+void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, int height, int width)
 {
+    int depth = 1024;
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
@@ -443,14 +444,14 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
 
 }
 
-void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_image, int height, int width){
+void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_image){
     RasterizeGLState& s = *stateWrapper.pState;
-    unsigned int bytes = height*width*4*sizeof(float);
+    unsigned int bytes = obs_image.size(0)*obs_image.size(1)*4*sizeof(float);
     cudaMalloc((void**)&s.obs_image, bytes);
     cudaMemcpy(s.obs_image, obs_image.data_ptr<float>(),  bytes, cudaMemcpyDeviceToDevice);
 }
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, int height, int width, int num_images)
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, int height, int width)
 {
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -460,9 +461,22 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     if (stateWrapper.automatic)
         setGLContext(s.glctx);
 
+    int num_total_poses = pose.size(0);
+    size_t pose_bytes = 1024*16*sizeof(float);
     const float* posePtr = pose.data_ptr<float>();
 
-    size_t pose_bytes = 1024*16*sizeof(float);
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::Tensor output_torch_tensor = torch::empty({num_total_poses*height*width*4}, opts);
+
+    // Set the GL context unless manual context.
+    if (stateWrapper.automatic)
+        setGLContext(s.glctx);
+    NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
+    glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
+
+    // Set viewport, clear color buffer(s) and depth/stencil buffer.
+    NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
+    NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
 
     if (s.cudaPoseTexture)
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPoseTexture));
@@ -473,6 +487,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
     cudaArray_t pose_array = 0;
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
@@ -480,37 +495,9 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(pose_array, 0, 0, posePtr, pose_bytes, cudaMemcpyDeviceToDevice));
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
 
-    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
 
-    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
-    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
-    // int pose_bytes = 1024*16*sizeof(float);
-    // void* opengl_ptr = NULL;
-    // size_t posBytes = 0;
-    // const float* posPtr = pose.data_ptr<float>();
-    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer((void**)&opengl_ptr, &posBytes, s.cudaPoseTexture));
-    // NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(opengl_ptr, posPtr, 4, cudaMemcpyDeviceToDevice, stream));
-    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
-
-
-    NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
-
-    // Set the GL context unless manual context.
-    if (stateWrapper.automatic)
-        setGLContext(s.glctx);
-    NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
-
-    // Set viewport, clear color buffer(s) and depth/stencil buffer.
-    NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
-    NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
-
-
-    // Populate a buffer for draw commands and execute it.
-    std::vector<GLDrawCmd> drawCmdBuffer(num_images);
-    // Fill in range array to instantiate the same triangles for each output layer.
-    // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
-    // the first dimension in addressing the triangle array.
-    for (int i=0; i < num_images; i++)
+    std::vector<GLDrawCmd> drawCmdBuffer(num_total_poses);
+    for (int i=0; i < num_total_poses; i++)
     {
         GLDrawCmd& cmd = drawCmdBuffer[i];
         cmd.firstIndex    = 0;
@@ -520,66 +507,53 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         cmd.instanceCount = 1;
     }
 
-    glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
     
     // Draw!
-    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], num_images, sizeof(GLDrawCmd)));
+    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], num_total_poses, sizeof(GLDrawCmd)));
 
-    unsigned int bytes = num_images*height*width*4*sizeof(float);
-    float* outputPtr[2];
-    outputPtr[1] = NULL;
-    float *da;
-    cudaMalloc((void**)&da, bytes);
-    outputPtr[0] = da;
+    unsigned int image_bytes = num_total_poses*height*width*4*sizeof(float);
+    float *output_image_cuda;
+    cudaMalloc((void**)&output_image_cuda, image_bytes);
 
     // Copy color buffers to output tensors.
     cudaArray_t array = 0;
     cudaChannelFormatDesc arrayDesc = {};   // For error checking.
     cudaExtent arrayExt = {};               // For error checking.
-    int num_outputs = s.enableDB ? 2 : 1;
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(num_outputs, s.cudaColorBuffer, stream));
-    for (int i=0; i < num_outputs; i++)
-    {
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[i], 0, 0));
-        NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
-        NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
-        NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
-        NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= num_images, "CUDA mapped array extent mismatch");
-        cudaMemcpy3DParms p = {0};
-        p.srcArray = array;
-        p.dstPtr.ptr = outputPtr[i];
-        p.dstPtr.pitch = width * 4 * sizeof(float);
-        p.dstPtr.xsize = width;
-        p.dstPtr.ysize = height;
-        p.extent.width = width;
-        p.extent.height = height;
-        p.extent.depth = num_images;
-        p.kind = cudaMemcpyDeviceToDevice;
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
-    }
-    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(num_outputs, s.cudaColorBuffer, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, s.cudaColorBuffer, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
+    NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
+    NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
+    NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
+    NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= num_total_poses, "CUDA mapped array extent mismatch");
+    cudaMemcpy3DParms p = {0};
+    p.srcArray = array;
+    p.dstPtr.ptr = output_image_cuda;
+    p.dstPtr.pitch = width * 4 * sizeof(float);
+    p.dstPtr.xsize = width;
+    p.dstPtr.ysize = height;
+    p.extent.width = width;
+    p.extent.height = height;
+    p.extent.depth = num_total_poses;
+    p.kind = cudaMemcpyDeviceToDevice;
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
 
-    dim3 blockSize(num_images, 1, 1);
-    dim3 gridSize(height,width, 1);
-    float r = 4.0;
-    void* args[] = {&da, &s.obs_image, &r, &width, &height, &num_images};
-    std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
-    cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
+    // dim3 blockSize(num_images, 1, 1);
+    // dim3 gridSize(height,width, 1);
+    // float r = 4.0;
+    // void* args[] = {&da, &s.obs_image, &r, &width, &height, &num_images};
+    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    // cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
-    std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
 
-    // Allocate output tensors.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    torch::Tensor out = torch::empty({num_images*height*width*4}, opts);
-    
-    cudaMemcpy(out.data_ptr<float>(), da, sizeof(float)*num_images*height*width*4, cudaMemcpyDeviceToDevice);
-    cudaFreeAsync(da, stream);
+    cudaMemcpy(output_torch_tensor.data_ptr<float>(), output_image_cuda, image_bytes, cudaMemcpyDeviceToDevice);
 
     // Done. Release GL context and return.
     if (stateWrapper.automatic)
         releaseGLContext();
 
-    return out;
+    return output_torch_tensor;
 }
 
 
