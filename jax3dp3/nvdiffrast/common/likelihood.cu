@@ -4,11 +4,14 @@ inline __device__ int index(const int i, const int j, const int k, int width, in
 
 __global__ void threedp3_likelihood(float *pos, float *obs_image, float r, int width, int height, int depth)
 {   
-    int i = threadIdx.x;
+    int i_0 = threadIdx.x;
+    int i_multiplier = threadIdx.y;
+    int i = i_0 * i_multiplier;
     int j = blockIdx.x;
     int k = blockIdx.y;
 
     int filter_size = 5;
+    float outlier_prob = 0.01;
 
     float x_o = obs_image[index(0,j,k, width, height, depth) + 0];
     float y_o = obs_image[index(0,j,k, width, height, depth) + 1];
@@ -35,6 +38,7 @@ __global__ void threedp3_likelihood(float *pos, float *obs_image, float r, int w
             }
         }
     }
+    
     int idx = index(i,j,k, width, height, depth);
     pos[idx+3] = counter;
 }

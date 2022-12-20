@@ -16,6 +16,7 @@
 #include <pybind11/stl.h>
 #include <vector>
 
+#include <chrono>
 
 #include <vector>
 #include <iostream>
@@ -451,32 +452,29 @@ void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_im
     cudaMemcpy(s.obs_image, obs_image.data_ptr<float>(),  bytes, cudaMemcpyDeviceToDevice);
 }
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, int height, int width)
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, uint height, uint width, bool likelihood)
 {
-    std::cout << "start rasterize "<< std::endl;;
+    auto start = std::chrono::high_resolution_clock::now();
+
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
-    std::cout << "crash 1"<< std::endl;;
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
         setGLContext(s.glctx);
 
     uint num_total_poses = pose.size(0);
-    int sub_total_poses = 1024;
+    uint sub_total_poses = 1024;
 
-    size_t pose_bytes = sub_total_poses*16*sizeof(float);
+    uint pose_bytes = sub_total_poses*16*sizeof(float);
     const float* posePtr = pose.data_ptr<float>();
-    std::cout << "crash 2"<< std::endl;;
-
-    std::cout << num_total_poses << std::endl;
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    // std::cout << v << std::endl;
-    torch::Tensor output_torch_tensor = torch::empty({num_total_poses,height,width,4}, opts);
 
 
-    std::cout << "crash 3"<< std::endl;;
+    unsigned long int image_bytes= num_total_poses*height*width*4*sizeof(float);
+
+
+
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
@@ -495,7 +493,6 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 
-    std::cout << "crash 2"<< std::endl;;
 
     std::vector<GLDrawCmd> drawCmdBuffer(sub_total_poses);
     for (int i=0; i < sub_total_poses; i++)
@@ -508,11 +505,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         cmd.instanceCount = 1;
     }
 
-    std::cout << "image_bytes"<< std::endl;;
 
-    unsigned int image_bytes = num_total_poses*height*width*4*sizeof(float);
-    float *output_image_cuda;
-    cudaMalloc((void**)&output_image_cuda, image_bytes);
 
     // Copy color buffers to output tensors.
     cudaArray_t array = 0;
@@ -531,11 +524,13 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
-    std::cout << "before loop"<< std::endl;;
+
+    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::Tensor output_torch_tensor = torch::empty({num_total_poses,height,width,4}, opts);
 
     for(int start_pose_idx=0; start_pose_idx < num_total_poses; start_pose_idx+=sub_total_poses)
     {
-        std::cout << "loop iteration " << start_pose_idx << std::endl;
         // Set viewport, clear color buffer(s) and depth/stencil buffer.
         NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
         NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
@@ -552,7 +547,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
         cudaMemcpy3DParms p = {0};
         p.srcArray = array;
-        p.dstPtr.ptr = output_image_cuda + start_pose_idx*height*width*4;
+        p.dstPtr.ptr = output_torch_tensor.data_ptr<float>() + start_pose_idx*height*width*4;
         p.dstPtr.pitch = width * 4 * sizeof(float);
         p.dstPtr.xsize = width;
         p.dstPtr.ysize = height;
@@ -563,26 +558,37 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         NVDR_CHECK_CUDA_ERROR(cudaMemcpy3D(&p));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
     }
-    std::cout << "after loop " << std::endl;
 
-    // dim3 blockSize(num_images, 1, 1);
-    // dim3 gridSize(height,width, 1);
-    // float r = 4.0;
-    // void* args[] = {&da, &s.obs_image, &r, &width, &height, &num_images};
-    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
-    // cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
-    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    // if(likelihood){
+    //     dim3 blockSize(1024, num_total_poses/4, 1);
+    //     dim3 gridSize(height,width, 1);
+    //     float r = 4.0;
+    //     void* args[] = {&output_image_cuda , &s.obs_image, &r, &width, &height, &num_total_poses};
+    //     // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    //     cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
-    cudaMemcpy(output_torch_tensor.data_ptr<float>(), output_image_cuda, image_bytes, cudaMemcpyDeviceToDevice);
+    //     // output_torch_tensor = torch::empty({num_total_poses}, opts);
+    //     // cudaMemcpy(output_torch_tensor.data_ptr<float>(), output_image_cuda, num_total_poses*4, cudaMemcpyDeviceToDevice);
 
-    std::cout << "after loop2 " << std::endl;
+    //     torch::Tensor prev_tensor = torch::empty({num_total_poses,height,width,4}, opts);
+    //     cudaMemcpy(prev_tensor.data_ptr<float>(), output_image_cuda, image_bytes, cudaMemcpyDeviceToDevice);
+    //     output_torch_tensor = torch::sum(prev_tensor, std::vector<int64_t>({1,2,3}));
+    // }
+    // else{
+    //     output_torch_tensor = torch::empty({num_total_poses,height,width,4}, opts);
+    //     cudaMemcpy(output_torch_tensor.data_ptr<float>(), output_image_cuda, image_bytes, cudaMemcpyDeviceToDevice);
+
+
+    // }
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "duration : " << duration.count() << std::endl;
 
 
     // Done. Release GL context and return.
     if (stateWrapper.automatic)
         releaseGLContext();
-    std::cout << "after loop3 " << std::endl;
 
     return output_torch_tensor;
 }

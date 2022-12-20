@@ -215,11 +215,14 @@ class RasterizeGLContext:
 # def load_vertices(glctx, proj, pos, tri, resolution, ranges=None, grad_db=True):
 #     return _get_plugin(gl=True).load_vertices(glctx.cpp_wrapper, pos, tri)
 
-def rasterize(glctx, pose, proj, height, width):
+def rasterize(glctx, pose, proj, height, width, likelihood):
     # Instantiate the function.
-    obs = _get_plugin(gl=True).rasterize_fwd_gl(glctx.cpp_wrapper, pose, proj, height, width)
-    obs = obs.reshape(pose.shape[0], height, width, 4)
-    return obs
+    obs = _get_plugin(gl=True).rasterize_fwd_gl(glctx.cpp_wrapper, pose, proj, height, width, likelihood)
+    if likelihood:
+        return obs
+    else:
+        obs = obs.reshape(pose.shape[0], height, width, 4)
+        return obs
 
 def load_obs_image(glctx, data):
     return _get_plugin(gl=True).load_obs_image(glctx.cpp_wrapper, data)
