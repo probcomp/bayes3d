@@ -5,9 +5,14 @@ inline __device__ int index(const int i, const int j, const int k, int width, in
 __global__ void threedp3_likelihood(float *pos, float *latent_points, float *obs_image, float r, int width, int height, int depth)
 {   
     int i_0 = threadIdx.x;
-    int i = i_0;
     int j = blockIdx.x;
     int k = blockIdx.y;
+    int block = blockIdx.z;
+
+    int i = i_0 + 1024*block;
+    if (i >= depth){
+        return;
+    }
 
     int filter_size = 5;
     float outlier_prob = 0.01;
@@ -41,7 +46,7 @@ __global__ void threedp3_likelihood(float *pos, float *latent_points, float *obs
     int idx = index(i,j,k, width, height, depth);
     if(latent_points[i] > 0 & z_o > 0)
     {
-        pos[idx+3] = log(outlier_prob * 1.0 / powf(20.0,3) + (1 - outlier_prob) / latent_points[i] * counter / (4.0/3.0 * 3.1415 * powf(r, 3)));
+        pos[idx+3] = log(outlier_prob + (1 - outlier_prob) / latent_points[i] * counter / (4.0/3.0 * 3.1415 * powf(r, 3)));
     }
     else{
         pos[idx+3] = 0.0;

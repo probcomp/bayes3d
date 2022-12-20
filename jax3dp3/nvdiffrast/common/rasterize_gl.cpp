@@ -560,7 +560,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     }
 
     dim3 blockSize(1024, 1, 1);
-    dim3 gridSize(height,width, 1);
+    dim3 gridSize(height,width, std::ceil(num_total_poses / sub_total_poses));
     float r = 0.1;
     torch::Tensor num_latent_points = output_torch_tensor.index({"...", 3}).sum({1,2});
     std::cout << num_latent_points.sizes() << std::endl;
