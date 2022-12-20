@@ -450,20 +450,49 @@ void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_im
     cudaMemcpy(s.obs_image, obs_image.data_ptr<float>(),  bytes, cudaMemcpyDeviceToDevice);
 }
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  std::vector<float>& pose, const std::vector<float>& proj, int height, int width, int num_images)
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, int height, int width, int num_images)
 {
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
 
+    // Set the GL context unless manual context.
+    if (stateWrapper.automatic)
+        setGLContext(s.glctx);
+
+    const float* posePtr = pose.data_ptr<float>();
+
+    size_t pose_bytes = 1024*16*sizeof(float);
+
+    if (s.cudaPoseTexture)
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPoseTexture));
     NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPoseTexture));
     NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, s.glPoseTexture));
-    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 16, 1024, 0, GL_RED, GL_FLOAT, &pose[0]));
+    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 16, 1024, 0, GL_RED, GL_FLOAT, 0));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-        
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
+    cudaArray_t pose_array = 0;
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(pose_array, 0, 0, posePtr, pose_bytes, cudaMemcpyDeviceToDevice));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+
+    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+
+    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
+    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+    // int pose_bytes = 1024*16*sizeof(float);
+    // void* opengl_ptr = NULL;
+    // size_t posBytes = 0;
+    // const float* posPtr = pose.data_ptr<float>();
+    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer((void**)&opengl_ptr, &posBytes, s.cudaPoseTexture));
+    // NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(opengl_ptr, posPtr, 4, cudaMemcpyDeviceToDevice, stream));
+    // NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
+
+
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
 
     // Set the GL context unless manual context.

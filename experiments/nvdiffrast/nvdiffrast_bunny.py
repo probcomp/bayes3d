@@ -69,10 +69,12 @@ pose = np.array([np.eye(4) for _ in range(num_images)])
 pose[:,:3,3] = np.array([-0.0, -0.0, 3.0])
 pose[:,2,3] = np.linspace(3.0, 1000.0, num_images)
 pose_list = list(pose.reshape(-1))
+pose_list = tensor(pose.astype("f"))
+pose_list = tensor(pose.astype("f"))
 # pose = [0.0 for _ in range(16)]
 
 dr.load_vertices(glenv, view_space_vertices_h, triangles, h,w, num_images)
-rast = dr.rasterize(glenv, pose_list, proj_list, h,w, num_images)
+# rast = dr.rasterize(glenv, pose_list, proj_list, h,w, num_images)
 start = time.time()
 rast = dr.rasterize(glenv, pose_list, proj_list, h,w, num_images)
 end = time.time()
@@ -83,7 +85,7 @@ jax3dp3.viz.save_depth_image(rast[0,:,:,2].cpu().numpy(), "bunny.png",max=5.0)
 jax3dp3.viz.save_depth_image(rast[1,:,:,2].cpu().numpy(), "bunny2.png",max=5.0)
 
 dr.load_obs_image(glenv, rast[0,:,:,:], h, w)
-rast = dr.rasterize(glenv, pose_list, proj_list, h,w, num_images)
+# rast = dr.rasterize(glenv, pose_list, proj_list, h,w, num_images)
 
 jax3dp3.viz.save_depth_image(rast[1,:,:,-1].cpu().numpy(), "bunny_count.png",max=121.0)
 
