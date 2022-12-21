@@ -225,6 +225,11 @@ def rasterize(glctx, pose, proj, height, width, likelihood):
     #     obs = obs.reshape(pose.shape[0], height, width, 4)
     #     return obs
 
+def rasterize_get_best_pose(glctx, pose, proj, height, width, likelihood):
+    # Instantiate the function.
+    obs = _get_plugin(gl=True).rasterize_get_best_pose_fwd(glctx.cpp_wrapper, pose, proj, height, width, likelihood)
+    return obs
+
 def load_obs_image(glctx, data):
     return _get_plugin(gl=True).load_obs_image(glctx.cpp_wrapper, data)
 

@@ -333,7 +333,7 @@ void RasterizeGLStateWrapper::releaseContext(void)
 //------------------------------------------------------------------------
 // Forward op (OpenGL).
 
-void threedp3_likelihood(float *pos, float *latent_points, float *obs_image, float r, int width, int height, int depth);
+void threedp3_likelihood(float *pos, float *latent_points, float *likelihoods, float *obs_image, float r, int width, int height, int depth);
 
 void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, int height, int width)
 {
@@ -455,7 +455,7 @@ void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_im
     cudaMemcpy(s.obs_image, obs_image.data_ptr<float>(),  bytes, cudaMemcpyDeviceToDevice);
 }
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, uint height, uint width, bool likelihood)
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, uint height, uint width, float r)
 {
     NVDR_CHECK_DEVICE(pose);
     NVDR_CHECK_CONTIGUOUS(pose);
@@ -565,20 +565,8 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         NVDR_CHECK_CUDA_ERROR(cudaMemcpy3D(&p));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
     }
-
-    dim3 blockSize(1024, 1, 1);
-    dim3 gridSize(height,width, 1);
-    float r = 0.05;
-    torch::Tensor num_latent_points = output_torch_tensor.index({"...", 3}).sum({1,2});
-    std::cout << num_latent_points.sizes() << std::endl;
-    float *output_ptr = output_torch_tensor.data_ptr<float>();
-    float *num_latent_points_ptr = num_latent_points.data_ptr<float>();
-    void* args[] = {&output_ptr, &num_latent_points_ptr, &s.obs_image, &r, &width, &height, &num_total_poses};
-    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
-    cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
-
-    torch::Tensor torch_out =  torch::empty({num_total_poses,height,width,4}, opts);
-    cudaMemcpy(torch_out.data_ptr<float>(), output_torch_tensor.data_ptr<float>(), num_total_poses*height*width*4*4, cudaMemcpyDeviceToDevice);
+    // torch::Tensor torch_out =  torch::empty({num_total_poses,height,width,4}, opts);
+    // cudaMemcpy(torch_out.data_ptr<float>(), output_torch_tensor.data_ptr<float>(), num_total_poses*height*width*4*4, cudaMemcpyDeviceToDevice);
 
     // torch::Tensor prev_tensor = torch::empty({num_total_poses,height,width,4}, opts);
     // cudaMemcpy(prev_tensor.data_ptr<float>(), output_image_cuda, image_bytes, cudaMemcpyDeviceToDevice);
@@ -602,6 +590,33 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     return output_torch_tensor;
 }
 
+std::vector<float> rasterize_get_best_pose_fwd(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, uint height, uint width, float r)
+{
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    RasterizeGLState& s = *stateWrapper.pState;
+
+    torch::Tensor output_torch_tensor = rasterize_fwd_gl(stateWrapper, pose, proj, height, width, r);
+    uint num_total_poses = pose.size(0);
+    float* likelihoods;
+    cudaMalloc((void**)&likelihoods, num_total_poses*sizeof(float));
+
+
+    dim3 blockSize(1024, 1, 1);
+    dim3 gridSize(height,width, 1);
+    torch::Tensor num_latent_points = output_torch_tensor.index({"...", 3}).sum({1,2});
+    std::cout << num_latent_points.sizes() << std::endl;
+    float *output_ptr = output_torch_tensor.data_ptr<float>();
+    float *num_latent_points_ptr = num_latent_points.data_ptr<float>();
+    void* args[] = {&output_ptr, &num_latent_points_ptr, &likelihoods, &s.obs_image, &r, &width, &height, &num_total_poses};
+    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
+
+
+    std::vector<float> likelihoods_cpu(num_total_poses);
+    cudaMemcpy(&likelihoods_cpu[0], likelihoods, num_total_poses*sizeof(float), cudaMemcpyDeviceToHost);
+    return likelihoods_cpu;
+}
+
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // State classes.
@@ -613,6 +628,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
     m.def("load_obs_image", &load_obs_image, "rasterize forward op (opengl)");
     m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
+    m.def("rasterize_get_best_pose_fwd", &rasterize_get_best_pose_fwd, "rasterize forward op (opengl)");
 }
 
 //------------------------------------------------------------------------
