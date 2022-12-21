@@ -27,6 +27,7 @@ import time
 import trimesh
 from jax3dp3.camera import open_gl_projection_matrix
 from jax3dp3.likelihood import threedp3_likelihood
+import jax3dp3.distributions
 
 def tensor(*args, **kwargs):
     return torch.tensor(*args, device='cuda', **kwargs)
@@ -35,15 +36,19 @@ def zeros(size):
     return torch.zeros(size, device='cuda')
 
 
-h, w = 120,160
-cx = (w-1)/2
-cy = (h-1)/2
-fx = 200.0
-fy = 200.0
-near=0.05
+h, w = 200,200
+fx,fy = 200, 200
+cx,cy = 100, 100
+near=0.01
 far=100.0
+proj_list = list(open_gl_projection_matrix(h, w, fx, fy, cx, cy, near, far).reshape(-1))
 
-max_depth = 30.0
+r = 0.1
+outlier_prob = 0.01
+
+max_depth = 20.0
+
+
 glenv = dr.RasterizeGLContext(output_db=False)
 
 mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"bunny.obj"))
@@ -61,9 +66,21 @@ dr.load_obs_image(glenv, obs_image)
 
 num_images = 1024*1
 
-pose = np.array([np.eye(4) for _ in range(num_images)])
-pose[:,:3,3] = np.array([0.0, 0.0, 3.0])
-pose[:,2,3] = np.linspace(3.0, 40.0, num_images)
+center_of_sampling = t3d.transform_from_pos(jnp.array([0.0, 0.0, 8.0]))
+variance = 0.5
+concentration = 0.01
+key = jax.random.PRNGKey(5)
+sampler_jit = jax.jit(jax3dp3.distributions.gaussian_vmf_sample)
+gt_pose = np.array(sampler_jit(key, center_of_sampling, variance, concentration))
+gt_pose = np.array(gt_pose)
+
+translation_deltas_1 = np.array(make_translation_grid_enumeration(-1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 10, 10, 10))
+translation_deltas_1[:,:3,3] += np.array([0.0, 0.0, 10.0]).reshape(1,3)
+pose = translation_deltas_1
+pose[:,:3,:3] = gt_pose[:3,:3][None,:,:]
+# pose = np.array([np.eye(4) for _ in range(num_images)])
+# pose[:,:3,3] = np.array([0.0, 0.0, 3.0])
+# pose[:,2,3] = np.linspace(3.0, 40.0, num_images)
 pose_list = tensor(pose.astype("f"))
 # pose = [0.0 for _ in range(16)]
 
@@ -77,7 +94,8 @@ print ("Time elapsed:", end - start)
 
 jax3dp3.viz.save_depth_image(rast[0,:,:,2].cpu().numpy(), "bunny.png",max=20.0)
 jax3dp3.viz.save_depth_image(rast[50,:,:,2].cpu().numpy(), "bunny2.png",max=20.0)
-# print(rast.shape)
+
+
 
 dr.load_obs_image(glenv, rast[50,:,:,:])
 rast = dr.rasterize(glenv, pose_list, proj_list, h,w, True)

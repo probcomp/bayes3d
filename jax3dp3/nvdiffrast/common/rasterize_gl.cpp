@@ -446,6 +446,9 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
 }
 
 void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_image){
+    NVDR_CHECK_DEVICE(obs_image);
+    NVDR_CHECK_CONTIGUOUS(obs_image);
+    NVDR_CHECK_F32(obs_image);
     RasterizeGLState& s = *stateWrapper.pState;
     unsigned int bytes = obs_image.size(0)*obs_image.size(1)*4*sizeof(float);
     cudaMalloc((void**)&s.obs_image, bytes);
@@ -454,6 +457,10 @@ void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_im
 
 torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, uint height, uint width, bool likelihood)
 {
+    NVDR_CHECK_DEVICE(pose);
+    NVDR_CHECK_CONTIGUOUS(pose);
+    NVDR_CHECK_F32(pose);
+
     auto start = std::chrono::high_resolution_clock::now();
 
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
@@ -560,8 +567,8 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     }
 
     dim3 blockSize(1024, 1, 1);
-    dim3 gridSize(height,width, std::ceil(num_total_poses / sub_total_poses));
-    float r = 0.1;
+    dim3 gridSize(height,width, 1);
+    float r = 0.05;
     torch::Tensor num_latent_points = output_torch_tensor.index({"...", 3}).sum({1,2});
     std::cout << num_latent_points.sizes() << std::endl;
     float *output_ptr = output_torch_tensor.data_ptr<float>();
@@ -570,8 +577,8 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
     cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
-    // output_torch_tensor = torch::empty({num_total_poses}, opts);
-    // cudaMemcpy(output_torch_tensor.data_ptr<float>(), output_image_cuda, num_total_poses*4, cudaMemcpyDeviceToDevice);
+    torch::Tensor torch_out =  torch::empty({num_total_poses,height,width,4}, opts);
+    cudaMemcpy(torch_out.data_ptr<float>(), output_torch_tensor.data_ptr<float>(), num_total_poses*height*width*4*4, cudaMemcpyDeviceToDevice);
 
     // torch::Tensor prev_tensor = torch::empty({num_total_poses,height,width,4}, opts);
     // cudaMemcpy(prev_tensor.data_ptr<float>(), output_image_cuda, image_bytes, cudaMemcpyDeviceToDevice);

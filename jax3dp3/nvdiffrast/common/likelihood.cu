@@ -46,7 +46,7 @@ __global__ void threedp3_likelihood(float *pos, float *latent_points, float *obs
     int idx = index(i,j,k, width, height, depth);
     if(latent_points[i] > 0 & z_o > 0)
     {
-        pos[idx+3] = log(outlier_prob + (1 - outlier_prob) / latent_points[i] * counter / (4.0/3.0 * 3.1415 * powf(r, 3)));
+        pos[idx+3] = log(outlier_prob / (powf(10.0,3))+ (1 - outlier_prob) / latent_points[i] * counter / (4.0/3.0 * 3.1415 * powf(r, 3)));
     }
     else{
         pos[idx+3] = 0.0;
