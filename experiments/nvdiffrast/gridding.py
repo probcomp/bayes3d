@@ -75,7 +75,7 @@ dr.load_obs_image(glenv, gt_image)
 image_from_pose = lambda pose: dr.rasterize(glenv, pose, proj_list, h,w, r)
 likelihoods_from_pose = lambda pose: dr.rasterize(glenv, pose, proj_list, h,w, r)[:,:,:,-1].sum((1,2))
 
-translation_deltas_1 = tensor(np.array(make_translation_grid_enumeration(-2.0, -2.0, -2.0, 2.0, 2.0, 2.0, 9,9,9)))
+translation_deltas_1 = tensor(np.array(make_translation_grid_enumeration(-2.0, -2.0, -2.0, 2.0, 2.0, 2.0, 11,1,11)))
 translation_deltas_2 = tensor(np.array(make_translation_grid_enumeration(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5, 9,9,9)))
 translation_deltas_3 = tensor(np.array(make_translation_grid_enumeration(-0.1, -0.1, -0.1, 0.1, 0.2, 0.1, 9,9,9)))
 rotation_deltas = tensor(np.array(make_rotation_grid_enumeration(50, 20)))
@@ -84,54 +84,22 @@ rotation_deltas = tensor(np.array(make_rotation_grid_enumeration(50, 20)))
 initial_pose_estimate = tensor(np.array(sampler_jit(jax.random.split(key)[0], center_of_sampling, variance, concentration)))
 x = initial_pose_estimate;
 
+# start = time.time()
+# proposals = torch.einsum("ij,ajk->aik", x, translation_deltas_1).contiguous()
+# scores = likelihoods_from_pose(proposals)
+# x = proposals[torch.argmax(scores)]
+# print(x)
+# end = time.time()
+# print ("Time elapsed:", end - start)
+
 start = time.time()
-proposals = torch.einsum("ij,ajk->aik", x, translation_deltas_3).contiguous()
-scores = likelihoods_from_pose(proposals)
-x = proposals[torch.argmax(scores)]
+proposals = torch.einsum("ij,ajk->aik", x, translation_deltas_1).contiguous()
+scores = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
+x = proposals[np.argmax(scores)]
 print(x)
 end = time.time()
 print ("Time elapsed:", end - start)
 
-
-
-
-start = time.time()
-proposals = torch.einsum("ij,ajk->aik", x, translation_deltas_3).contiguous()
-imgs = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
-best_idx = np.argmax(imgs)
-x = proposals[best_idx]
-print(x)
-end = time.time()
-print ("Time elapsed:", end - start)
-
-from IPython import embed; embed()
-
-
-
-rendered_img = image_from_pose(x[None,:,:])
-likelihoods_from_pose(x[None,:,:])
-
-threedp3_likelihood(jnp.array(gt_image.cpu().numpy()), jnp.array(rendered_img[0].cpu().numpy()), r, 0.01)
-
-
-
-
-
-
-
-proposals = torch.einsum("ij,ajk->aik", x, rotation_deltas).contiguous()
-x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
-proposals = torch.einsum("ij,ajk->aik", x, translation_deltas_3).contiguous()
-x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
-proposals = torch.einsum("ij,ajk->aik", x, rotation_deltas).contiguous()
-x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
-proposals = torch.einsum("ij,ajk->aik", x, translation_deltas_3).contiguous()
-x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
-proposals = torch.einsum("ij,ajk->aik", x, rotation_deltas).contiguous()
-x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
-
-end = time.time()
-print ("Time elapsed:", end - start)
 
 gt_img_viz = jax3dp3.viz.get_depth_image(gt_image[:,:,2].cpu(),max=max_depth) 
 initial_viz = jax3dp3.viz.get_depth_image(image_from_pose(initial_pose_estimate[None,...])[0,:,:,2].cpu(),max=max_depth)
@@ -147,5 +115,48 @@ jax3dp3.viz.multi_panel(
     20
 ).save("all_estimates.png")
 
+
 from IPython import embed; embed()
 
+
+
+# start = time.time()
+# proposals = torch.einsum("ij,ajk->aik", x, translation_deltas_3).contiguous()
+# imgs = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
+# best_idx = np.argmax(imgs)
+# x = proposals[best_idx]
+# print(x)
+# end = time.time()
+# print ("Time elapsed:", end - start)
+
+# from IPython import embed; embed()
+
+
+
+# rendered_img = image_from_pose(x[None,:,:])
+# likelihoods_from_pose(x[None,:,:])
+
+# threedp3_likelihood(jnp.array(gt_image.cpu().numpy()), jnp.array(rendered_img[0].cpu().numpy()), r, 0.01)
+
+
+
+
+
+
+
+# proposals = torch.einsum("ij,ajk->aik", x, rotation_deltas).contiguous()
+# x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
+# proposals = torch.einsum("ij,ajk->aik", x, translation_deltas_3).contiguous()
+# x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
+# proposals = torch.einsum("ij,ajk->aik", x, rotation_deltas).contiguous()
+# x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
+# proposals = torch.einsum("ij,ajk->aik", x, translation_deltas_3).contiguous()
+# x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
+# proposals = torch.einsum("ij,ajk->aik", x, rotation_deltas).contiguous()
+# x = dr.rasterize_get_best_pose(glenv, proposals, proj_list, h,w, r)
+
+# end = time.time()
+# print ("Time elapsed:", end - start)
+
+
+# from IPython import embed; embed()
