@@ -45,6 +45,8 @@ struct RasterizeGLState // Must be initializable by memset to zero.
     cudaGraphicsResource_t  cudaPosBuffer;
     cudaGraphicsResource_t  cudaTriBuffer;
     cudaGraphicsResource_t  cudaPoseTexture;
+    cudaArray_t             cuda_color_buffer;
+    cudaArray_t             cuda_pose_buffer;
     float*                  obs_image;
     int                     enableDB;
     int                     enableZModify;      // Modify depth in shader, workaround for a rasterization issue on A100.

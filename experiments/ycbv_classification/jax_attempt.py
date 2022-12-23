@@ -29,7 +29,7 @@ model_names = os.listdir("/home/nishadgothoskar/jax3dp3/assets/models/")
 
 glenv = dr.RasterizeGLContext(output_db=False)
 
-gt_mesh_name = model_names[2]
+gt_mesh_name = model_names[5]
 mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"models/{}/textured_simple.obj".format(gt_mesh_name)))
 # mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"cube.obj"))
 vertices = np.array(mesh.vertices)
@@ -63,9 +63,10 @@ def scorer(rendered_image):
 scorer_parallel = jax.vmap(scorer)
 scorer_parallel_jit = jax.jit(scorer_parallel)
 
-rotation_deltas = jax3dp3.enumerations.make_rotation_grid_enumeration(20, 30)
+rotation_deltas = jax3dp3.enumerations.make_rotation_grid_enumeration(50, 20)
 poses_to_score = jnp.einsum("ij,ajk->aik", gt_pose, rotation_deltas)
 poses_to_score_torch = torch.tensor(np.array(poses_to_score), device='cuda')
+
 
 model = gt_mesh_name
 
@@ -89,5 +90,26 @@ end = time.time()
 print ("Time elapsed:", end - start)
 print(gt_mesh_name)
 print(model_names[np.argmax(all_scores)])
+
+# start= time.time()
+# all_scores = []
+# for model in model_names:
+#     images = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(dr.rasterize(glenv, poses_to_score_torch, proj_list, h,w, False)))
+#     weights = scorer_parallel_jit(images)
+#     all_scores.append(weights.max())
+# end = time.time()
+# print ("Time elapsed:", end - start)
+# print(gt_mesh_name)
+# print(model_names[np.argmax(all_scores)])
+
+
+# start= time.time()
+# all_scores = []
+# images = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(dr.rasterize(glenv, poses_to_score_torch, proj_list, h,w, False)))
+# weights = scorer_parallel_jit(images)
+# print(weights.max())
+# end = time.time()
+# print ("Time elapsed:", end - start)
+
 
 from IPython import embed; embed()
