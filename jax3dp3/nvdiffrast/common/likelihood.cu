@@ -14,7 +14,7 @@ __global__ void threedp3_likelihood(float *pos, float *latent_points, float *lik
         return;
     }
 
-    int filter_size = 5;
+    int filter_size = 3;
     float outlier_prob = 0.01;
 
     float x_o = obs_image[index(0,j,k, width, height, depth) + 0];
@@ -44,9 +44,12 @@ __global__ void threedp3_likelihood(float *pos, float *latent_points, float *lik
     }
 
     int idx = index(i,j,k, width, height, depth);
+    float log_score =  log(outlier_prob + (1 - outlier_prob) / latent_points[i] * counter / (4.0/3.0 * 3.1415 * powf(r, 3)));
     if(latent_points[i] > 0 & z_o > 0)
     {
-        atomicAdd(likelihood + i, log(outlier_prob + (1 - outlier_prob) / latent_points[i] * counter / (4.0/3.0 * 3.1415 * powf(r, 3))));
+        pos[idx+3] = log_score;
+    }else{
+        pos[idx+3] = 0.0;
     }
     return;
 }

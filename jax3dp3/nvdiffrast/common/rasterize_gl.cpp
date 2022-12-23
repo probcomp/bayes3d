@@ -73,14 +73,13 @@ static void compileGLShader(NVDR_CTX_ARGS, const RasterizeGLState& s, GLuint* pS
     NVDR_CHECK_GL_ERROR(glCompileShader(*pShader));
 }
 
-static void constructGLProgram(NVDR_CTX_ARGS, GLuint* pProgram, GLuint glVertexShader, GLuint glGeometryShader, GLuint glFragmentShader)
+static void constructGLProgram(NVDR_CTX_ARGS, GLuint* pProgram, GLuint glVertexShader, GLuint glFragmentShader)
 {
     *pProgram = 0;
 
     GLuint glProgram = 0;
     NVDR_CHECK_GL_ERROR(glProgram = glCreateProgram());
     NVDR_CHECK_GL_ERROR(glAttachShader(glProgram, glVertexShader));
-    NVDR_CHECK_GL_ERROR(glAttachShader(glProgram, glGeometryShader));
     NVDR_CHECK_GL_ERROR(glAttachShader(glProgram, glFragmentShader));
     NVDR_CHECK_GL_ERROR(glLinkProgram(glProgram));
 
@@ -135,38 +134,38 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         "#version 330\n"
         "#extension GL_ARB_shader_draw_parameters : enable\n"
         "#extension GL_ARB_explicit_uniform_location : enable\n"
+        "#extension GL_AMD_vertex_shader_layer : enable\n"
         STRINGIFY_SHADER_SOURCE(
             layout(location = 0) uniform mat4 mvp;
             in vec4 in_vert;
-            out int v_layer;
             out vec4 vertex_on_object;
             uniform sampler2D texture;
             void main()
             {
-                v_layer = gl_DrawIDARB;
+                gl_Layer = gl_DrawIDARB;
                 vec4 v1 = vec4(
-                    texelFetch(texture, ivec2(0, v_layer), 0).r,
-                    texelFetch(texture, ivec2(4, v_layer), 0).r,
-                    texelFetch(texture, ivec2(8, v_layer), 0).r,
-                    texelFetch(texture, ivec2(12, v_layer), 0).r
+                    texelFetch(texture, ivec2(0, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(4, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(8, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(12, gl_Layer), 0).r
                 );
                 vec4 v2 = vec4(
-                    texelFetch(texture, ivec2(1, v_layer), 0).r,
-                    texelFetch(texture, ivec2(5, v_layer), 0).r,
-                    texelFetch(texture, ivec2(9, v_layer), 0).r,
-                    texelFetch(texture, ivec2(13, v_layer), 0).r
+                    texelFetch(texture, ivec2(1, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(5, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(9, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(13, gl_Layer), 0).r
                 );
                 vec4 v3 = vec4(
-                    texelFetch(texture, ivec2(2, v_layer), 0).r,
-                    texelFetch(texture, ivec2(6, v_layer), 0).r,
-                    texelFetch(texture, ivec2(10, v_layer), 0).r,
-                    texelFetch(texture, ivec2(14, v_layer), 0).r
+                    texelFetch(texture, ivec2(2, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(6, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(10, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(14, gl_Layer), 0).r
                 );
                 vec4 v4 = vec4(
-                    texelFetch(texture, ivec2(3, v_layer), 0).r,
-                    texelFetch(texture, ivec2(7, v_layer), 0).r,
-                    texelFetch(texture, ivec2(11, v_layer), 0).r,
-                    texelFetch(texture, ivec2(15, v_layer), 0).r
+                    texelFetch(texture, ivec2(3, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(7, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(11, gl_Layer), 0).r,
+                    texelFetch(texture, ivec2(15, gl_Layer), 0).r
                 );
 
                 mat4 pose_mat = mat4(
@@ -178,50 +177,22 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         )
     );
 
-    // Geometry shader without bary differential output.
-    compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
-        "#version 330\n"
-        STRINGIFY_SHADER_SOURCE(
-            layout (triangles) in;
-            layout(triangle_strip, max_vertices=3) out;
-            in vec4 vertex_on_object[];
-            in int v_layer[];
-            out vec4 vertex_on_object_out;
-            void main()
-            {
-                gl_Layer =  v_layer[0];
-                gl_Position = gl_in[0].gl_Position;
-                vertex_on_object_out = vertex_on_object[0];
-                EmitVertex();
-                gl_Layer =  v_layer[0];
-                gl_Position = gl_in[1].gl_Position;
-                vertex_on_object_out = vertex_on_object[1];
-                EmitVertex();
-                gl_Layer =  v_layer[0];
-                gl_Position = gl_in[2].gl_Position;
-                vertex_on_object_out = vertex_on_object[2];
-                EmitVertex();
-                EndPrimitive();
-            }
-        )
-    );
-
     // Fragment shader without bary differential output.
     compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
         "#version 430\n"
         STRINGIFY_SHADER_SOURCE(
-            in vec4 vertex_on_object_out;
+            in vec4 vertex_on_object;
             out vec4 fragColor;
             void main()
             {
-                fragColor = vec4(vertex_on_object_out);
+                fragColor = vec4(vertex_on_object);
             }
         )
     );
 
     // Finalize programs.
-    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgram, s.glVertexShader, s.glGeometryShader, s.glFragmentShader);
-    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgramDP, s.glVertexShader, s.glGeometryShader, s.glFragmentShader);
+    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgram, s.glVertexShader, s.glFragmentShader);
+    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgramDP, s.glVertexShader, s.glFragmentShader);
 
     // Construct main fbo and bind permanently.
     NVDR_CHECK_GL_ERROR(glGenFramebuffers(1, &s.glFBO));
@@ -538,6 +509,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
 
     for(int start_pose_idx=0; start_pose_idx < num_total_poses; start_pose_idx+=sub_total_poses)
     {
+        auto poses_on_this_iter = std::min(num_total_poses-start_pose_idx, sub_total_poses);
         // Set viewport, clear color buffer(s) and depth/stencil buffer.
         NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
         NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
@@ -548,7 +520,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
 
         // Draw!
-        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], sub_total_poses, sizeof(GLDrawCmd)));
+        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], poses_on_this_iter, sizeof(GLDrawCmd)));
 
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, s.cudaColorBuffer, stream));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
@@ -560,7 +532,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         p.dstPtr.ysize = height;
         p.extent.width = width;
         p.extent.height = height;
-        p.extent.depth = std::min(num_total_poses-start_pose_idx, sub_total_poses);
+        p.extent.depth = poses_on_this_iter;
         p.kind = cudaMemcpyDeviceToDevice;
         NVDR_CHECK_CUDA_ERROR(cudaMemcpy3D(&p));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
@@ -578,8 +550,13 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
 
 
     // }
+    // float* output_ptr = output_torch_tensor.data_ptr<float>();
+    // float temp = 1.0;
+    // cudaMemcpy(&temp, output_ptr, sizeof(float), cudaMemcpyDeviceToHost);
+    // std::cout << temp << std::endl;
+    
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start) * 1e-6;
     std::cout << "duration : " << duration.count() << std::endl;
 
 
@@ -594,11 +571,14 @@ std::vector<float> rasterize_get_best_pose_fwd(RasterizeGLStateWrapper& stateWra
 {
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
+    auto start2 = std::chrono::high_resolution_clock::now();
 
     torch::Tensor output_torch_tensor = rasterize_fwd_gl(stateWrapper, pose, proj, height, width, r);
+
     uint num_total_poses = pose.size(0);
     float* likelihoods;
     cudaMalloc((void**)&likelihoods, num_total_poses*sizeof(float));
+    std::vector<float> likelihoods_cpu(num_total_poses);
 
 
     dim3 blockSize(1024, 1, 1);
@@ -609,11 +589,24 @@ std::vector<float> rasterize_get_best_pose_fwd(RasterizeGLStateWrapper& stateWra
     float *num_latent_points_ptr = num_latent_points.data_ptr<float>();
     void* args[] = {&output_ptr, &num_latent_points_ptr, &likelihoods, &s.obs_image, &r, &width, &height, &num_total_poses};
     // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+
     cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
 
+    float temp = 1.0;
+    cudaMemcpy(&temp, output_ptr, sizeof(float), cudaMemcpyDeviceToHost);
+    std::cout << temp << std::endl;
+    auto stop2 = std::chrono::high_resolution_clock::now();
+    auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(stop2 - start2);    
+    std::cout << "duration 2: " << duration2.count() << std::endl;
+    
 
-    std::vector<float> likelihoods_cpu(num_total_poses);
+
+    auto start3 = std::chrono::high_resolution_clock::now();
     cudaMemcpy(&likelihoods_cpu[0], likelihoods, num_total_poses*sizeof(float), cudaMemcpyDeviceToHost);
+    auto stop3 = std::chrono::high_resolution_clock::now();
+    auto duration3 = std::chrono::duration_cast<std::chrono::microseconds>(stop3 - start3);    
+    std::cout << "duration 3: " << duration3.count() << std::endl;
+
     return likelihoods_cpu;
 }
 
