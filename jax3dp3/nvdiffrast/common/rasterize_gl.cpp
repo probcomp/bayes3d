@@ -143,34 +143,11 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             void main()
             {
                 gl_Layer = gl_DrawIDARB;
-                vec4 v1 = vec4(
-                    texelFetch(texture, ivec2(0, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(4, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(8, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(12, gl_Layer), 0).r
-                );
-                vec4 v2 = vec4(
-                    texelFetch(texture, ivec2(1, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(5, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(9, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(13, gl_Layer), 0).r
-                );
-                vec4 v3 = vec4(
-                    texelFetch(texture, ivec2(2, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(6, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(10, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(14, gl_Layer), 0).r
-                );
-                vec4 v4 = vec4(
-                    texelFetch(texture, ivec2(3, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(7, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(11, gl_Layer), 0).r,
-                    texelFetch(texture, ivec2(15, gl_Layer), 0).r
-                );
-
-                mat4 pose_mat = mat4(
-                    v1,v2,v3,v4
-                );
+                vec4 v1 = texelFetch(texture, ivec2(0, gl_Layer), 0);
+                vec4 v2 = texelFetch(texture, ivec2(1, gl_Layer), 0);
+                vec4 v3 = texelFetch(texture, ivec2(2, gl_Layer), 0);
+                vec4 v4 = texelFetch(texture, ivec2(3, gl_Layer), 0);
+                mat4 pose_mat = transpose(mat4(v1,v2,v3,v4));
                 vertex_on_object = pose_mat * in_vert;
                 gl_Position = mvp * vertex_on_object;
             }
@@ -465,7 +442,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPoseTexture));
     NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPoseTexture));
     NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, s.glPoseTexture));
-    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 16, sub_total_poses, 0, GL_RED, GL_FLOAT, 0));
+    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, sub_total_poses, 0, GL_RGBA, GL_FLOAT, 0));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
