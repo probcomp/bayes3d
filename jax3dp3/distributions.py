@@ -27,6 +27,7 @@ def gaussian_vmf(key, var, concentration):
     return jnp.vstack(
         [jnp.hstack([rot_matrix, translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
     )
+    
 
 def gaussian_vmf_sample(key, pose_mean, var, concentration):
     return pose_mean.dot(gaussian_vmf(key, var, concentration))

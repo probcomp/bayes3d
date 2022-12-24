@@ -1,18 +1,17 @@
 import jax.numpy as jnp
 from jax3dp3.transforms_3d import rotation_matrix_to_quaternion
 from jax3dp3.rendering import render_planes 
-from jax3dp3.utils import depth_to_coords_in_camera
 
 def get_rot_error_from_poses(p1, p2)->float:
     rot1 = p1[:3, :3] 
     rot2 = p2[:3, :3] 
     q1, q2 = rotation_matrix_to_quaternion(rot1), rotation_matrix_to_quaternion(rot2)
 
-    rot_err = jnp.arccos(min(1.0, 2 * q1.dot(q2)**2 - 1))
+    rot_err = jnp.arccos(jnp.min(jnp.array([1.0, 2 * q1.dot(q2)**2 - 1]))) 
 
     return rot_err
 
-def get_translation_error_from_poses(shape_renderer, p1, p2, K):
+def get_translation_error_from_poses(shape_renderer, p1, p2):
     coords1 = shape_renderer(p1)
     coords2 = shape_renderer(p2)
 

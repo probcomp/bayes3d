@@ -41,7 +41,7 @@ pose1 = jnp.array([
 )
 pose2 = pose1
 
-err12 = get_rot_error_from_poses(pose1, pose2), get_translation_error_from_poses(pose1, pose2, K)
+err12 = get_rot_error_from_poses(pose1, pose2), get_translation_error_from_poses(pose1, pose2)
 print("error should be 0 : ", err12)
 
 
@@ -53,7 +53,7 @@ pose3 = jnp.array([
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
-err13 = get_rot_error_from_poses(pose1, pose3), get_translation_error_from_poses(pose1, pose3, K)
+err13 = get_rot_error_from_poses(pose1, pose3), get_translation_error_from_poses(pose1, pose3)
 print("error should only have translation err", err13)
 
 
@@ -67,7 +67,7 @@ Rx = jnp.array([
 )
 pose4 = Rx @ pose1
 print("pose4=", pose4)
-err14 = get_rot_error_from_poses(pose1, pose4), get_translation_error_from_poses(pose1, pose4, K)
+err14 = get_rot_error_from_poses(pose1, pose4), get_translation_error_from_poses(pose1, pose4)
 print("error should have rotation err ~ pi/5", err14)
 
 

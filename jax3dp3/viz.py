@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 import matplotlib
-import graphviz
-import distinctipy
+# import graphviz
+# import distinctipy
 
 
 def make_gif_from_pil_images(images, filename):
@@ -61,7 +61,7 @@ def save_rgba_image(image, max_val, filename):
 
 ####
 
-def multi_panel(images, labels, middle_width, top_border, fontsize):
+def multi_panel(images, labels, middle_width=10, top_border=20, fontsize=20):
     num_images = len(images)
     w = images[0].width
     h = images[0].height

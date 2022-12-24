@@ -50,6 +50,56 @@ def ray_triangle_vmap(ray, vertices):
     return jnp.nan_to_num(P) * valid + 10000.0 * (1 - valid)
 
 
+@functools.partial(
+    jnp.vectorize,
+    signature='(3)->(4)',
+    excluded=(1,2,3,),
+)
+def ray_triangle_vmap_pose(ray, vertices, index, poses):
+    dir = ray
+    orig = jnp.zeros(3)
+
+    vertices = jnp.einsum('ij,...j->...i', poses[index], vertices)
+    v0,v1,v2 = vertices[0,:3], vertices[1,:3], vertices[2,:3]
+
+    v0v1 = v1 - v0; 
+    v0v2 = v2 - v0; 
+
+    N = jnp.cross(v0v1, v0v2)
+    area2 = jnp.linalg.norm(N)
+
+    NdotRayDirection = N.dot(dir); 
+    bad1 = ~(jnp.abs(NdotRayDirection) < 1e-20)
+
+
+    d = -N.dot(v0); 
+ 
+    t = -(N.dot(orig) + d) / NdotRayDirection; 
+    bad2 =  ~(t < 0)
+ 
+    P = orig + t * dir; 
+
+    edge0 = v1 - v0; 
+    vp0 = P - v0; 
+    C = jnp.cross(edge0, vp0)
+
+    bad3 = ~(N.dot(C) < 0) 
+    
+    edge1 = v2 - v1; 
+    vp1 = P - v1; 
+    C = jnp.cross(edge1, vp1); 
+    bad4 = ~(N.dot(C) < 0) 
+ 
+    edge2 = v0 - v2; 
+    vp2 = P - v2; 
+    C = jnp.cross(edge2, vp2); 
+    bad5 = ~(N.dot(C) < 0) 
+
+    valid = bad1 * bad2 * bad3 * bad4 * bad5 * jnp.all(~jnp.isnan(P))
+    return jnp.nan_to_num(P) * valid + 10000.0 * (1 - valid)
+
+
+
 def render_triangles(pose, trimesh_shape, rays):
     trimesh_shape_h = jnp.concatenate([trimesh_shape, jnp.ones((*trimesh_shape.shape[:2],1))], axis=-1)
     all_vertices = jnp.einsum("ik,abk->abi", pose, trimesh_shape_h)[:,:,:3]
@@ -64,10 +114,14 @@ def render_triangles(pose, trimesh_shape, rays):
     return points_final_final
 
 def render_triangles_multiobject(poses, idxs, triangles, rays):
-    points = jax.vmap(jax.vmap(lambda vertex: ray_triangle_vmap(rays, vertex), out_axes=-2), out_axes=-3) (all_vertices)
+    points = jax.vmap(ray_triangle_vmap_pose, in_axes=(None, 0, 0, None),  out_axes=-2)(
+        rays,
+        triangles,
+        idxs,
+        poses
+    )
     print(points.shape)
     z_vals = points[:,:,:,]
-    
     idxs = jnp.argmax(z_vals, axis=-1)
 
     idxs = jnp.argmin(points[:,:,:,2], axis=-1)

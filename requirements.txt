@@ -11,3 +11,5 @@ open3d
 graphviz
 distinctipy
 moderngl
+trimesh
+ninja

@@ -41,7 +41,6 @@ def threedp3_likelihood(
 
 
 
-
 def sample_coordinate_within_r(r, key, coord):
     phi = jax.random.uniform(key, minval=0.0, maxval=2*jnp.pi)
     
@@ -59,10 +58,10 @@ def sample_coordinate_within_r(r, key, coord):
 
     return new_key, coord + jnp.array([sx, sy, sz]) 
 
-def sample_cloud_within_r(cloud, r):
+def sample_cloud_within_r(key, cloud, r, duplicates=1):
     cloud = cloud[cloud[:,:,2] > 0].reshape(-1, 3)
-    key = jax.random.PRNGKey(214)
-    keys = jax.random.split(key, cloud.shape[0])
-    _, sampled_cloud_r = jax.vmap(sample_coordinate_within_r, in_axes=(None, 0, 0))(r, keys, cloud)
+    cloud_tiled = jnp.tile(cloud, (duplicates, 1))
+    keys = jax.random.split(key, cloud_tiled.shape[0])
+    _, sampled_cloud_r = jax.vmap(sample_coordinate_within_r, in_axes=(None, 0, 0))(r, keys, cloud_tiled)
 
     return sampled_cloud_r

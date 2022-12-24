@@ -5,9 +5,8 @@ from jax3dp3.rendering import render_planes
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
-    depth_to_coords_in_camera
 )
-from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
+from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, depth_to_point_cloud_image
 from jax3dp3.distributions import gaussian_vmf, gaussian_vmf_cov
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
@@ -19,7 +18,6 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 import cv2
 from jax.scipy.special import logsumexp
-from jax3dp3.viz.gif import make_gif
 from jax3dp3.viz import multi_panel
 from jax3dp3.enumerations import make_grid_enumeration
 from jax3dp3.rendering import render_spheres, render_cloud_at_pose,render_planes_multiobject
@@ -44,18 +42,14 @@ fy = data["fy"] * scaling_factor
 cx = data["cx"] * scaling_factor
 cy = data["cy"] * scaling_factor
 
-K = np.array([
-    [fx, 0.0, cx],
-    [0.0, fy, cy],
-    [0.0, 0.0, 1.0],
-])
 original_height = data["height"]
 original_width = data["width"]
+
 h = int(np.round(original_height  * scaling_factor))
 w = int(np.round(original_width * scaling_factor))
 print(h,w,fx,fy,cx,cy)
 
-coord_images = [depth_to_coords_in_camera(cv2.resize(d.copy(), (w,h),interpolation=1), K.copy())[0] for d in depth_imgs]
+coord_images = [depth_to_point_cloud_image(cv2.resize(d.copy(), (w,h),interpolation=1), fx,fy,cx,cy) for d in depth_imgs]
 ground_truth_images = np.stack(coord_images)
 ground_truth_images[ground_truth_images[:,:,:,2] > 30.0] = 0.0
 ground_truth_images[ground_truth_images[:,:,:,1] > 0.85,:] = 0.0
@@ -80,7 +74,7 @@ shape_dims.append(dims)
 shape_dims = jnp.array(shape_dims)
 shape_planes = jnp.array(shape_planes)
 
-render_from_pose = lambda pose: render_planes_multiobject(pose, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
+render_from_pose = lambda pose: render_planes_multiobject(pose, shape_planes, shape_dims, h,w, fx,fy, cx,cy)
 render_from_pose_jit = jax.jit(render_from_pose)
 render_planes_parallel_jit = jax.jit(jax.vmap(lambda x: render_from_pose(x)))
 
@@ -135,8 +129,8 @@ for _ in range(10):
         initial_poses = proposals[jnp.argmax(weights)]
 
 
-save_depth_image(ground_truth_images[0][:,:,2],20.0,"gt_depth.png")
-save_depth_image(render_from_pose(initial_poses)[:,:,2],20.0,"inferred_depth.png")
+save_depth_image(ground_truth_images[0][:,:,2],"gt_depth.png",max=20.0)
+save_depth_image(render_from_pose(initial_poses)[:,:,2],"inferred_depth.png",max=20.0)
 
 
 
@@ -233,7 +227,7 @@ for i in range(ground_truth_images.shape[0]):
 
     translations = x[i, :, 1, :3, -1]
     img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 0)
-    projected_particles_img = get_depth_image(img[:,:,2], 40.0).resize((original_width,original_height))
+    projected_particles_img = get_depth_image(img[:,:,2], max=40.0).resize((original_width,original_height))
 
 
 
@@ -251,21 +245,5 @@ all_images[0].save(
     duration=100,
     loop=0,
 )
-
-import matplotlib.pyplot as plt
-
-plt.scatter(translations[:,0],translations[:,1])
-plt.xlim(-4,4)
-plt.ylim(-4,4)
-plt.savefig("scatter.png")
-
-translations = x[20, :, 1, :3, -1]
-img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx_fy, cx_cy, 3)
-save_depth_image(img[:,:,2], 40.0, "scatter.png")
-
-plt.clf()
-plt.matshow(img[:,:,2])
-plt.colorbar()
-plt.savefig("scatter.png")
 
 from IPython import embed; embed()

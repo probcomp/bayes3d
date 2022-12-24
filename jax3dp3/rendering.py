@@ -14,13 +14,13 @@ import jax
 # output: (h,w,3) coordinate image
 # @functools.partial(jax.jit, static_argnames=["h","w"])
 
-def render_cloud_at_pose(input_cloud, pose, h, w, fx_fy, cx_cy, pixel_smudge):
+def render_cloud_at_pose(input_cloud, pose, h, w, fx, fy, cx, cy, pixel_smudge):
     transformed_cloud = apply_transform(input_cloud, pose)
     point_cloud = jnp.vstack([-1.0 * jnp.ones((1, 3)), transformed_cloud])
 
     point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
-    temp1 = point_cloud_normalized[:, :2] * fx_fy
-    temp2 = temp1 + cx_cy
+    temp1 = point_cloud_normalized[:, :2] * jnp.array([fx,fy])
+    temp2 = temp1 + jnp.array([cx,cy])
     pixels = jnp.round(temp2)
 
     x, y = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
@@ -31,13 +31,13 @@ def render_cloud_at_pose(input_cloud, pose, h, w, fx_fy, cx_cy, pixel_smudge):
     return point_cloud[a]
 
 
-def render_planes(pose, shape, h,w, fx_fy, cx_cy):
+def render_planes(pose, shape, h,w, fx, fy, cx, cy):
     shape_planes, shape_dimensions = shape
     plane_poses = jnp.einsum("ij,ajk",pose, shape_planes)
 
     r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
     pixel_coords = jnp.stack([r,c],axis=-1)
-    pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
+    pixel_coords_dir = jnp.concatenate([(pixel_coords - jnp.array([cx,cy])) / jnp.array([fx,fy]), jnp.ones((h,w,1))],axis=-1)
 
     denoms = jnp.einsum("ijk,ak->ija", pixel_coords_dir , plane_poses[:,:3,2])
     numerators = jnp.einsum("...k,...k", 
@@ -100,38 +100,6 @@ def render_planes_rays(rays, pose, shape):
     return points_final_final
 
 
-def render_planes_multiobject(poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy):
-    plane_poses = jnp.einsum("...ij,...ajk",poses, shape_planes).reshape(-1, 4, 4)
-    shape_dimensions = shape_dims.reshape(-1, 2)
-
-    r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
-    pixel_coords = jnp.stack([r,c],axis=-1)
-    pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
-
-    denoms = jnp.einsum("ijk,ak->ija", pixel_coords_dir , plane_poses[:,:3,2])
-    numerators = jnp.einsum("...k,...k", 
-        plane_poses[:,:3,3],
-        plane_poses[:,:3,2]
-    )
-    d = numerators / (denoms + 1e-10)
-    points_temp = jnp.einsum("...ij,...kj", d[:,:,:,None], pixel_coords_dir[:,:,:,None])
-    points = jnp.concatenate([points_temp, jnp.ones((*points_temp.shape[:3],1,))],axis=-1) # (H,W,N,4)
-    inv_plane_poses = jnp.linalg.inv(plane_poses)
-    points_in_plane_frame = jnp.einsum("...ij,ab...j->ab...i", inv_plane_poses, points)
-
-    valid = jnp.all(jnp.abs(points_in_plane_frame[:,:,:,:2]) < shape_dimensions,axis=-1) # (H,W,N)
-    z_vals = (1000.0 - points[:,:,:,2]) * valid
-    idxs = jnp.argmax(z_vals, axis=-1)
-
-    points_final = (
-        points[jnp.arange(points.shape[0])[:, None], jnp.arange(points.shape[1])[None, :], idxs]
-        *
-        jnp.any(valid, axis=-1)[:,:,None]
-    )
-
-    return points_final
-
-
 def render_planes_multiobject(poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy):
     r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
     pixel_coords = jnp.stack([r,c],axis=-1)
@@ -155,7 +123,7 @@ def render_planes_multiobject_rays(poses, shape_planes, shape_dims, pixel_coords
     inv_plane_poses = jnp.linalg.inv(plane_poses)
     points_in_plane_frame = jnp.einsum("...ij,ab...j->ab...i", inv_plane_poses, points)
 
-    valid = jnp.all(jnp.abs(points_in_plane_frame[:,:,:,:2]) < shape_dimensions,axis=-1) # (H,W,N)
+    valid = jnp.all(jnp.abs(points_in_plane_frame[:,:,:,:2]) < shape_dimensions,axis=-1) * (points[:,:,:,2] > 0.0)# (H,W,N)
     z_vals = (1000.0 - points[:,:,:,2]) * valid
     idxs = jnp.argmax(z_vals, axis=-1)
 
@@ -168,14 +136,14 @@ def render_planes_multiobject_rays(poses, shape_planes, shape_dims, pixel_coords
     return points_final
 
 
-def render_sphere(pose, shape, h,w, fx_fy, cx_cy):
+def render_sphere(pose, shape, h,w, fx,fy, cx,cy):
     radius = shape
     center = pose[:3,-1]
     center_norm_square = jnp.linalg.norm(center)**2
 
     r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
     pixel_coords = jnp.stack([r,c],axis=-1)
-    pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
+    pixel_coords_dir = jnp.concatenate([(pixel_coords  - jnp.array([cx,cy])) /  jnp.array([fx,fy]), jnp.ones((h,w,1))],axis=-1)
     u = pixel_coords_dir / jnp.linalg.norm(pixel_coords_dir,axis=-1, keepdims=True)
 
     u_dot_c = jnp.einsum("ijk,k->ij", u, -center)
@@ -189,13 +157,13 @@ def render_sphere(pose, shape, h,w, fx_fy, cx_cy):
     return points_homogeneous
 
 
-def render_spheres(poses, radii, h, w, fx_fy, cx_cy):
+def render_spheres(poses, radii, h, w,  fx,fy, cx,cy):
     center = poses[:, :3,-1]
     center_norm_square = jnp.linalg.norm(center,axis=-1)**2
 
     r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
     pixel_coords = jnp.stack([r,c],axis=-1)
-    pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
+    pixel_coords_dir = jnp.concatenate([(pixel_coords - jnp.array([cx,cy])) /  jnp.array([fx,fy]), jnp.ones((h,w,1))],axis=-1)
     u = pixel_coords_dir / jnp.linalg.norm(pixel_coords_dir,axis=-1, keepdims=True)
 
     u_dot_c = jnp.einsum("ijk,ak->ija", u, -center)

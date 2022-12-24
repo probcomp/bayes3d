@@ -1,111 +1,137 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-from jax3dp3.model import make_scoring_function
+import jax3dp3.viz
 from jax3dp3.rendering import render_planes
-from jax3dp3.viz.gif import make_gif
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
-    depth_to_coords_in_camera
+    
 )
-from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, transform_from_pos
+from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, transform_from_pos, depth_to_coords_in_camera
+
 from jax.scipy.stats.multivariate_normal import logpdf
 from jax.scipy.special import logsumexp
-from jax3dp3.enumerations import fibonacci_sphere, geodesicHopf_select_axis
+
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 from jax3dp3.viz import save_depth_image
+import jax3dp3.transforms_3d as t3d
 import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
+import jax3dp3.distributions
+from jax3dp3.enumerations import fibonacci_sphere, geodesicHopf_select_axis
+from jax3dp3.enumerations import make_translation_grid_enumeration, make_rotation_grid_enumeration
+
 import matplotlib.pyplot as plt
 import cv2
+from jax3dp3.enumerations import make_translation_grid_enumeration, make_rotation_grid_enumeration
 
-h, w, fx_fy, cx_cy = (
-    100,
-    100,
-    jnp.array([50.0, 50.0]),
-    jnp.array([50.0, 50.0]),
-)
+h, w = 200,200
+fx,fy = 200, 200
+cx,cy = 100, 100
+
 r = 0.1
 outlier_prob = 0.01
-pixel_smudge = 0
 
-shape = get_rectangular_prism_shape(jnp.array([0.5, 0.4, 0.9]))
-# shape = get_cube_shape(0.1)
+shapes = [get_rectangular_prism_shape(jnp.array([0.4, 0.4, 0.4])), get_rectangular_prism_shape(jnp.array([0.2, 0.2, 0.2]))]
 
-render_from_pose = lambda pose, shape: render_planes(pose,shape,h,w,fx_fy,cx_cy)
+render_from_pose = lambda pose, shape: render_planes(pose,shape, h,w,fx,fy,cx,cy)
 render_from_pose_jit = jax.jit(render_from_pose)
 render_from_pose_parallel = jax.vmap(render_from_pose, in_axes=(0,None))
 render_from_pose_parallel_jit = jax.jit(render_from_pose_parallel)
 
-gt_pose = jnp.array([
-    [1.0, 0.0, 0.0, -0.0],   
-    [0.0, 1.0, 0.0, -0.0],   
-    [0.0, 0.0, 1.0, 2.0],   
-    [0.0, 0.0, 0.0, 1.0],   
-    ]
-)
-rot = R.from_euler('zyx', [0.1, -0.3, -0.6], degrees=False).as_matrix()
-gt_pose = gt_pose.at[:3,:3].set(jnp.array(rot))
-gt_image = render_from_pose(gt_pose, shape)
-save_depth_image(gt_image[:,:,2], 5.0, "gt_img.png")
+center_of_sampling = t3d.transform_from_pos(jnp.array([0.0, 0.0, 3.0]))
+variance = 0.5
+concentration = 0.01
+key = jax.random.PRNGKey(30)
 
+sampler_jit = jax.jit(jax3dp3.distributions.gaussian_vmf_sample)
 
+gt_pose = sampler_jit(key, center_of_sampling, variance, concentration)
+gt_shape_idx = jax.random.categorical(key, jnp.ones(len(shapes))/len(shapes) )
 
-num_sphere_gridpoints = 200
-num_planar_angle_gridpoints = 75
-unit_sphere_directions = fibonacci_sphere(num_sphere_gridpoints)
-planar_rotations = jnp.linspace(0, 2*jnp.pi, num_planar_angle_gridpoints+1)[:-1]
-geodesicHopf_select_axis_vmap = jax.vmap(jax.vmap(geodesicHopf_select_axis, in_axes=(0,None)), in_axes=(None,0))
-rotation_enumerations = geodesicHopf_select_axis_vmap(unit_sphere_directions, planar_rotations).reshape(-1,4,4)
+gt_image = render_from_pose(gt_pose, shapes[gt_shape_idx])
+save_depth_image(gt_image[:,:,2], "gt_image.png", max=5.0)
 
-original_translation = transform_from_pos(gt_pose[:3,-1])
-potential_poses = jnp.einsum("ij,ajk->aik", original_translation, rotation_enumerations)
-print('potential_poses.shape:');print(potential_poses.shape)
+initial_pose_estimate = sampler_jit(jax.random.split(key)[0], center_of_sampling, variance, concentration)
 
-def scorer(pose, gt_image):
+translation_deltas_1 = make_translation_grid_enumeration(-1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 5, 5, 5)
+translation_deltas_2 = make_translation_grid_enumeration(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5, 5, 5, 5)
+translation_deltas_3 = make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
+rotation_deltas = make_rotation_grid_enumeration(20, 20)
+
+def scorer(pose, shape, gt_image):
     rendered_image = render_from_pose(pose, shape)
     weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
     return weight
-scorer_parallel = jax.vmap(scorer, in_axes = (0, None))
+scorer_parallel = jax.vmap(scorer, in_axes = (0, None, None))
 
-def find_best_pose(initial_pose, gt_image):
-    potential_poses = jnp.einsum("ij,ajk->aik", initial_pose, rotation_enumerations)
-    weights_new = scorer_parallel(potential_poses, gt_image)
-    x = potential_poses[jnp.argmax(weights_new)]
+def coarse_to_fine_inference(x, shape, gt_image):
+    proposals = jnp.einsum("ij,ajk->aik", x, translation_deltas_1)
+    weights_new = scorer_parallel(proposals, shape, gt_image)
+    x = proposals[jnp.argmax(weights_new)]
+
+    proposals = jnp.einsum("ij,ajk->aik", x, rotation_deltas)
+    weights_new = scorer_parallel(proposals, shape, gt_image)
+    x = proposals[jnp.argmax(weights_new)]
+
+    proposals = jnp.einsum("ij,ajk->aik", x, translation_deltas_2)
+    weights_new = scorer_parallel(proposals, shape, gt_image)
+    x = proposals[jnp.argmax(weights_new)]
+
+    proposals = jnp.einsum("ij,ajk->aik", x, rotation_deltas)
+    weights_new = scorer_parallel(proposals, shape, gt_image)
+    x = proposals[jnp.argmax(weights_new)]
+
+    proposals = jnp.einsum("ij,ajk->aik", x, translation_deltas_3)
+    weights_new = scorer_parallel(proposals, shape, gt_image)
+    x = proposals[jnp.argmax(weights_new)]
+
+    proposals = jnp.einsum("ij,ajk->aik", x, rotation_deltas)
+    weights_new = scorer_parallel(proposals, shape, gt_image)
+    x = proposals[jnp.argmax(weights_new)]
     return x
 
-find_best_pose_jit = jax.jit(find_best_pose)
-
-best_pose = find_best_pose_jit(original_translation,gt_image)
-
-start = time.time()
-best_pose = find_best_pose_jit(original_translation,gt_image)
-end = time.time()
-print ("Time elapsed:", end - start)
+coarse_to_fine_inference_jit = jax.jit(coarse_to_fine_inference)
+pose_estimates_for_all_objects = [
+    coarse_to_fine_inference_jit(initial_pose_estimate, shapes[i], gt_image)
+    for i in range(len(shapes))
+]
+final_scores = [scorer(pose_estimates_for_all_objects[i], shapes[i], gt_image).item()  for i in range(len(shapes))]
 
 
-start = time.time()
-best_pose = find_best_pose_jit(original_translation,gt_image)
-end = time.time()
-print ("Time elapsed:", end - start)
 
+# Each object panel
+for i in range(len(shapes)):
+    max_depth = 10.0
+    gt_img_viz = jax3dp3.viz.get_depth_image(gt_image[:,:,2],max=max_depth) 
+    initial_viz = jax3dp3.viz.get_depth_image(render_from_pose(initial_pose_estimate, shapes[i])[:,:,2],max=max_depth) 
+    final_viz = jax3dp3.viz.get_depth_image(render_from_pose(pose_estimates_for_all_objects[i], shapes[i])[:,:,2],max=max_depth) 
 
-start = time.time()
-best_pose = find_best_pose_jit(original_translation,gt_image)
-end = time.time()
-print ("Time elapsed:", end - start)
+    jax3dp3.viz.multi_panel(
+        [gt_img_viz, initial_viz, final_viz],
+        ["Ground Truth", "Initial", "Final"],
+        10,
+        50,
+        20
+    ).save("pose_estimation_{}.png".format(i))
 
+# All objects panel
 
-start = time.time()
-best_pose = find_best_pose_jit(original_translation,gt_image)
-end = time.time()
-print ("Time elapsed:", end - start)
+gt_img_viz = jax3dp3.viz.get_depth_image(gt_image[:,:,2],max=max_depth) 
+final_imgs = []
+for i in range(len(shapes)):
+    final_viz = jax3dp3.viz.get_depth_image(render_from_pose(pose_estimates_for_all_objects[i], shapes[i])[:,:,2],max=max_depth) 
+    final_imgs.append(final_viz)
 
-best_image = render_from_pose(best_pose, shape)
-save_depth_image(best_image[:,:,2], 5.0, "img.png")
-print('gt_pose:');print(gt_pose)
-print('best_pose:');print(best_pose)
+jax3dp3.viz.multi_panel(
+    [gt_img_viz] + final_imgs,
+    ["Ground Truth\nShape {}\nPred Shape {}".format(gt_shape_idx, np.argmax(final_scores))]+ ["Shape {:d}\n Score {:0.3f}".format(i, final_scores[i]) for i in range(len(shapes))],
+    10,
+    100,
+    20
+).save("all_estimates.png")
 
 from IPython import embed; embed()
+

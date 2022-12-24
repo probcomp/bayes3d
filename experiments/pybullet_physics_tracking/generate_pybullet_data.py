@@ -3,10 +3,11 @@ import numpy as np
 import os
 import pybullet as p
 import pybullet_data
-from jax3dp3.viz.gif import make_gif
+from jax3dp3.viz import make_gif_from_pil_images
 from PIL import Image
 from copy import copy
 from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
+import jax3dp3.utils
 
 p.connect(p.DIRECT)
 p.resetSimulation()
@@ -17,7 +18,7 @@ planeId = p.loadURDF("plane.urdf")
 
 cubeStartPos = [0, 0, 2.2]
 cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
-filename_1 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/003_cracker_box/textured.obj'
+filename_1 = os.path.join(jax3dp3.utils.get_assets_dir(), "003_cracker_box/textured.obj")
 scale_1 = [20.0, 20.0, 20.0]
 brick_coll = p.createCollisionShape(p.GEOM_MESH, fileName=filename_1, meshScale=scale_1)
 brick_vis = p.createVisualShape(p.GEOM_MESH, fileName=filename_1, meshScale=scale_1)
@@ -28,7 +29,7 @@ brick = p.createMultiBody(baseMass=1110.0001,
 
 cubeStartPos = [-5, -4, 2.0]
 cubeStartOrientation = p.getQuaternionFromEuler([0.0, 0.0, 0.0])
-filename_2 = '/home/nishadgothoskar/jax3dp3/experiments/pybullet_physics_tracking/004_sugar_box/textured.obj'
+filename_2 = os.path.join(jax3dp3.utils.get_assets_dir(), "004_sugar_box/textured.obj")
 scale_2 = [20.0, 20.0, 20.0]
 obj_2_coll = p.createCollisionShape(p.GEOM_MESH, fileName=filename_2, meshScale=scale_2)
 obj_2_vis = p.createVisualShape(p.GEOM_MESH, fileName=filename_2, meshScale=scale_2)
@@ -66,7 +67,7 @@ fy = cy / np.tan(fov_y / 2.0)
 
 rgb_imgs = []
 depth_imgs = []
-for y in np.linspace(-4.0, 4.0,50):
+for y in np.linspace(-4.0, 6.0,70):
     # for _ in range(5):     
     #     p.stepSimulation()
     new_position = copy(cubeStartPos)
