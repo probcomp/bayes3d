@@ -1,14 +1,14 @@
 import jax.numpy as jnp
 from .transforms_3d import apply_transform
 
-def render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy):
+def render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy):
     plane_poses = jnp.einsum("...ij,...ajk",poses, shape_planes)
     num_planes_per_object = shape_planes.shape[1]
     shape_dimensions = shape_dims
 
     r, c = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
     pixel_coords = jnp.stack([r,c],axis=-1)
-    pixel_coords_dir = jnp.concatenate([(pixel_coords - cx_cy) / fx_fy, jnp.ones((h,w,1))],axis=-1)
+    pixel_coords_dir = jnp.concatenate([(pixel_coords - jnp.array([cx,cy])) / jnp.array([fx,fy]), jnp.ones((h,w,1))],axis=-1)
 
     denoms = jnp.einsum("ijk,abk->ijab", pixel_coords_dir , plane_poses[:,:,:3,2])
     numerators = jnp.einsum("...k,...k", 
