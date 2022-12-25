@@ -4,9 +4,8 @@ import jax
 from jax3dp3.rendering_augmented import render_planes_multiobject_augmented
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
-    depth_to_coords_in_camera
 )
-from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
+from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, depth_to_coords_in_camera
 from jax3dp3.shape import get_cube_shape
 from jax3dp3.viz import save_depth_image
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
@@ -14,11 +13,13 @@ from scipy.spatial.transform import Rotation as R
 
 import matplotlib.pyplot as plt
 
-h, w, fx_fy, cx_cy = (
+h, w, fx,fy, cx,cy = (
     300,
     300,
-    jnp.array([200.0, 200.0]),
-    jnp.array([150.0, 150.0]),
+    200.0, 
+    200.0,
+    150.0,
+    150.0
 )
 
 
@@ -50,14 +51,16 @@ pose_2 = pose_2.at[:3,:3].set(jnp.array(rot))
 
 poses = jnp.stack([pose_1, pose_2])
 
+offsets= jnp.zeros((2,3))
+scales= jnp.ones(2)
 
-gt_image,segmentation, points_in_object_frame = render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx_fy, cx_cy)
+gt_image,segmentation, points_in_object_frame = render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy, offsets, scales)
 print('gt_image.shape ',gt_image.shape)
-save_depth_image(gt_image[:,:,2], 10.0, "multiobject.png")
-save_depth_image(points_in_object_frame[:,:,0] + 0.5, 2.0, "x.png")
-save_depth_image(points_in_object_frame[:,:,1] + 0.5, 2.0, "y.png")
-save_depth_image(points_in_object_frame[:,:,2] + 0.5, 2.0, "z.png")
-save_depth_image(segmentation == 0, 20.0, "seg.png")
+save_depth_image(gt_image[:,:,2], "multiobject.png", max=10.0)
+save_depth_image(points_in_object_frame[:,:,0] + 0.5, "x.png", max=2.0)
+save_depth_image(points_in_object_frame[:,:,1] + 0.5, "y.png", max=2.0)
+save_depth_image(points_in_object_frame[:,:,2] + 0.5, "z.png", max=2.0)
+save_depth_image(segmentation == 1,"seg.png", max=20.0)
 
 
 

@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 from .transforms_3d import apply_transform
 
-def render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy):
+def render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy, offsets, scales):
     plane_poses = jnp.einsum("...ij,...ajk",poses, shape_planes)
     num_planes_per_object = shape_planes.shape[1]
     shape_dimensions = shape_dims
@@ -45,7 +45,7 @@ def render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx
     idxs = jnp.argmax(intersection_points_2[:,:,:,2], axis=-1)
 
     collided = jnp.any(jnp.any(valid, axis=-1), axis=-1)
-    segmentation = (collided * idxs) + (1.0 - collided) * -1.0
+    segmentation = (collided * idxs) + (1 - collided) * -1
     points_final = (
         intersection_points_2[
             jnp.arange(intersection_points_2.shape[0])[:, None],
@@ -56,11 +56,11 @@ def render_planes_multiobject_augmented(poses, shape_planes, shape_dims, h,w, fx
         collided[:,:,None]
     )
 
-    points_in_object_frame = (points_in_object_frame[
+    points_in_object_frame = ((points_in_object_frame[
             jnp.arange(points_in_object_frame.shape[0])[:, None],
             jnp.arange(points_in_object_frame.shape[1])[None, :],
             idxs,
-        ]
+        ][...,:3] - offsets[idxs])/ (scales[idxs][...,None])
         *
         collided[:,:,None]
     )

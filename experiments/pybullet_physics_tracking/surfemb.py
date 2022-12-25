@@ -94,7 +94,7 @@ middle_width = 20
 top_border = 100
 cm = plt.get_cmap("turbo")
 
-scaling_factor = 1.0
+scaling_factor = 0.25
 
 fx = data_npz["fx"] * scaling_factor
 fy = data_npz["fy"] * scaling_factor
@@ -196,69 +196,83 @@ gl_renderer = all_test_images[0].get_renderer(data_directory, 1.0)
 intrinsics = all_test_images[0].intrinsics.copy()
 n_objs = len(bop_obj_indices)
 
-
-
-
-
 r = 0.1
 outlier_prob = 0.000001
 
-from IPython import embed; embed()
+
+from objects3d.surfemb.siren_jax import (get_params_from_siren_torch_model,
+                                         siren_jax_from_surfemb)
+infer_mlp = siren_jax_from_surfemb(model, bop_obj_indices)
 
 gt_poses = [np.array(initial_poses_estimates[0]),np.array(initial_poses_estimates[1])]
 poses = gt_poses
 
 model_xyz, obj_ids, obj_coords = render_planes_multiobject_augmented(
-    jnp.array(poses), shape_planes, shape_dims, h,w, fx,fy, cx,cy
+    jnp.array(poses), shape_planes, shape_dims, h,w, fx,fy, cx,cy, jnp.array(gl_renderer.offsets), jnp.array(gl_renderer.scales)
 )
-a,b = 200,120
-point_on_object = obj_coords[a,b]
-id = obj_ids[a,b]
+obj_ids = obj_ids.astype(jnp.int32)
+model_xyz = model_xyz[:,:,:3]
+model_mask = model_xyz[:,:,2] > 0.0
+obj_coords = obj_coords[:,:,:3]
+obj_ids = np.array(obj_ids)
 
-print(model_xyz[200,120,:])
-save_depth_image(model_xyz[:,:,2], "1.png", max=2000.0)
+model_descriptors_jax = jax.vmap(infer_mlp,in_axes=(0,0))(obj_coords.reshape(-1,3), obj_ids.reshape(-1,1))[:,0,0,0,0,:].reshape(120,160,12)
 
-model_xyz_gl, obj_coords_gl, model_mask_gl, obj_ids_gl = gl_renderer.render(
-    [0,1], poses
-)
-print(model_xyz_gl[200,120,:])
-save_depth_image(model_xyz_gl[:,:,2], "2.png", max=2000.0)
+obj_coords_torch = torch.from_numpy(np.array(obj_coords).astype(np.float32)).to(model.device)
+
+model_descriptors = np.zeros(model_mask.shape + (model.emb_dim,))
+for ii in range(len(gl_renderer.bop_obj_indices)):
+    model_descriptors[obj_ids == ii] = (
+        model.infer_mlp(
+            obj_coords_torch,
+            gl_renderer.bop_obj_indices[ii],
+        )[obj_ids == ii]
+        .cpu()
+        .numpy()
+    )
+
+
+
+# print(model_xyz[200,120,:])
+# save_depth_image(obj_coords[:,:,2] + 3.0, "1.png", max=10.0)
+
+# model_xyz_gl, obj_coords_gl, model_mask_gl, obj_ids_gl = gl_renderer.render(
+#     [0,1], poses
+# )
+# print(model_xyz_gl[200,120,:])
+# save_depth_image(obj_coords_gl[:,:,2] + 3.0, "2.png", max=10.0)
 
 def get_score(poses, data_xyz, data_descriptors, log_normalizers):
     model_xyz, obj_ids, obj_coords = render_planes_multiobject_augmented(
-        jnp.array(poses), shape_planes, shape_dims, h,w, fx,fy, cx,cy
+        poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy, jnp.array(gl_renderer.offsets), jnp.array(gl_renderer.scales)
     )
+    obj_ids = obj_ids.astype(jnp.int32)
     model_xyz = model_xyz[:,:,:3]
+    model_mask = model_xyz[:,:,2] > 0.0
     obj_coords = obj_coords[:,:,:3]
-    obj_ids = np.array(obj_ids)
-    save_depth_image(model_xyz[:,:,2], "1.png", max=2000.0)
-    save_depth_image(np.array(obj_ids) + 1.0, "1.png", max=3.0)
 
-    # model_xyz, obj_coords, model_mask, obj_ids = gl_renderer.render(
-    #     [0,1], poses
-    # )
-    # save_depth_image(np.array(obj_ids) + 1.0, "2.png", max=3.0)
-    # save_depth_image(model_xyz[:,:,2], "2.png", max=2000.0)
+    model_descriptors = jax.vmap(infer_mlp,in_axes=(0,0))(obj_coords.reshape(-1,3), obj_ids.reshape(-1,1))[:,0,0,0,0,:].reshape(120,160,12)
 
-    obj_coords = torch.from_numpy(np.array(obj_coords).astype(np.float32)).to(model.device)
-    model_descriptors = np.zeros(model_mask.shape + (model.emb_dim,))
-    for ii in range(len(gl_renderer.bop_obj_indices)):
-        model_descriptors[obj_ids == ii] = (
-            model.infer_mlp(
-                obj_coords,
-                gl_renderer.bop_obj_indices[ii],
-            )[obj_ids == ii]
-            .cpu()
-            .numpy()
-        )
+    # obj_coords_torch = torch.from_numpy(np.array(obj_coords).astype(np.float32)).to(model.device)
+
+    # model_descriptors = np.zeros(model_mask.shape + (model.emb_dim,))
+    # for ii in range(len(gl_renderer.bop_obj_indices)):
+    #     model_descriptors[obj_ids == ii] = (
+    #         model.infer_mlp(
+    #             obj_coords_torch,
+    #             gl_renderer.bop_obj_indices[ii],
+    #         )[obj_ids == ii]
+    #         .cpu()
+    #         .numpy()
+    #     )
     p_background = outlier_prob
     p_foreground = (1.0 - outlier_prob) / model_mask.sum()
 
     log_prob = neural_descriptor_likelihood(
-        data_xyz=data_xyz,
+        data_xyz=data_xyz / 100.0,
         data_descriptors=data_descriptors,
         log_normalizers=log_normalizers,
-        model_xyz=model_xyz,
+        model_xyz=model_xyz / 100.0,
         model_descriptors=model_descriptors,
         model_mask=model_mask.astype(float),
         obj_ids=obj_ids.astype(float),
@@ -268,8 +282,46 @@ def get_score(poses, data_xyz, data_descriptors, log_normalizers):
         p_foreground=p_foreground,
         filter_shape=(5,5),
     )
-    return log_prob.item()
+    return log_prob
 
+get_score_jit = jax.jit(get_score)
+get_score_parallel_jit = jax.jit(jax.vmap(get_score,in_axes=(0,None, None, None)))
+get_score_parallel = jax.vmap(get_score,in_axes=(0,None, None, None))
+
+
+
+
+
+# t = 0
+
+
+# for (t,test_img) in enumerate(all_test_images):
+#     data_descriptors = surfemb.get_data_descriptors(
+#         test_img,
+#         1.5,
+#         bop_obj_indices=bop_obj_indices,
+#         use_cpu=True
+#     )
+#     log_normalizers = voting.get_max_indices_normalizers_probs(
+#         data_descriptors, np.array(bop_obj_indices), squeeze=False
+#     )[1]
+
+#     coords =  np.linspace(-400.0,200.0,100)
+#     values = []
+#     for i in coords:
+#         poses = gt_poses.copy()
+#         poses[1][0,3] = i
+#         score = get_score_jit(jnp.array(poses), jnp.array(coord_images[t]), jnp.array(data_descriptors), jnp.array(log_normalizers))
+#         values.append(score)
+#     print(coords[np.argmax(values)])
+
+from IPython import embed; embed()
+
+num_particles = 1000
+particles = []
+for _ in range(num_particles):
+    particles.append(np.array(gt_poses))
+particles = jnp.stack(particles)
 for (t,test_img) in enumerate(all_test_images):
     data_descriptors = surfemb.get_data_descriptors(
         test_img,
@@ -280,31 +332,21 @@ for (t,test_img) in enumerate(all_test_images):
     log_normalizers = voting.get_max_indices_normalizers_probs(
         data_descriptors, np.array(bop_obj_indices), squeeze=False
     )[1]
+    keys = jax.random.split(jax.random.PRNGKey(3), particles.shape[0])
+    drift_poses = jax.vmap(gaussian_pose, in_axes=(0, None))(keys, jnp.diag(jnp.array([50.0, 25.0, 0.001])))
+    i = 1
+    particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", drift_poses, particles[:,i]))
 
-    fig, ax = plt.subplots(
-        1,
-        len(test_img.bop_obj_indices) + 1,
-        figsize=(10 * (len(test_img.bop_obj_indices) + 1), 15),
-    )
-    for ii in range(len(test_img.bop_obj_indices)):
-        ax[ii].imshow(
-            model.get_emb_vis(torch.from_numpy(data_descriptors[:, :, ii])).cpu().numpy()
+    scores = []
+    for iters in range(10):
+        scores.append(
+            get_score_parallel_jit(particles[iters*100:iters*100+100], jnp.array(coord_images[t]), jnp.array(data_descriptors), jnp.array(log_normalizers))
         )
-    fig.tight_layout()
-    fig.savefig("descriptors_{}.png".format(t))
-
-    coords =  np.linspace(-400.0,200.0,100)
-    values = []
-    for i in coords:
-        poses = gt_poses.copy()
-        poses[1][0,3] = i
-        score = get_score(poses, coord_images[t], data_descriptors, log_normalizers)
-        values.append(score)
-    print(coords[np.argmax(values)])
-
-
-
-
+    scores = jnp.concatenate(scores)
+    parent_idxs = jax.random.categorical(keys[0], scores, shape=scores.shape)
+    particles = particles[parent_idxs]
+    keys = jax.random.split(keys[0], keys.shape[0])
+    print(particles[:,1,0,3])
 
 
 from IPython import embed; embed()
