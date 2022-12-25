@@ -35,7 +35,7 @@ def threedp3_likelihood(
     indices = jnp.stack([ii,jj],axis=-1)
     counts = count_ii_jj(indices, obs_xyz, rendered_xyz_padded, r, filter_size)
     num_latent_points = rendered_mask.sum()
-    probs = outlier_prob  +  jnp.nan_to_num((1.0 - outlier_prob) / num_latent_points  * counts * 1.0 / (4/3 * jnp.pi * r**3))
+    probs = outlier_prob +  jnp.nan_to_num((1.0 - outlier_prob) / num_latent_points  * counts * 1.0 / (4/3 * jnp.pi * r**3))
     log_probs = jnp.log(probs)
     return jnp.sum(jnp.where(obs_mask, log_probs, 0.0))
 

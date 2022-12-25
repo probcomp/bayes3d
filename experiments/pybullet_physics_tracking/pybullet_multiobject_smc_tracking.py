@@ -9,7 +9,7 @@ from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
 )
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, depth_to_point_cloud_image
-from jax3dp3.distributions import gaussian_vmf, gaussian_vmf_cov
+from jax3dp3.distributions import gaussian_vmf, gaussian_vmf_cov, vmf, gaussian_pose
 from jax3dp3.shape import get_cube_shape, get_rectangular_prism_shape
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
 from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
@@ -64,8 +64,8 @@ ground_truth_images[ground_truth_images[:,:,:,2] > 1900.0] = 0.0
 ground_truth_images = np.concatenate([ground_truth_images, np.ones(ground_truth_images.shape[:3])[:,:,:,None] ], axis=-1)
 ground_truth_images = jnp.array(ground_truth_images)
 
-r = 1.0
-outlier_prob = 0.05
+r = 0.1
+outlier_prob = 0.01
 
 shape_filenames = [
     os.path.join(jax3dp3.utils.get_assets_dir(), "models/003_cracker_box/textured_simple.obj"),
@@ -90,8 +90,8 @@ render_planes_parallel_jit = jax.jit(jax.vmap(lambda x: render_from_pose(x)))
 
 
 def likelihood(x, obs):
-    rendered_image = render_from_pose(x)
-    weight = threedp3_likelihood(obs, rendered_image, r, outlier_prob)
+    rendered_image = render_from_pose(x) / 100.0
+    weight = threedp3_likelihood(obs / 100.0, rendered_image, r, outlier_prob)
     return weight
 likelihood_parallel = jax.vmap(likelihood, in_axes = (0, None))
 likelihood_parallel_jit = jax.jit(likelihood_parallel)
@@ -154,45 +154,27 @@ after = Image.fromarray(
 dst = multi_panel([rgb_img, before, after], ["rgb", "before","after"], middle_width, top_border, 40)
 dst.save("before_after.png")
 
-num_grids = 1000
-idx = 50
-i = 1
-proposals = jnp.array([initial_poses for _ in range(num_grids)])
-proposals = proposals.at[:,i,0,3].set(jnp.linspace(-200.0, 200.0, num_grids))
-scores = likelihood_parallel(proposals, ground_truth_images[idx])
-best_poses = proposals[scores.argmax()]
-
-rgb = rgb_imgs[idx]
-rgb_img = Image.fromarray(
-    rgb.astype(np.int8), mode="RGBA"
-)
-
-depth_img = get_depth_image(ground_truth_images[idx,:,:,2],min=min_depth,max=max_depth).resize((original_width,original_height))
-rendered_image = render_from_pose_jit(best_poses)
-rendered_depth_img = get_depth_image(rendered_image[:, :, 2],min=min_depth,max=max_depth).resize((original_width,original_height))
-
-i1 = rendered_depth_img.copy()
-i2 = rgb_img.copy()
-i1.putalpha(128)
-i2.putalpha(128)
-overlay_img = Image.alpha_composite(i1, i2)
-
-dst = multi_panel([rgb_img, depth_img, rendered_depth_img, overlay_img], None, middle_width, top_border, 40)
-dst.save("best.png")
-
-num_particles = 1000
-drift_poses = make_translation_grid_enumeration(-14.0,0.0,0.0,14.0,0.0,0.0,1000,1,1)
-
 
 def run_inference(initial_particles, ground_truth_images):
+    variances = jnp.stack([
+        jnp.diag(jnp.array([50.0, 25.0, 0.001])),
+        jnp.diag(jnp.array([50.0, 25.0, 0.001])),
+        jnp.diag(jnp.array([50.0, 25.0, 0.001])),
+    ]
+    )
+        # jnp.array(0.05, 0.3, 0.5])
+    # concentrations = jnp.array([2000.0, 2000.0, 2000.0])
+    mixture_logits = jnp.log(jnp.ones(variances.shape[0]) / variances.shape[0])
+
     def particle_filtering_step(data, gt_image):
         particles, weights, keys = data
         i = 1
+        proposal_type = jax.random.categorical(keys[0], mixture_logits, shape=(particles.shape[0],))
+        drift_poses = jax.vmap(gaussian_pose, in_axes=(0, 0))(keys, variances[proposal_type])
         particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", drift_poses, particles[:,i]))
-        scores = likelihood_parallel(particles, gt_image)
-        weights = weights + scores
-        # parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
-        particles = jnp.tile(particles[scores.argmax()][None,...],(weights.shape[0],1,1,1))
+        weights = weights + likelihood_parallel(particles, gt_image)
+        parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
+        particles = particles[parent_idxs]
         weights = jnp.full(weights.shape[0],logsumexp(weights) - jnp.log(weights.shape[0]))
         keys = jax.random.split(keys[0], weights.shape[0])
         return (particles, weights, keys), particles
@@ -204,6 +186,7 @@ def run_inference(initial_particles, ground_truth_images):
 
 
 run_inference_jit = jax.jit(run_inference)
+num_particles = 1000
 particles = []
 for _ in range(num_particles):
     particles.append(initial_poses)
@@ -217,9 +200,6 @@ _,x = run_inference_jit(particles, ground_truth_images)
 end = time.time()
 print ("Time elapsed:", end - start)
 print ("FPS:", ground_truth_images.shape[0] / (end - start))
-
-
-
 
 middle_width = 20
 top_border = 100
@@ -246,8 +226,7 @@ for i in range(ground_truth_images.shape[0]):
 
     translations = x[i, :, 1, :3, -1]
     img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx,fy, cx,cy, 0)
-    projected_particles_img = get_depth_image(img[:,:,2], max=40.0).resize((original_width,original_height))
-
+    projected_particles_img = get_depth_image(img[:,:,2] > 0.0, max=1.0).resize((original_width,original_height))
 
 
     images = [rgb_img, depth_img, rendered_depth_img, overlay_img, projected_particles_img]

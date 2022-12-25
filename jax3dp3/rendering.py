@@ -25,7 +25,7 @@ def render_cloud_at_pose(input_cloud, pose, h, w, fx, fy, cx, cy, pixel_smudge):
 
     x, y = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
     matches = (jnp.abs(x[:, :, None] - pixels[:, 0]) <= pixel_smudge) & (jnp.abs(y[:, :, None] - pixels[:, 1]) <= pixel_smudge)
-    matches = matches * (1000.0 - point_cloud[:,-1][None, None, :])
+    matches = matches * (100000.0 - point_cloud[:,-1][None, None, :])
 
     a = jnp.argmax(matches, axis=-1)    
     return point_cloud[a]
