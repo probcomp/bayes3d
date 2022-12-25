@@ -124,7 +124,7 @@ def render_planes_multiobject_rays(poses, shape_planes, shape_dims, pixel_coords
     points_in_plane_frame = jnp.einsum("...ij,ab...j->ab...i", inv_plane_poses, points)
 
     valid = jnp.all(jnp.abs(points_in_plane_frame[:,:,:,:2]) < shape_dimensions,axis=-1) * (points[:,:,:,2] > 0.0)# (H,W,N)
-    z_vals = (1000.0 - points[:,:,:,2]) * valid
+    z_vals = (20000.0 - points[:,:,:,2]) * valid
     idxs = jnp.argmax(z_vals, axis=-1)
 
     points_final = (
