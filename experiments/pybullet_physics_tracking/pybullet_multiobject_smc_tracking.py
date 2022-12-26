@@ -186,7 +186,7 @@ def run_inference(initial_particles, ground_truth_images):
 
 
 run_inference_jit = jax.jit(run_inference)
-num_particles = 1000
+num_particles = 300
 particles = []
 for _ in range(num_particles):
     particles.append(initial_poses)

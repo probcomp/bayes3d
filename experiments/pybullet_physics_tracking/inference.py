@@ -137,43 +137,70 @@ initial_poses_estimates = jnp.array(
 )
 initial_poses_estimates = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), initial_poses_estimates)
 
+
+render_from_pose = lambda pose: render_planes_multiobject(pose, shape_planes, shape_dims, h,w, fx,fy, cx,cy)
+render_from_pose_jit = jax.jit(render_from_pose)
+render_planes_parallel_jit = jax.jit(jax.vmap(lambda x: render_from_pose(x)))
+
+
 r=0.1
-outlier_prob = 0.000001
-def get_score(poses, data_xyz, data_descriptors, log_normalizers):
-    model_xyz, obj_ids, obj_coords = render_planes_multiobject_augmented(
-        poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy, jnp.array(offsets), jnp.array(scales)
-    )
-    obj_ids = obj_ids.astype(jnp.int32)
-    model_xyz = model_xyz[:,:,:3]
-    model_mask = model_xyz[:,:,2] > 0.0
-    obj_coords = obj_coords[:,:,:3]
+outlier_prob = 0.1
+def likelihood(poses, obs):
+# def get_score(poses, data_xyz, data_descriptors, log_normalizers):
+    # model_xyz, obj_ids, obj_coords = render_planes_multiobject_augmented(
+    #     poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy, jnp.array(offsets), jnp.array(scales)
+    # )
+    model_xyz = render_from_pose(poses)
+    # obj_ids = obj_ids.astype(jnp.int32)
+    # model_xyz = model_xyz[:,:,:3]
+    # model_mask = model_xyz[:,:,2] > 0.0
+    # obj_coords = obj_coords[:,:,:3]
 
-    model_descriptors = jax.vmap(infer_mlp,in_axes=(0,0))(obj_coords.reshape(-1,3), obj_ids.reshape(-1,1))[:,0,0,0,0,:].reshape(120,160,12)
-    p_background = outlier_prob
-    p_foreground = (1.0 - outlier_prob) / model_mask.sum()
+    # model_descriptors = jax.vmap(infer_mlp,in_axes=(0,0))(obj_coords.reshape(-1,3), obj_ids.reshape(-1,1))[:,0,0,0,0,:].reshape(120,160,12)
+    # p_background = outlier_prob
+    # p_foreground = (1.0 - outlier_prob) / model_mask.sum()
 
-    log_prob = neural_descriptor_likelihood(
-        data_xyz=data_xyz / 100.0,
-        data_descriptors=data_descriptors,
-        log_normalizers=log_normalizers,
-        model_xyz=model_xyz / 100.0,
-        model_descriptors=model_descriptors,
-        model_mask=model_mask.astype(float),
-        obj_ids=obj_ids.astype(float),
-        data_mask=data_xyz[:,:,2] > 0.0,
-        r=r,
-        p_background=p_background,
-        p_foreground=p_foreground,
-        filter_shape=(5,5),
-    )
+    log_prob = threedp3_likelihood(obs / 100.0, model_xyz / 100.0, r, outlier_prob)
+    # log_prob = threedp3_likelihood(
+    #     data_xyz / 100.0,
+    #     model_xyz / 100.0,
+    #     r,
+    #     outlier_prob
+    # )
+    # log_prob = neural_descriptor_likelihood(
+    #     data_xyz=data_xyz / 100.0,
+    #     data_descriptors=data_descriptors,
+    #     log_normalizers=log_normalizers,
+    #     model_xyz=model_xyz / 100.0,
+    #     model_descriptors=model_descriptors,
+    #     model_mask=model_mask.astype(float),
+    #     obj_ids=obj_ids.astype(float),
+    #     data_mask=data_xyz[:,:,2] > 0.0,
+    #     r=r,
+    #     p_background=p_background,
+    #     p_foreground=p_foreground,
+    #     filter_shape=(5,5),
+    # )
     return log_prob
 
-get_score_jit = jax.jit(get_score)
-get_score_parallel_jit = jax.jit(jax.vmap(get_score,in_axes=(0,None, None, None)))
-get_score_parallel = jax.vmap(get_score,in_axes=(0,None, None, None))
+# def likelihood(x, obs):
+#     rendered_image = render_from_pose(x) / 100.0
+#     weight = threedp3_likelihood(obs / 100.0, rendered_image, r, outlier_prob)
+#     return weight
+
+
+
+likelihood_parallel = jax.vmap(likelihood, in_axes = (0, None))
+likelihood_parallel_jit = jax.jit(likelihood_parallel)
 
 gt_poses = [np.array(initial_poses_estimates[0]),np.array(initial_poses_estimates[1])]
 poses = gt_poses
+
+
+render_from_pose_jit = jax.jit(lambda poses: render_planes_multiobject_augmented(
+    poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy, jnp.array(offsets), jnp.array(scales)
+)[0]
+)
 
 
 num_particles = 300
@@ -181,26 +208,113 @@ particles = []
 for _ in range(num_particles):
     particles.append(np.array(gt_poses))
 particles = jnp.stack(particles)
-for (t,_) in enumerate(all_descriptors_and_normalizers):
-    data_descriptors = all_descriptors_and_normalizers[t][0]
-    log_normalizers = all_descriptors_and_normalizers[t][1]
-    keys = jax.random.split(jax.random.PRNGKey(3), particles.shape[0])
-    drift_poses = jax.vmap(gaussian_pose, in_axes=(0, None))(keys, jnp.diag(jnp.array([50.0, 25.0, 0.001])))
-    i = 1
-    particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", drift_poses, particles[:,i]))
 
-    scores = get_score_parallel_jit(particles, jnp.array(coord_images[t]), jnp.array(data_descriptors), jnp.array(log_normalizers))
+def run_inference(initial_particles, ground_truth_images):
+    variances = jnp.stack([
+        jnp.diag(jnp.array([50.0, 25.0, 0.001])),
+        jnp.diag(jnp.array([50.0, 25.0, 0.001])),
+        jnp.diag(jnp.array([50.0, 25.0, 0.001])),
+    ]
+    )
+        # jnp.array(0.05, 0.3, 0.5])
+    # concentrations = jnp.array([2000.0, 2000.0, 2000.0])
+    mixture_logits = jnp.log(jnp.ones(variances.shape[0]) / variances.shape[0])
 
-    # scores = []
-    # for iters in range(10):
-    #     scores.append(
-    #         get_score_parallel_jit(particles[iters*100:iters*100+100], jnp.array(coord_images[t]), jnp.array(data_descriptors), jnp.array(log_normalizers))
-    #     )
-    # scores = jnp.concatenate(scores)
-    parent_idxs = jax.random.categorical(keys[0], scores, shape=scores.shape)
-    particles = particles[parent_idxs]
-    keys = jax.random.split(keys[0], keys.shape[0])
-    print(particles[:,1,0,3])
+    def particle_filtering_step(data, gt_image):
+        particles, weights, keys = data
+        i = 1
+        proposal_type = jax.random.categorical(keys[0], mixture_logits, shape=(particles.shape[0],))
+        drift_poses = jax.vmap(gaussian_pose, in_axes=(0, 0))(keys, variances[proposal_type])
+        particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", drift_poses, particles[:,i]))
+        weights = weights + likelihood_parallel(particles, gt_image)
+        parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
+        particles = particles[parent_idxs]
+        weights = jnp.full(weights.shape[0],logsumexp(weights) - jnp.log(weights.shape[0]))
+        keys = jax.random.split(keys[0], weights.shape[0])
+        return (particles, weights, keys), particles
 
+    initial_weights = jnp.full(initial_particles.shape[0], 0.0)
+    initial_key = jax.random.PRNGKey(3)
+    initial_keys = jax.random.split(initial_key, initial_particles.shape[0])
+    return jax.lax.scan(particle_filtering_step, (initial_particles, initial_weights, initial_keys), ground_truth_images)
+
+
+run_inference_jit = jax.jit(run_inference)
+num_particles = 300
+particles = []
+for _ in range(num_particles):
+    particles.append(initial_poses_estimates)
+particles = jnp.stack(particles)
+
+_,x = run_inference_jit(particles, ground_truth_images)
+
+# for (t,_) in enumerate(all_descriptors_and_normalizers):
+#     data_descriptors = all_descriptors_and_normalizers[t][0]
+#     log_normalizers = all_descriptors_and_normalizers[t][1]
+#     keys = jax.random.split(jax.random.PRNGKey(3), particles.shape[0])
+#     drift_poses = jax.vmap(gaussian_pose, in_axes=(0, None))(keys, jnp.diag(jnp.array([50.0, 25.0, 0.001])))
+#     i = 1
+#     particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", drift_poses, particles[:,i]))
+
+
+#     scores = []
+#     for iters in range(10):
+#         scores.append(
+#             get_score_parallel_jit(particles[iters*300:iters*300+300], jnp.array(coord_images[t]), jnp.array(data_descriptors), jnp.array(log_normalizers))
+#         )
+#     scores = jnp.concatenate(scores)
+#     parent_idxs = jax.random.categorical(keys[0], scores, shape=scores.shape)
+#     particles = particles[parent_idxs]
+#     keys = jax.random.split(keys[0], keys.shape[0])
+#     print(particles[:,1,0,3])
+#     particles_over_time.append(jnp.array(particles))
+# x = jnp.array(particles_over_time)
+
+
+
+middle_width = 20
+top_border = 100
+cm = plt.get_cmap("turbo")
+all_images = []
+min_depth = 10.0
+max_depth = 2000.0
+
+for i in range(ground_truth_images.shape[0]):
+    rgb = rgb_imgs[i]
+    rgb_img = Image.fromarray(
+        rgb.astype(np.int8), mode="RGBA"
+    )
+
+    depth_img = get_depth_image(ground_truth_images[i,:,:,2],min=min_depth,max=max_depth).resize((original_width,original_height))
+
+    pose = x[i,0,:,:,:]
+    rendered_image = render_from_pose_jit(pose)
+
+    rendered_depth_img = get_depth_image(rendered_image[:, :, 2],min=min_depth,max=max_depth).resize((original_width,original_height))
+
+    i1 = rendered_depth_img.copy()
+    i2 = rgb_img.copy()
+    i1.putalpha(128)
+    i2.putalpha(128)
+    overlay_img = Image.alpha_composite(i1, i2)
+
+    translations = x[i, :, 1, :3, -1]
+    img = render_cloud_at_pose(translations, jnp.eye(4), h, w, fx,fy, cx,cy, 0)
+    projected_particles_img = get_depth_image(img[:,:,2] > 0.0, max=1.0).resize((original_width,original_height))
+
+
+    images = [rgb_img, depth_img, rendered_depth_img, overlay_img, projected_particles_img]
+    labels = ["RGB Image Frame {}".format(i), "Depth Image", "Inferred Depth", "Overlay",  "Particles"]
+    dst = multi_panel(images, labels, middle_width, top_border, 40)
+    all_images.append(dst)
+
+all_images[0].save(
+    fp="out_{}_particles.gif".format(num_particles),
+    format="GIF",
+    append_images=all_images,
+    save_all=True,
+    duration=100,
+    loop=0,
+)
 
 from IPython import embed; embed()
