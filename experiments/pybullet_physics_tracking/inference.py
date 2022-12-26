@@ -6,8 +6,6 @@ import cv2
 import joblib
 import numpy as np
 import pandas as pd
-import taichi as ti
-import torch.utils.data
 from objects3d.bop.bop_surfemb import BOPSurfEmb
 from objects3d.bop.bop_vote import BOPVoting
 from objects3d.bop.data import BOPTestDataset
@@ -23,7 +21,7 @@ from objects3d.surfemb.surface_embedding import SurfaceEmbeddingModel
 from objects3d.utils.transform import depth_to_coords_in_camera
 from objects3d.visualization.images import save_multiple_images, save_rgb_image, save_depth_image
 from objects3d.likelihood.ndl import neural_descriptor_likelihood
-from objects3d.surfemb.siren_jax import siren_jax_from_surfemb
+from objects3d.surfemb.siren_jax import siren_jax_from_surfemb, siren_jax_from_params
 from objects3d.bop.data import BOPTestImage
 from jax3dp3.rendering_augmented import render_planes_multiobject_augmented
 import numpy as np
@@ -58,31 +56,6 @@ import jax3dp3.viz
 import jax3dp3.transforms_3d as t3d
 from objects3d.bop.detector_crops import get_hypotheses_from_detector_crops
 
-from objects3d.likelihood.ndl import JAXNDL
-
-ti.init(arch=ti.vulkan)
-device = torch.device('cuda:0')
-
-data_directory = os.path.expanduser('~/data')
-surfemb_model_path = os.path.join(data_directory, 'models/ycbv-jwpvdij1.compact.ckpt')
-dataset = 'ycbv'
-
-
-ti.init(arch=ti.cuda)
-surfemb = BOPSurfEmb(data_directory=data_directory, dataset=dataset, device='cuda:0')
-
-data = BOPTestDataset(
-    data_directory=data_directory,
-    dataset=dataset,
-    load_detector_crops=True,
-)
-voting = BOPVoting(
-    data_directory=data_directory,
-    dataset=dataset,
-)
-model = surfemb.surfemb_model
-voting.load_all_model_descriptors(model)
-all_model_descriptors = voting.all_model_descriptors
 
 data_npz = np.load("data.npz")
 depth_imgs = np.array(data_npz["depth_imgs"]).copy()
@@ -111,69 +84,16 @@ ground_truth_images[ground_truth_images[:,:,:,2] > 1900.0] = 0.0
 ground_truth_images = np.concatenate([ground_truth_images, np.ones(ground_truth_images.shape[:3])[:,:,:,None] ], axis=-1)
 ground_truth_images = jnp.array(ground_truth_images)
 
-intrinsics = np.array([
-    [fx, 0.0, cx],
-    [0.0, fy, cy],
-    [0.0, 0.0, 1.0]
-])
-cam_pose = np.eye(4)
-
-bop_obj_indices = [2,3]
-
-all_test_images = [
-    BOPTestImage(
-    dataset='ycbv',
-    scene_id=-1,
-    img_id=-1,
-    rgb=rgb_images[image_index][:,:,:3],
-    depth=coord_images[image_index][:,:,2],
-    intrinsics=intrinsics,
-    camera_pose=cam_pose,
-    bop_obj_indices=tuple(bop_obj_indices),
-    default_scales=np.array(
-        [1.5, 1.5]
-    ),
-    annotations=None
-    )
-    for image_index in range(len(rgb_images))
-]   
-
-gl_renderer = all_test_images[0].get_renderer(data_directory, 1.0)
-intrinsics = all_test_images[0].intrinsics.copy()
-n_objs = len(bop_obj_indices)
-
-from objects3d.surfemb.siren_jax import (get_params_from_siren_torch_model,
-                                         siren_jax_from_surfemb)
-infer_mlp = siren_jax_from_surfemb(model, bop_obj_indices)
-
-
-
-all_descriptors_and_normalizers = []
-for (t,test_img) in enumerate(all_test_images):
-    data_descriptors = surfemb.get_data_descriptors(
-        test_img,
-        1.5,
-        bop_obj_indices=bop_obj_indices,
-        use_cpu=True
-    )
-    log_normalizers = voting.get_max_indices_normalizers_probs(
-        data_descriptors, np.array(bop_obj_indices), squeeze=False
-    )[1]
-    all_descriptors_and_normalizers.append((data_descriptors, log_normalizers))
-
 import joblib
-joblib.dump(
-    (
-        all_descriptors_and_normalizers,
-        [get_params_from_siren_torch_model(model.mlps[obj_idx-1].net) for obj_idx in bop_obj_indices],
-        jnp.array(gl_renderer.offsets),
-        jnp.array(gl_renderer.scales)
-    ),
-    "surfemb_data.joblib"
-)
-################
+(
+    all_descriptors_and_normalizers,
+    all_params,
+    offsets,
+    scales
+) = joblib.load("surfemb_data.joblib")
 
-from IPython import embed; embed()
+infer_mlp = siren_jax_from_params(all_params)
+
 
 shape_filenames = [
     os.path.join(jax3dp3.utils.get_assets_dir(), "models/003_cracker_box/textured_simple.obj"),
@@ -221,7 +141,7 @@ r=0.1
 outlier_prob = 0.000001
 def get_score(poses, data_xyz, data_descriptors, log_normalizers):
     model_xyz, obj_ids, obj_coords = render_planes_multiobject_augmented(
-        poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy, jnp.array(gl_renderer.offsets), jnp.array(gl_renderer.scales)
+        poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy, jnp.array(offsets), jnp.array(scales)
     )
     obj_ids = obj_ids.astype(jnp.int32)
     model_xyz = model_xyz[:,:,:3]
@@ -256,60 +176,31 @@ gt_poses = [np.array(initial_poses_estimates[0]),np.array(initial_poses_estimate
 poses = gt_poses
 
 
-
-
-num_particles = 1000
+num_particles = 300
 particles = []
 for _ in range(num_particles):
     particles.append(np.array(gt_poses))
 particles = jnp.stack(particles)
-for (t,test_img) in enumerate(all_test_images):
-    data_descriptors = surfemb.get_data_descriptors(
-        test_img,
-        1.5,
-        bop_obj_indices=bop_obj_indices,
-        use_cpu=True
-    )
-    log_normalizers = voting.get_max_indices_normalizers_probs(
-        data_descriptors, np.array(bop_obj_indices), squeeze=False
-    )[1]
+for (t,_) in enumerate(all_descriptors_and_normalizers):
+    data_descriptors = all_descriptors_and_normalizers[t][0]
+    log_normalizers = all_descriptors_and_normalizers[t][1]
     keys = jax.random.split(jax.random.PRNGKey(3), particles.shape[0])
     drift_poses = jax.vmap(gaussian_pose, in_axes=(0, None))(keys, jnp.diag(jnp.array([50.0, 25.0, 0.001])))
     i = 1
     particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", drift_poses, particles[:,i]))
 
-    scores = []
-    for iters in range(10):
-        scores.append(
-            get_score_parallel_jit(particles[iters*100:iters*100+100], jnp.array(coord_images[t]), jnp.array(data_descriptors), jnp.array(log_normalizers))
-        )
-    scores = jnp.concatenate(scores)
+    scores = get_score_parallel_jit(particles, jnp.array(coord_images[t]), jnp.array(data_descriptors), jnp.array(log_normalizers))
+
+    # scores = []
+    # for iters in range(10):
+    #     scores.append(
+    #         get_score_parallel_jit(particles[iters*100:iters*100+100], jnp.array(coord_images[t]), jnp.array(data_descriptors), jnp.array(log_normalizers))
+    #     )
+    # scores = jnp.concatenate(scores)
     parent_idxs = jax.random.categorical(keys[0], scores, shape=scores.shape)
     particles = particles[parent_idxs]
     keys = jax.random.split(keys[0], keys.shape[0])
     print(particles[:,1,0,3])
 
 
-
-# num_particles = 300
-# particles = []
-# for _ in range(num_particles):
-#     particles.append(np.array(gt_poses))
-# particles = jnp.stack(particles)
-
-# from IPython import embed; embed()
-
-# for t in range(len(all_descriptors_and_normalizers)):
-#     data_descriptors, log_normalizers = all_descriptors_and_normalizers[t]
-#     keys = jax.random.split(jax.random.PRNGKey(3), particles.shape[0])
-#     drift_poses = jax.vmap(gaussian_pose, in_axes=(0, None))(keys, jnp.diag(jnp.array([50.0, 25.0, 0.001])))
-#     i = 1
-#     particles = particles.at[:, i].set(jnp.einsum("...ij,...jk->...ik", drift_poses, particles[:,i]))
-#     scores= get_score_parallel_jit(particles, jnp.array(coord_images[t]), jnp.array(data_descriptors), jnp.array(log_normalizers))
-#     parent_idxs = jax.random.categorical(keys[0], scores, shape=scores.shape)
-#     particles = particles[parent_idxs]
-#     keys = jax.random.split(keys[0], keys.shape[0])
-#     print(particles[:,1,0,3])
-
 from IPython import embed; embed()
-
