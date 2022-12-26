@@ -2,6 +2,7 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 from jax3dp3.rendering_augmented import render_planes_multiobject_augmented
+from jax3dp3.rendering import render_planes_multiobject, render_planes
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
 )
@@ -22,7 +23,6 @@ h, w, fx,fy, cx,cy = (
     150.0
 )
 
-
 ############# THIS IS HOW YOU COMBINE SHAPES (FOR NOW) ###########
 shape1_planes, shape1_dims = get_rectangular_prism_shape(jnp.array([0.4, 0.8, 0.1]))
 shape2_planes, shape2_dims = get_rectangular_prism_shape(jnp.array([0.4, 0.4, 0.2]))
@@ -40,14 +40,14 @@ rot = R.from_euler('zyx', [1.0, -0.1, -2.0]).as_matrix()
 pose_1 = pose_1.at[:3,:3].set(jnp.array(rot))
 
 pose_2 = jnp.array([
-    [1.0, 0.0, 0.0, 1.0],   
-    [0.0, 1.0, 0.0, 1.0],   
+    [1.0, 0.0, 0.0, 0.1],   
+    [0.0, 1.0, 0.0, 0.1],   
     [0.0, 0.0, 1.0, 2.0],   
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
 rot = R.from_euler('zyx', [0.2, -0.1, 0.3]).as_matrix()
-pose_2 = pose_2.at[:3,:3].set(jnp.array(rot))
+# pose_2 = pose_2.at[:3,:3].set(jnp.array(rot))
 
 poses = jnp.stack([pose_1, pose_2])
 
@@ -60,8 +60,13 @@ save_depth_image(gt_image[:,:,2], "multiobject.png", max=10.0)
 save_depth_image(points_in_object_frame[:,:,0] + 0.5, "x.png", max=2.0)
 save_depth_image(points_in_object_frame[:,:,1] + 0.5, "y.png", max=2.0)
 save_depth_image(points_in_object_frame[:,:,2] + 0.5, "z.png", max=2.0)
-save_depth_image(segmentation == 1,"seg.png", max=20.0)
+save_depth_image(segmentation + 1,"seg.png", max=4.0)
 
 
+gt_image2 = render_planes_multiobject(poses, shape_planes, shape_dims, h,w, fx,fy, cx,cy)
+
+print("here")
+print((gt_image - gt_image2).sum())
+save_depth_image((jnp.abs(gt_image - gt_image2))>0.0 ,"errors.png", max=4.0)
 
 from IPython import embed; embed()
