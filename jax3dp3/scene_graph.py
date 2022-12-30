@@ -1,6 +1,7 @@
 from .transforms_3d import rotation_from_axis_angle, transform_from_rot_and_pos, transform_from_pos, transform_from_axis_angle
 import jax.numpy as jnp
 import networkx as nx
+import jax
 
 def get_contact_planes(dimensions):
     return jnp.stack([
@@ -33,3 +34,21 @@ def relative_pose_from_contact(
     return (parent_plane.dot(contact_transform)).dot(jnp.linalg.inv(child_plane))
 
 
+## Get poses
+
+
+def iter(poses, box_dims, edge, contact_params, face_params):
+    i, j = edge
+    x,y,ang = contact_params
+    rel_pose = relative_pose_from_contact(box_dims[i], box_dims[j], face_params[0], face_params[1], (x,y,ang))
+    return (
+        poses[i].dot(rel_pose) * (i != -1)
+        +
+        poses[j] * (i == -1)
+    )
+
+def get_poses(poses, box_dims, edges, contact_params, face_params):
+    def _f(poses, _):
+        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0,))(poses, box_dims, edges, contact_params, face_params)
+        return (new_poses, new_poses)
+    return jax.lax.scan(_f, poses, jnp.ones(edges.shape[0]))[0]
