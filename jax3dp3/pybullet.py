@@ -280,7 +280,8 @@ def capture_image(camera_pose, height,width, fx,fy, cx,cy, near,far):
 
     _,_, rgb, depth, segmentation = p.getCameraImage(width, height,
         tuple(np.linalg.inv(np.array(viewMatrix)).T.reshape(-1)),
-        tuple(np.array(projMatrix).T.reshape(-1))
+        tuple(np.array(projMatrix).T.reshape(-1)),
+        renderer=p.ER_BULLET_HARDWARE_OPENGL
     )
     rgb = np.array(rgb).reshape((height,width,4))
     depth_buffer = np.array(depth).reshape((height,width))

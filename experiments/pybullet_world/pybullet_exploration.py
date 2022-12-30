@@ -19,13 +19,13 @@ ycb_path2 = os.path.join(jax3dp3.utils.get_assets_dir(), "models/004_sugar_box/t
 
 table, table_dims = jax3dp3.pybullet.create_table(
     1.0,
-    1.0,
-    1.0,
-    0.05,
-    0.05
+    0.5,
+    0.5,
+    0.01,
+    0.01
 )
-object, obj_dims = jax3dp3.pybullet.create_obj_centered(ycb_path1, scale = 10.0)
-object2, obj_dims2 = jax3dp3.pybullet.create_obj_centered(ycb_path2, scale = 10.0)
+object, obj_dims = jax3dp3.pybullet.create_obj_centered(ycb_path1)
+object2, obj_dims2 = jax3dp3.pybullet.create_obj_centered(ycb_path2)
 
 
 all_pybullet_objects = [
@@ -83,13 +83,14 @@ cam_pose = t3d.transform_from_rot_and_pos(
         [1.0, 0.0, 0.0],
         [0.0, -1.0, 0.0],
     ]),
-    jnp.array([10.0, 0.0, 5.0])
+    jnp.array([1.0, 0.0, 0.5])
 )
+
 
 height, width, fx,fy, cx,cy = (
     480,
     640,
-    500.0,500.0,
+    400.0,400.0,
     320.0,240.0
 )
 near,far = 0.1, 20.0
