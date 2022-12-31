@@ -46,7 +46,7 @@ enumeration_grid_tr = make_translation_grid_enumeration(
 enumeration_grid_rot = get_rotation_proposals(fib_nums, rot_nums)
 
 
-def round(float_num, places=3):
+def round_str(float_num, places=3):
     return int(float_num * 10**places)/10**places
 
 
@@ -82,7 +82,7 @@ gt_shape_idx = TEST_IDX % num_shapes
 gt_pose = gt_poses[TEST_IDX]
 
 
-gt_image = render_planes(gt_pose, shapes[gt_shape_idx],h,w,fx_fy,cx_cy) 
+gt_image = render_planes(gt_pose, shapes[gt_shape_idx],h,w,fx,fy,cx,cy) 
 gt_depth_image = get_depth_image(gt_image[:,:,2], max=max_depth)
 # gt_depth_image.save(f"gt_img.png")  
 
@@ -101,10 +101,10 @@ for shape_i, shape in enumerate(shapes):
     
     print("pred pose=", pred_pose)
     
-    pred_image = render_planes(pred_pose, shapes[shape_i],h,w,fx_fy,cx_cy) 
+    pred_image = render_planes(pred_pose, shapes[shape_i],h,w,fx,fy,cx,cy) 
     pred_depth_image = get_depth_image(pred_image[:,:,2], max=max_depth)
     images.append(pred_depth_image)
-    labels.append(shape_labels[shape_i] + f"\nScore={round(score,4)}" )
+    labels.append(shape_labels[shape_i] + f"\nScore={round_str(score,4)}" )
 
 dst = multi_panel(images, labels, middle_width, top_border, 13)
 

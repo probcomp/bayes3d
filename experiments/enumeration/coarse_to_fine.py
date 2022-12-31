@@ -7,7 +7,7 @@ from jax3dp3.coarse_to_fine import coarse_to_fine
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.rendering import render_planes
 from jax3dp3.enumerations import get_rotation_proposals
-from jax3dp3.shape import get_cube_shape
+from jax3dp3.shape import get_rectangular_prism_shape
 from jax3dp3.viz import save_depth_image, get_depth_image
 import time
 from functools import partial 
@@ -38,17 +38,17 @@ gt_pose = jnp.array([
     ]
 )
 
-cube_length = 0.5
-shape = get_cube_shape(cube_length)
+shape_dims = jnp.array([0.3, 0.5, 0.7])
+shape = get_rectangular_prism_shape(shape_dims)  
 
-render_planes_lambda = lambda p: render_planes(p,shape,h,w,fx_fy,cx_cy)
+render_planes_lambda = lambda p: render_planes(p,shape,h,w,fx,fy,cx,cy)
 render_planes_jit = jax.jit(render_planes_lambda)
 render_planes_parallel_jit = jax.jit(jax.vmap(render_planes_lambda))
 gt_image = render_planes_jit(gt_pose)
 
 
 def scorer(pose, gt_image, r):
-    rendered_image = render_planes(pose, shape, h, w, fx_fy, cx_cy)
+    rendered_image = render_planes(pose, shape, h, w, fx, fy, cx, cy)
     weight = threedp3_likelihood(gt_image, rendered_image, r, outlier_prob)
     return weight
 
