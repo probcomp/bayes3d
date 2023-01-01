@@ -12,13 +12,21 @@ import jax3dp3.viz
 from jax3dp3.scene_graph import get_poses
 
 
-height, width, fx,fy, cx,cy = (
-    480,
-    640,
-    1000.0,1000.0,
-    320.0,240.0
-)
-near,far = 0.1, 20.0
+# h, w, fx,fy, cx,cy = (
+#     480,
+#     640,
+#     1000.0,1000.0,
+#     320.0,240.0
+# )
+# near,far = 0.1, 20.0
+
+h, w = 120, 160
+fx,fy = 200.0, 200.0
+cx,cy = 80.0, 60.0
+near=0.01
+far=50.0
+max_depth=2.0
+
 
 p.connect(p.GUI)
 # p.connect(p.DIRECT)
@@ -99,7 +107,7 @@ pr2_urdf = os.path.join(jax3dp3.utils.get_assets_dir(), "robots/pr2/pr2.urdf")
 robot = p.loadURDF(pr2_urdf, useFixedBase=True)
 
 
-new_robot_pose = t3d.transform_from_pos(jnp.array([-2.0, 1.0, 0.0]))
+new_robot_pose = t3d.transform_from_pos(jnp.array([-1.0, 0.0, 0.0]))
 jpb.set_pose_wrapped(robot, new_robot_pose)
 
 head_joint_names = ["head_pan_joint", "head_tilt_joint"]
@@ -114,13 +122,15 @@ print(jpb.get_joint_positions(robot, head_joints))
 cam_pose = jpb.get_link_pose_wrapped(robot, jpb.link_from_name(robot,  "head_mount_kinect_rgb_optical_frame"))
 rgb, depth, segmentation = jpb.capture_image(
     cam_pose,
-    height, width, fx,fy, cx,cy , near, far
+    h, w, fx,fy, cx,cy , near, far
 )
 jax3dp3.viz.save_rgba_image(rgb, 255.0, "rgb.png")
 jax3dp3.viz.save_depth_image(depth, "depth.png", max=far)
 jax3dp3.viz.save_depth_image(segmentation, "seg.png", min=-1.0,max=4.0)
 
 jpb.set_arm_conf(robot, "left", jpb.COMPACT_LEFT_ARM)
+
+np.savez("data.npz", rgb=rgb, depth=depth, segmentation=segmentation, params=(h,w,fx,fy,cx,cy,near,far))
 
 
 

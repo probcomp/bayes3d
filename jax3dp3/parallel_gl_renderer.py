@@ -4,6 +4,7 @@ import jax3dp3.camera
 import trimesh
 import jax
 import numpy as np
+import jax.dlpack
 
 RENDERER_ENV = None
 PROJ_LIST = None
