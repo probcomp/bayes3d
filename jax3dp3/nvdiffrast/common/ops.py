@@ -191,7 +191,6 @@ class RasterizeGLContext:
                 cuda_device_idx = torch.cuda.current_device()
         self.cpp_wrapper = _get_plugin(gl=True).RasterizeGLStateWrapper(output_db, mode == 'automatic', cuda_device_idx)
         self.active_depth_peeler = None # For error checking only.
-        _get_plugin(gl=True).setup(self.cpp_wrapper, height, width)
 
     def set_context(self):
         '''Set (activate) OpenGL context in the current CPU thread.
@@ -206,33 +205,3 @@ class RasterizeGLContext:
         '''
         assert self.mode == 'manual'
         self.cpp_wrapper.release_context()
-
-#----------------------------------------------------------------------------
-# Rasterize.
-#----------------------------------------------------------------------------
-
-
-# # Op wrapper.
-# def load_vertices(glctx, proj, pos, tri, resolution, ranges=None, grad_db=True):
-#     return _get_plugin(gl=True).load_vertices(glctx.cpp_wrapper, pos, tri)
-
-def rasterize(glctx, pose, proj, height, width, likelihood):
-    # Instantiate the function.
-    obs = _get_plugin(gl=True).rasterize_fwd_gl(glctx.cpp_wrapper, pose, proj, height, width, likelihood)
-    return obs
-    # if likelihood:
-    #     return obs
-    # else:
-    #     obs = obs.reshape(pose.shape[0], height, width, 4)
-    #     return obs
-
-def rasterize_get_best_pose(glctx, pose, proj, height, width, likelihood):
-    # Instantiate the function.
-    obs = _get_plugin(gl=True).rasterize_get_best_pose_fwd(glctx.cpp_wrapper, pose, proj, height, width, likelihood)
-    return obs
-
-def load_obs_image(glctx, data):
-    return _get_plugin(gl=True).load_obs_image(glctx.cpp_wrapper, data)
-
-def load_vertices(glctx, pos, tri, h, w):
-    return _get_plugin(gl=True).load_vertices_fwd(glctx.cpp_wrapper, pos, tri, h, w)

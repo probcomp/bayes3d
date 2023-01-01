@@ -541,50 +541,6 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     return output_torch_tensor;
 }
 
-std::vector<float> rasterize_get_best_pose_fwd(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, uint height, uint width, float r)
-{
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-    RasterizeGLState& s = *stateWrapper.pState;
-    auto start2 = std::chrono::high_resolution_clock::now();
-
-    torch::Tensor output_torch_tensor = rasterize_fwd_gl(stateWrapper, pose, proj, height, width, r);
-
-    uint num_total_poses = pose.size(0);
-    float* likelihoods;
-    cudaMalloc((void**)&likelihoods, num_total_poses*sizeof(float));
-    std::vector<float> likelihoods_cpu(num_total_poses);
-
-
-    dim3 blockSize(1024, 1, 1);
-    dim3 gridSize(height,width, 1);
-    torch::Tensor num_latent_points = output_torch_tensor.index({"...", 3}).sum({1,2});
-    std::cout << num_latent_points.sizes() << std::endl;
-    float *output_ptr = output_torch_tensor.data_ptr<float>();
-    float *num_latent_points_ptr = num_latent_points.data_ptr<float>();
-    void* args[] = {&output_ptr, &num_latent_points_ptr, &likelihoods, &s.obs_image, &r, &width, &height, &num_total_poses};
-    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
-
-    cudaLaunchKernel((void*)threedp3_likelihood, gridSize, blockSize, args, 0, stream);
-
-    float temp = 1.0;
-    cudaMemcpy(&temp, output_ptr, sizeof(float), cudaMemcpyDeviceToHost);
-    std::cout << temp << std::endl;
-    auto stop2 = std::chrono::high_resolution_clock::now();
-    auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(stop2 - start2);    
-    std::cout << "duration 2: " << duration2.count() << std::endl;
-    
-
-
-    auto start3 = std::chrono::high_resolution_clock::now();
-    cudaMemcpy(&likelihoods_cpu[0], likelihoods, num_total_poses*sizeof(float), cudaMemcpyDeviceToHost);
-    auto stop3 = std::chrono::high_resolution_clock::now();
-    auto duration3 = std::chrono::duration_cast<std::chrono::microseconds>(stop3 - start3);    
-    std::cout << "duration 3: " << duration3.count() << std::endl;
-
-    return likelihoods_cpu;
-}
-
-
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // State classes.
     pybind11::class_<RasterizeGLStateWrapper>(m, "RasterizeGLStateWrapper").def(pybind11::init<bool, bool, int>())
@@ -596,7 +552,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
     m.def("load_obs_image", &load_obs_image, "rasterize forward op (opengl)");
     m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
-    m.def("rasterize_get_best_pose_fwd", &rasterize_get_best_pose_fwd, "rasterize forward op (opengl)");
 }
 
 //------------------------------------------------------------------------

@@ -39,3 +39,13 @@ def open_gl_projection_matrix(h, w, fx, fy, cx, cy, near, far):
         ]
     )
     return orth @ persp @ view
+
+def scale_camera_paraeters(h,w,fx,fy,cx,cy, scaling_factor):
+    new_fx = fx * scaling_factor
+    new_fy = fy * scaling_factor
+    new_cx = cx * scaling_factor
+    new_cy = cy * scaling_factor
+
+    new_h = int(np.round(h  * scaling_factor))
+    new_w = int(np.round(w * scaling_factor))
+    return new_h, new_w, new_fx, new_fy, new_cx, new_cy
