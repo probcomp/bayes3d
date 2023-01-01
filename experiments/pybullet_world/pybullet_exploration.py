@@ -20,8 +20,8 @@ height, width, fx,fy, cx,cy = (
 )
 near,far = 0.1, 20.0
 
-# p.connect(p.GUI)
-p.connect(p.DIRECT)
+p.connect(p.GUI)
+# p.connect(p.DIRECT)
 
 ycb_path1 = os.path.join(jax3dp3.utils.get_assets_dir(), "models/003_cracker_box/textured_simple.obj")
 ycb_path2 = os.path.join(jax3dp3.utils.get_assets_dir(), "models/004_sugar_box/textured_simple.obj")
@@ -119,6 +119,9 @@ rgb, depth, segmentation = jpb.capture_image(
 jax3dp3.viz.save_rgba_image(rgb, 255.0, "rgb.png")
 jax3dp3.viz.save_depth_image(depth, "depth.png", max=far)
 jax3dp3.viz.save_depth_image(segmentation, "seg.png", min=-1.0,max=4.0)
+
+jpb.set_arm_conf(robot, "left", jpb.COMPACT_LEFT_ARM)
+
 
 
 from IPython import embed; embed()
