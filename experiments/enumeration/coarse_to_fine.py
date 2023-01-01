@@ -38,10 +38,12 @@ gt_pose = jnp.array([
     ]
 )
 
-shape_dims = jnp.array([0.3, 0.5, 0.7])
+shape_dims = jnp.array([0.3, 0.5, 0.7])  # shape to evaluate poses on
 shape = get_rectangular_prism_shape(shape_dims)  
 
-render_planes_lambda = lambda p: render_planes(p,shape,h,w,fx,fy,cx,cy)
+# create gt image from some shape and pose
+gt_shape = get_rectangular_prism_shape(jnp.array([0.5, 0.5, 0.5]))  
+render_planes_lambda = lambda p: render_planes(p,gt_shape,h,w,fx,fy,cx,cy)
 render_planes_jit = jax.jit(render_planes_lambda)
 render_planes_parallel_jit = jax.jit(jax.vmap(render_planes_lambda))
 gt_image = render_planes_jit(gt_pose)
