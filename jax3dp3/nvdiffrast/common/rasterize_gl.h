@@ -24,13 +24,14 @@ struct RasterizeGLState // Must be initializable by memset to zero.
     int                     height;             // Allocated frame buffer height.
     int                     depth;              // Allocated frame buffer depth.
     int                     posCount;           // Allocated position buffer in floats.
-    int                     triCount;           // Allocated triangle buffer in ints.
+    int                     triCounts[1000];           // Allocated triangle buffer in ints.
+    int                     model_counter;           // Allocated triangle buffer in ints.
     GLContext               glctx;
     GLuint                  glFBO;
     GLuint                  glColorBuffer[2];
     GLuint                  glPrevOutBuffer;
     GLuint                  glDepthStencilBuffer;
-    GLuint                  glVAO;
+    GLuint                  glVAOs[100];
     GLuint                  glTriBuffer;
     GLuint                  glPosBuffer;
     GLuint                  glPoseTexture;
