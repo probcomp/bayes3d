@@ -12,20 +12,20 @@ import jax3dp3.viz
 from jax3dp3.scene_graph import get_poses
 
 
-# h, w, fx,fy, cx,cy = (
-#     480,
-#     640,
-#     1000.0,1000.0,
-#     320.0,240.0
-# )
-# near,far = 0.1, 20.0
+h, w, fx,fy, cx,cy = (
+    480,
+    640,
+    1000.0,1000.0,
+    320.0,240.0
+)
+near,far = 0.01, 50.0
 
-h, w = 120, 160
-fx,fy = 200.0, 200.0
-cx,cy = 80.0, 60.0
-near=0.01
-far=50.0
-max_depth=2.0
+# h, w = 120, 160
+# fx,fy = 200.0, 200.0
+# cx,cy = 80.0, 60.0
+# near=0.01
+# far=50.0
+# max_depth=2.0
 
 
 p.connect(p.GUI)
@@ -74,7 +74,7 @@ contact_params = jnp.array(
     [
         [0.0, 0.0, jnp.pi/4],
         [0.0, 0.0, jnp.pi/4],
-        [0.1, 0.1, -jnp.pi/4],
+        [0.2, 0.2, -jnp.pi/4],
     ]
 )
 
