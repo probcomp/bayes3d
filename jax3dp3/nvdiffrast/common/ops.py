@@ -154,7 +154,7 @@ def set_log_level(level):
 #----------------------------------------------------------------------------
 
 class RasterizeGLContext:
-    def __init__(self, output_db=False, mode='automatic', device=None):
+    def __init__(self, height, width, output_db=False, mode='automatic', device=None):
         '''Create a new OpenGL rasterizer context.
 
         Creating an OpenGL context is a slow operation so you should usually reuse the same
@@ -191,6 +191,7 @@ class RasterizeGLContext:
                 cuda_device_idx = torch.cuda.current_device()
         self.cpp_wrapper = _get_plugin(gl=True).RasterizeGLStateWrapper(output_db, mode == 'automatic', cuda_device_idx)
         self.active_depth_peeler = None # For error checking only.
+        _get_plugin(gl=True).setup(self.cpp_wrapper, height, width)
 
     def set_context(self):
         '''Set (activate) OpenGL context in the current CPU thread.
@@ -233,5 +234,5 @@ def rasterize_get_best_pose(glctx, pose, proj, height, width, likelihood):
 def load_obs_image(glctx, data):
     return _get_plugin(gl=True).load_obs_image(glctx.cpp_wrapper, data)
 
-def load_vertices(glctx, pos, tri, height, width):
-    return _get_plugin(gl=True).load_vertices_fwd(glctx.cpp_wrapper, pos, tri, height, width)
+def load_vertices(glctx, pos, tri, h, w):
+    return _get_plugin(gl=True).load_vertices_fwd(glctx.cpp_wrapper, pos, tri, h, w)
