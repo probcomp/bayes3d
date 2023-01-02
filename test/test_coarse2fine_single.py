@@ -37,13 +37,15 @@ gt_pose = jnp.array([
     [0.0, 0.0, 0.0, 1.0],   
     ]
 )
-gt_dims = jnp.array([0.5, 0.5, 0.5])
+gt_dims = jnp.array([0.2, 0.5, 0.8])
 gt_shape = get_rectangular_prism_shape(gt_dims)
 gt_image = render_planes(gt_pose, gt_shape, h, w, fx, fy, cx, cy)
 
 
 # generate shapes to eval
-shapes_dims = jnp.array([jnp.array([0.3, 0.5, 0.7]), jnp.array([0.5, 0.5, 0.5]), jnp.array([0.1, 0.5, 0.5])])
+shapes_dims = jnp.array([jnp.array([0.5, 0.5, 0.5]), 
+                        jnp.array([0.2, 0.5, 0.8]), 
+                        jnp.array([0.1, 0.5, 0.5])])
 num_shapes = len(shapes_dims)
 shapes_idxs = jnp.arange(num_shapes)
 
@@ -69,8 +71,8 @@ latent_pose_estimate = jnp.array([
 print("initial latent=", latent_pose_estimate)
 
 # tuples of (radius, width of gridding, num gridpoints)
-schedule_tr = [(0.5, 1, 10), (0.25, 0.5, 10), (0.1, 0.2, 10), (0.02, 0.1, 10)]
-schedule_rot = [(10, 10), (10, 10), (20, 20), (30,30)]
+schedule_tr = [(0.5, 1, 9), (0.25, 0.5, 9), (0.1, 0.2, 9), (0.02, 0.1, 9)]
+schedule_rot = [(10, 10), (20, 15), (20, 20), (40,20)]
 
 enumeration_likelihood_r = [sched[0] for sched in schedule_tr]
 enumeration_grid_tr = [make_translation_grid_enumeration(

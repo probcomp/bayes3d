@@ -49,8 +49,8 @@ def scorer(shape, pose, gt_image, r):
 #####################
 
 # tuples of (radius, width of gridding, num gridpoints)
-schedule_tr = [(0.5, 1, 10), (0.25, 0.5, 10), (0.1, 0.2, 10), (0.02, 0.1, 10)]
-schedule_rot = [(10, 10), (10, 10), (20, 20), (30,30)]
+schedule_tr = [(0.5, 1, 10)]#, (0.25, 0.5, 10), (0.1, 0.2, 10), (0.02, 0.1, 10)]
+schedule_rot = [(100,100)]#[(10, 10), (10, 10), (20, 20), (30,30)]
 
 enumeration_likelihood_r = [sched[0] for sched in schedule_tr]
 enumeration_grid_tr = [make_translation_grid_enumeration(

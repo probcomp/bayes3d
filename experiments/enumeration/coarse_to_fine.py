@@ -3,6 +3,7 @@ sys.path.append('.')
 
 import jax.numpy as jnp
 import jax
+from jax3dp3.bbox import axis_aligned_bounding_box
 from jax3dp3.coarse_to_fine import coarse_to_fine
 from jax3dp3.likelihood import threedp3_likelihood
 from jax3dp3.rendering import render_planes
@@ -38,16 +39,17 @@ gt_pose = jnp.array([
     ]
 )
 
-shape_dims = jnp.array([0.3, 0.5, 0.7])  # shape to evaluate poses on
+shape_dims = jnp.array([0.2, 0.5, 0.8])  # shape to evaluate poses on
 shape = get_rectangular_prism_shape(shape_dims)  
 
-# create gt image from some shape and pose
-gt_shape = get_rectangular_prism_shape(jnp.array([0.5, 0.5, 0.5]))  
+gt_shape = get_rectangular_prism_shape(jnp.array([0.2, 0.5, 0.9]))  # gt shape to generate gt img with
 render_planes_lambda = lambda p: render_planes(p,gt_shape,h,w,fx,fy,cx,cy)
 render_planes_jit = jax.jit(render_planes_lambda)
 render_planes_parallel_jit = jax.jit(jax.vmap(render_planes_lambda))
 gt_image = render_planes_jit(gt_pose)
 
+
+## Setup c2f experiment
 
 def scorer(pose, gt_image, r):
     rendered_image = render_planes(pose, shape, h, w, fx, fy, cx, cy)
@@ -66,12 +68,15 @@ latent_pose_estimate = jnp.array([
     [0.0, 0.0, 1.0, 2.0],   
     [0.0, 0.0, 0.0, 1.0],   
     ])
+non_zero_points = gt_image[gt_image[:,:,2]>0,:3]
+_, centroid_pose = axis_aligned_bounding_box(non_zero_points)
+latent_pose_estimate = centroid_pose
 
 print("initial latent=", latent_pose_estimate)
 
 # tuples of (radius, width of gridding, num gridpoints)
-schedule_tr = [(0.5, 1, 10), (0.25, 0.5, 10), (0.1, 0.2, 10), (0.02, 0.1, 10)]
-schedule_rot = [(10, 10), (10, 10), (20, 20), (30,30)]
+schedule_tr = [(0.5, 1, 9), (0.25, 0.5, 9), (0.1, 0.2, 9), (0.02, 0.1, 9)]
+schedule_rot = [(10, 10), (20, 15), (20, 20), (40,20)]
 
 enumeration_likelihood_r = [sched[0] for sched in schedule_tr]
 enumeration_grid_tr = [make_translation_grid_enumeration(
@@ -85,6 +90,8 @@ enumeration_grid_r = [get_rotation_proposals(fib_nums, rot_nums) for (fib_nums, 
 coarse_to_fine = partial(coarse_to_fine, scorer)
 coarse_to_fine_jit = jax.jit(coarse_to_fine)
 
+
+## Run coarse to fine
 _ = coarse_to_fine_jit(enumeration_grid_tr, enumeration_grid_r, enumeration_likelihood_r,
                         jnp.array([
                         [1.0, 0.0, 0.0, 0.0],   
