@@ -33,14 +33,18 @@ near,far = 0.01, 50.0
 p.connect(p.GUI)
 # p.connect(p.DIRECT)
 
-cracker_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/003_cracker_box/textured_simple.obj")
+model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
+model_names = os.listdir(model_dir)
+idx_1 = 9
+idx_2 = 10
+cracker_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/{}/textured_simple.obj".format(model_names[idx_1]))
 cracker_box_mesh = trimesh.load(cracker_box_path)
 cracker_box_mesh_centered = jax3dp3.mesh.center_mesh(cracker_box_mesh)
 cracker_box_centered_path = "/tmp/cracker_box/cracker_box.obj"
 os.makedirs(os.path.dirname(cracker_box_centered_path),exist_ok=True)
 cracker_box_mesh_centered.export(cracker_box_centered_path)
 
-sugar_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/004_sugar_box/textured_simple.obj")
+sugar_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/{}/textured_simple.obj".format(model_names[idx_2]))
 sugar_box_mesh = trimesh.load(sugar_box_path)
 sugar_box_mesh_centered = jax3dp3.mesh.center_mesh(sugar_box_mesh)
 sugar_box_centered_path = "/tmp/sugar_box/sugar_box.obj"
