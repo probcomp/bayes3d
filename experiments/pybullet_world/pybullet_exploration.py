@@ -10,6 +10,8 @@ import jax3dp3.pybullet_utils as jpb
 import jax3dp3.camera
 import jax3dp3.viz
 from jax3dp3.scene_graph import get_poses
+import jax3dp3.mesh
+import trimesh
 
 
 h, w, fx,fy, cx,cy = (
@@ -31,18 +33,33 @@ near,far = 0.01, 50.0
 p.connect(p.GUI)
 # p.connect(p.DIRECT)
 
-ycb_path1 = os.path.join(jax3dp3.utils.get_assets_dir(), "models/003_cracker_box/textured_simple.obj")
-ycb_path2 = os.path.join(jax3dp3.utils.get_assets_dir(), "models/004_sugar_box/textured_simple.obj")
+cracker_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/003_cracker_box/textured_simple.obj")
+cracker_box_mesh = trimesh.load(cracker_box_path)
+cracker_box_mesh_centered = jax3dp3.mesh.center_mesh(cracker_box_mesh)
+cracker_box_centered_path = "/tmp/cracker_box/cracker_box.obj"
+os.makedirs(os.path.dirname(cracker_box_centered_path),exist_ok=True)
+cracker_box_mesh_centered.export(cracker_box_centered_path)
 
-table, table_dims = jpb.create_table(
+sugar_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/004_sugar_box/textured_simple.obj")
+sugar_box_mesh = trimesh.load(sugar_box_path)
+sugar_box_mesh_centered = jax3dp3.mesh.center_mesh(sugar_box_mesh)
+sugar_box_centered_path = "/tmp/sugar_box/sugar_box.obj"
+os.makedirs(os.path.dirname(sugar_box_centered_path),exist_ok=True)
+sugar_box_mesh_centered.export(sugar_box_centered_path)
+
+table_mesh = jax3dp3.mesh.center_mesh(jax3dp3.mesh.make_table_mesh(
     1.0,
     2.0,
     0.8,
     0.01,
     0.01
-)
-object, obj_dims = jpb.create_obj_centered(ycb_path1)
-object2, obj_dims2 = jpb.create_obj_centered(ycb_path2)
+))
+table_mesh_path  = "table.obj"
+table_mesh.export(table_mesh_path)
+
+table, table_dims = jpb.add_mesh(table_mesh_path)
+object, obj_dims = jpb.add_mesh(cracker_box_centered_path)
+object2, obj_dims2 = jpb.add_mesh(sugar_box_centered_path)
 
 
 all_pybullet_objects = [
@@ -107,7 +124,7 @@ pr2_urdf = os.path.join(jax3dp3.utils.get_assets_dir(), "robots/pr2/pr2.urdf")
 robot = p.loadURDF(pr2_urdf, useFixedBase=True)
 
 
-new_robot_pose = t3d.transform_from_pos(jnp.array([-1.0, 0.0, 0.0]))
+new_robot_pose = t3d.transform_from_pos(jnp.array([-1.0, 1.0, 0.0]))
 jpb.set_pose_wrapped(robot, new_robot_pose)
 
 head_joint_names = ["head_pan_joint", "head_tilt_joint"]
@@ -130,7 +147,7 @@ jax3dp3.viz.save_depth_image(segmentation, "seg.png", min=-1.0,max=4.0)
 
 jpb.set_arm_conf(robot, "left", jpb.COMPACT_LEFT_ARM)
 
-np.savez("data.npz", rgb=rgb, depth=depth, segmentation=segmentation, params=(h,w,fx,fy,cx,cy,near,far))
+np.savez("data.npz", rgb=rgb, depth=depth, segmentation=segmentation, params=(h,w,fx,fy,cx,cy,near,far), cam_pose=cam_pose, table_pose=poses[0], table_dims=box_dims[0])
 
 
 

@@ -24,31 +24,40 @@ def get_contact_transform(contact_params):
     )
 
 def relative_pose_from_contact(
+    contact_params,
+    face_params,
     dims_parent, dims_child,
-    parent_face_id, child_face_id,
-    contact_params
 ):
-    parent_plane = get_contact_planes(dims_parent)[parent_face_id]
-    child_plane = get_contact_planes(dims_child)[child_face_id]
+    parent_plane = get_contact_planes(dims_parent)[face_params[0]]
+    child_plane = get_contact_planes(dims_child)[face_params[1]]
     contact_transform = get_contact_transform(contact_params)
     return (parent_plane.dot(contact_transform)).dot(jnp.linalg.inv(child_plane))
 
+def pose_from_contact(
+    contact_params,
+    face_params,
+    dims_parent, dims_child,
+    parent_pose
+):
+    parent_plane = get_contact_planes(dims_parent)[face_params[0]]
+    child_plane = get_contact_planes(dims_child)[face_params[1]]
+    contact_transform = get_contact_transform(contact_params)
+    return parent_pose.dot(parent_plane.dot(contact_transform)).dot(jnp.linalg.inv(child_plane))
 
 ## Get poses
 
 
 def iter(poses, box_dims, edge, contact_params, face_params):
     i, j = edge
-    x,y,ang = contact_params
-    rel_pose = relative_pose_from_contact(box_dims[i], box_dims[j], face_params[0], face_params[1], (x,y,ang))
+    rel_pose = relative_pose_from_contact(contact_params, face_params, box_dims[i], box_dims[j])
     return (
         poses[i].dot(rel_pose) * (i != -1)
         +
         poses[j] * (i == -1)
     )
 
-def get_poses(poses, box_dims, edges, contact_params, face_params):
+def get_poses(start_poses, box_dims, edges, contact_params, face_params):
     def _f(poses, _):
         new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0,))(poses, box_dims, edges, contact_params, face_params)
         return (new_poses, new_poses)
-    return jax.lax.scan(_f, poses, jnp.ones(edges.shape[0]))[0]
+    return jax.lax.scan(_f, start_poses, jnp.ones(edges.shape[0]))[0]

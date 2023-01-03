@@ -18,8 +18,7 @@ def setup(h, w, fx, fy, cx, cy, near, far):
         h,w,
     )
 
-def load_model(path, h, w):
-    mesh = trimesh.load(path)
+def load_model(mesh, h, w):
     # mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"cube.obj"))
     vertices = np.array(mesh.vertices)
     vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)

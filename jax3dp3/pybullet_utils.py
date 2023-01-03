@@ -8875,21 +8875,22 @@ def create_table(
     body = create_body(collision_id, visual_id, **kwargs)
     return body, np.array([width, length, height])
     
-def create_obj_centered(
-    ycb_path, scale=1.0
+def add_mesh(
+    ycb_path,
 ):
     mesh = trimesh.load(ycb_path)
-    mesh.vertices = mesh.vertices * scale
+    # mesh.vertices = mesh.vertices * scale
     dims, pose = jax3dp3.bbox.axis_aligned_bounding_box(mesh.vertices)
-    shift = np.array(pose[:3,3])
+    print("Object center is {}".format(pose))
+    # shift = np.array(pose[:3,3])
 
     visual_geometry = get_mesh_geometry(
-        ycb_path, scale=scale
+        ycb_path
     )  # TODO: randomly transform
-    collision_geometry = get_mesh_geometry(ycb_path, scale=scale)
+    collision_geometry = get_mesh_geometry(ycb_path)
 
     geometry_pose = (
-       np.array(-shift),
+       np.zeros(3),
        IDENTITY_QUAT
     )
     collision_id = create_collision_shape(
