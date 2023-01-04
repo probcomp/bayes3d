@@ -3,7 +3,7 @@ import cv2
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix, depth_to_point_cloud_image
 import jax3dp3.camera
 import jax3dp3.viz
-import jax3dp3.parallel_gl_renderer as pgl
+import jax3dp3.renderer as pgl
 import jax3dp3.utils
 import os
 import jax

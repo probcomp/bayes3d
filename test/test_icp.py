@@ -1,7 +1,7 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-from jax3dp3.rendering import render_planes
+from jax3dp3.rendering.jax_rendering import render_planes
 from jax3dp3.utils import (
     make_centered_grid_enumeration_3d_points,
     quaternion_to_rotation_matrix,
@@ -9,13 +9,13 @@ from jax3dp3.utils import (
     depth_to_coords_in_camera,
     transform_from_rot_and_pos
 )
-from jax3dp3.shape import get_cube_shape
+from jax3dp3.rendering.shape import get_cube_shape
 import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 import cv2
-from jax3dp3.shape import get_cube_shape
+from jax3dp3.rendering.shape import get_cube_shape
 from jax3dp3.viz import save_depth_image
 from jax3dp3.icp import get_nearest_neighbor, find_least_squares_transform_between_clouds, icp
 import jax.numpy as jnp

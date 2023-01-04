@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from itertools import product
 
 def center_mesh(mesh):
-    dims, pose = jax3dp3.bbox.axis_aligned_bounding_box(mesh.vertices)
+    _, pose = jax3dp3.bbox.axis_aligned_bounding_box(mesh.vertices)
     shift = np.array(pose[:3,3])
     mesh.vertices = mesh.vertices - shift
     return mesh

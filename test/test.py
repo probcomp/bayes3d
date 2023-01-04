@@ -1,11 +1,11 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-from jax3dp3.rendering import render_planes
+from jax3dp3.rendering.jax_rendering import render_planes
 from jax3dp3.distributions import gaussian_vmf
 from jax3dp3.transforms_3d import quaternion_to_rotation_matrix
 from jax3dp3.enumerations import make_translation_grid_enumeration
-from jax3dp3.shape import get_cube_shape
+from jax3dp3.rendering.shape import get_cube_shape
 import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R

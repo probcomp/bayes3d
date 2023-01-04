@@ -38,30 +38,3 @@ def threedp3_likelihood(
     probs = outlier_prob * (1.0 / 10.0**3)+  jnp.nan_to_num((1.0 - outlier_prob) / num_latent_points  * counts * 1.0 / (4/3 * jnp.pi * r**3))
     log_probs = jnp.log(probs)
     return jnp.sum(jnp.where(obs_mask, log_probs, 0.0))
-
-
-
-def sample_coordinate_within_r(r, key, coord):
-    phi = jax.random.uniform(key, minval=0.0, maxval=2*jnp.pi)
-    
-    new_key, subkey1, subkey2 = jax.random.split(key, 3)
-
-    costheta = jax.random.uniform(subkey1, minval=-1.0, maxval=1.0)
-    u = jax.random.uniform(subkey2, minval=0.0, maxval=1.0)
-
-    theta = jnp.arccos(costheta)
-    radius = r * jnp.cbrt(u)
-
-    sx = radius * jnp.sin(theta)* jnp.cos(phi)
-    sy = radius * jnp.sin(theta) * jnp.sin(phi)
-    sz = radius * jnp.cos(theta)
-
-    return new_key, coord + jnp.array([sx, sy, sz]) 
-
-def sample_cloud_within_r(key, cloud, r, duplicates=1):
-    cloud = cloud[cloud[:,:,2] > 0].reshape(-1, 3)
-    cloud_tiled = jnp.tile(cloud, (duplicates, 1))
-    keys = jax.random.split(key, cloud_tiled.shape[0])
-    _, sampled_cloud_r = jax.vmap(sample_coordinate_within_r, in_axes=(None, 0, 0))(r, keys, cloud_tiled)
-
-    return sampled_cloud_r

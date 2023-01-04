@@ -40,7 +40,7 @@ def open_gl_projection_matrix(h, w, fx, fy, cx, cy, near, far):
     )
     return orth @ persp @ view
 
-def scale_camera_paraeters(h,w,fx,fy,cx,cy, scaling_factor):
+def scale_camera_parameters(h,w,fx,fy,cx,cy, scaling_factor):
     new_fx = fx * scaling_factor
     new_fy = fy * scaling_factor
     new_cx = cx * scaling_factor

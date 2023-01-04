@@ -2,6 +2,7 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 import jax
+import jax3dp3.transforms_3d as t3d
 import os
 
 def get_assets_dir():
@@ -67,3 +68,9 @@ def make_cube_point_cloud(side_width, num_points):
     object_model_cloud = np.vstack(all_faces)
     return jnp.array(object_model_cloud)
 
+def axis_aligned_bounding_box(object_points):
+    maxs = jnp.max(object_points,axis=0)
+    mins = jnp.min(object_points,axis=0)
+    dims = (maxs - mins)
+    center = (maxs + mins) / 2
+    return dims, t3d.transform_from_pos(center)    

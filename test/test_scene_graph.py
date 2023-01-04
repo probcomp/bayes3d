@@ -2,8 +2,8 @@ from jax3dp3.scene_graph import get_poses
 import jax.numpy as jnp
 import jax
 import jax3dp3.transforms_3d as t3d
-from jax3dp3.shape import get_rectangular_prism_shape
-from jax3dp3.rendering import render_sphere, render_planes_multiobject,render_planes_multiobject_rays
+from jax3dp3.rendering.shape import get_rectangular_prism_shape
+from jax3dp3.rendering.jax_rendering import render_sphere, render_planes_multiobject,render_planes_multiobject_rays
 from jax3dp3.viz import save_depth_image, get_depth_image
 from jax3dp3.camera import camera_rays_from_params
 from jax3dp3.likelihood import threedp3_likelihood
