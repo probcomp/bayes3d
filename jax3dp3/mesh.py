@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from itertools import product
 
 def center_mesh(mesh):
-    _, pose = jax3dp3.bbox.axis_aligned_bounding_box(mesh.vertices)
+    _, pose = jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)
     shift = np.array(pose[:3,3])
     mesh.vertices = mesh.vertices - shift
     return mesh
@@ -18,9 +18,9 @@ def make_table_mesh(
     table_thickness,
     table_leg_width
 ):
-        
+
     table_face = trimesh.creation.box(
-        np.array([table_width, table_length, table_height]),
+        np.array([table_width, table_length, table_thickness]),
         np.array(t3d.transform_from_pos(jnp.array([0.0, 0.0, table_height/2.0 - table_thickness/2.])))
     )
     table_leg_height = table_height-table_thickness

@@ -30,8 +30,8 @@ from itertools import combinations
 import numpy as np
 import pybullet as p
 import jax.numpy as jnp
+import jax3dp3
 import jax3dp3.transforms_3d as t3d
-import jax3dp3.bbox
 from itertools import product
 from collections import defaultdict, deque, namedtuple
 import trimesh
@@ -8880,7 +8880,7 @@ def add_mesh(
 ):
     mesh = trimesh.load(ycb_path)
     # mesh.vertices = mesh.vertices * scale
-    dims, pose = jax3dp3.bbox.axis_aligned_bounding_box(mesh.vertices)
+    dims, pose = jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)
     print("Object center is {}".format(pose))
     # shift = np.array(pose[:3,3])
 

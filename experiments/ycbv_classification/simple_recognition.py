@@ -1,4 +1,5 @@
 import time
+import trimesh
 import os
 import numpy as np
 import jax.numpy as jnp
@@ -19,8 +20,8 @@ jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
 model_names = os.listdir(model_dir)
 for model in model_names:
-    model_path = os.path.join(jax3dp3.utils.get_assets_dir(),"models/{}/textured_simple.obj".format(model))
-    jax3dp3.load_model(model_path, h, w)
+    mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"models/{}/textured_simple.obj".format(model)))
+    jax3dp3.load_model(mesh, h, w)
 
 gt_model_idx = 19
 gt_mesh_name = model_names[gt_model_idx]
@@ -36,12 +37,10 @@ gt_image = jax3dp3.render(jnp.stack([gt_pose, gt_pose]), h,w,gt_model_idx)[0]
 jax3dp3.viz.save_depth_image(gt_image[:,:,2], "gt_image.png", max=max_depth)
 
 
-r = 0.05
-outlier_prob = 0.1
-def scorer(rendered_image, gt):
+def scorer(rendered_image, gt, r, outlier_prob):
     weight = jax3dp3.likelihood.threedp3_likelihood(gt, rendered_image, r, outlier_prob)
     return weight
-scorer_parallel = jax.vmap(scorer, in_axes=(0, None))
+scorer_parallel = jax.vmap(scorer, in_axes=(0, None, None, None))
 scorer_parallel_jit = jax.jit(scorer_parallel)
 
 non_zero_points = gt_image[gt_image[:,:,2]>0,:3]
@@ -52,12 +51,16 @@ poses_to_score = jnp.einsum("ij,ajk->aik", centroid_pose, rotation_deltas)
 object_indices = list(range(len(model_names)))
 
 start= time.time()
-
+all_scores = []
+for idx in object_indices:
+    images = jax3dp3.render(poses_to_score, h,w, idx)
+    weights = scorer_parallel_jit(images, gt_image, 0.05, 0.05)
+    best_pose_idx = weights.argmax()
+    jax3dp3.viz.save_depth_image(images[best_pose_idx,:,:,2], "imgs/best_{}.png".format(model_names[idx]), max=max_depth)
+    all_scores.append(weights[best_pose_idx])
+print(gt_mesh_name)
+print(model_names[np.argmax(all_scores)])
 end= time.time()
 print ("Time elapsed:", end - start)
-print(gt_mesh_name)
-print(model_names[best_idx])
-
-
 
 from IPython import embed; embed()

@@ -56,7 +56,7 @@ def iter(poses, box_dims, edge, contact_params, face_params):
         poses[j] * (i == -1)
     )
 
-def get_poses(start_poses, box_dims, edges, contact_params, face_params):
+def absolute_poses_from_scene_graph(start_poses, box_dims, edges, contact_params, face_params):
     def _f(poses, _):
         new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0,))(poses, box_dims, edges, contact_params, face_params)
         return (new_poses, new_poses)

@@ -1,23 +1,19 @@
-import numpy as np
-import jax
-import pybullet as p
-import jax.numpy as jnp
-import jax3dp3.utils
 import os
-import jax3dp3.transforms_3d as t3d
-import jax3dp3.bbox
-import jax3dp3.pybullet_utils as jpb
-import jax3dp3.camera
-import jax3dp3.viz
-from jax3dp3.scene_graph import get_poses
+import numpy as np
+import pybullet as p
+import jax
+import jax3dp3
 import jax3dp3.mesh
 import trimesh
+import jax.numpy as jnp
+import jax3dp3.pybullet
+import jax3dp3.transforms_3d as t3d
 
 
 h, w, fx,fy, cx,cy = (
     480,
     640,
-    1000.0,1000.0,
+    500.0,500.0,
     320.0,240.0
 )
 near,far = 0.01, 50.0
@@ -58,12 +54,12 @@ table_mesh = jax3dp3.mesh.center_mesh(jax3dp3.mesh.make_table_mesh(
     0.01,
     0.01
 ))
-table_mesh_path  = "table.obj"
+table_mesh_path  = "/tmp/table.obj"
 table_mesh.export(table_mesh_path)
 
-table, table_dims = jpb.add_mesh(table_mesh_path)
-object, obj_dims = jpb.add_mesh(cracker_box_centered_path)
-object2, obj_dims2 = jpb.add_mesh(sugar_box_centered_path)
+table, table_dims = jax3dp3.pybullet.add_mesh(table_mesh_path)
+object, obj_dims = jax3dp3.pybullet.add_mesh(cracker_box_centered_path)
+object2, obj_dims2 = jax3dp3.pybullet.add_mesh(sugar_box_centered_path)
 
 
 all_pybullet_objects = [
@@ -107,12 +103,12 @@ face_params = jnp.array(
     ]
 )
 
-get_poses_jit = jax.jit(get_poses)
+get_poses_jit = jax.jit(jax3dp3.scene_graph.absolute_poses_from_scene_graph)
 poses = get_poses_jit(
     absolute_poses, box_dims, edges, contact_params, face_params
 )
 for (obj, pose) in zip(all_pybullet_objects, poses):
-    jpb.set_pose_wrapped(obj, pose)
+    jax3dp3.pybullet.set_pose_wrapped(obj, pose)
 
 
 # cam_pose = t3d.transform_from_rot_and_pos(
@@ -128,20 +124,20 @@ pr2_urdf = os.path.join(jax3dp3.utils.get_assets_dir(), "robots/pr2/pr2.urdf")
 robot = p.loadURDF(pr2_urdf, useFixedBase=True)
 
 
-new_robot_pose = t3d.transform_from_pos(jnp.array([-1.0, 1.0, 0.0]))
-jpb.set_pose_wrapped(robot, new_robot_pose)
+new_robot_pose = t3d.transform_from_pos(jnp.array([-1.0, 0.0, 0.0]))
+jax3dp3.pybullet.set_pose_wrapped(robot, new_robot_pose)
 
 head_joint_names = ["head_pan_joint", "head_tilt_joint"]
-head_joints = jpb.joints_from_names(robot, head_joint_names)
-conf = jpb.inverse_visibility(robot, jpb.get_pose_wrapped(object)[:3,3], verbose=True, tolerance=0.001)
-jpb.set_joint_positions(robot, head_joints, conf)
+head_joints = jax3dp3.pybullet.joints_from_names(robot, head_joint_names)
+conf = jax3dp3.pybullet.inverse_visibility(robot, jax3dp3.pybullet.get_pose_wrapped(object)[:3,3], verbose=True, tolerance=0.001)
+jax3dp3.pybullet.set_joint_positions(robot, head_joints, conf)
 
 
-print(jpb.get_joint_positions(robot, head_joints))
+print(jax3dp3.pybullet.get_joint_positions(robot, head_joints))
 
 
-cam_pose = jpb.get_link_pose_wrapped(robot, jpb.link_from_name(robot,  "head_mount_kinect_rgb_optical_frame"))
-rgb, depth, segmentation = jpb.capture_image(
+cam_pose = jax3dp3.pybullet.get_link_pose_wrapped(robot, jax3dp3.pybullet.link_from_name(robot,  "head_mount_kinect_rgb_optical_frame"))
+rgb, depth, segmentation = jax3dp3.pybullet.capture_image(
     cam_pose,
     h, w, fx,fy, cx,cy , near, far
 )
@@ -149,7 +145,7 @@ jax3dp3.viz.save_rgba_image(rgb, 255.0, "rgb.png")
 jax3dp3.viz.save_depth_image(depth, "depth.png", max=far)
 jax3dp3.viz.save_depth_image(segmentation, "seg.png", min=-1.0,max=4.0)
 
-jpb.set_arm_conf(robot, "left", jpb.COMPACT_LEFT_ARM)
+jax3dp3.pybullet.set_arm_conf(robot, "left", jax3dp3.pybullet.COMPACT_LEFT_ARM)
 
 np.savez("data.npz", rgb=rgb, depth=depth, segmentation=segmentation, params=(h,w,fx,fy,cx,cy,near,far), cam_pose=cam_pose, table_pose=poses[0], table_dims=box_dims[0])
 
