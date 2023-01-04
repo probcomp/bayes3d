@@ -6,13 +6,14 @@ import jax
 import jax.numpy as jnp
 import trimesh
 import time
+import jax3dp3
 
 data = np.load("data.npz")
-segmentation = data["segmentation"]
-depth = data["depth"]
+segmentation = data["segmentation"][0]
+depth = data["depth"][0]
 table_dims = jnp.array(data["table_dims"])
 table_pose = jnp.array(data["table_pose"])
-cam_pose = jnp.array(data["cam_pose"])
+cam_pose = jnp.array(data["cam_pose"])[0]
 
 h,w,fx,fy,cx,cy,near,far = data["params"]
 h = int(h)
@@ -34,7 +35,7 @@ for model in model_names:
     jax3dp3.load_model(mesh, h, w)
 
 
-gt_image = t3d.depth_to_point_cloud_image(cv2.resize(depth * (segmentation == 1), (w,h),interpolation=0), fx,fy,cx,cy)
+gt_image = t3d.depth_to_point_cloud_image(cv2.resize(depth * (segmentation == 2), (w,h),interpolation=0), fx,fy,cx,cy)
 jax3dp3.viz.save_depth_image(gt_image[:,:,2], "gt_image.png", max=max_depth)
 
 contact_params = jnp.array([0.0, 0.0, -jnp.pi/4])
@@ -58,7 +59,7 @@ all_scores = []
 for idx in object_indices:
     pose_proposals = poses_from_contact_params_sweep(contact_params_sweep, face_params, table_dims, model_box_dims[idx], table_pose)
     proposals = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), pose_proposals)
-    images = jax3dp3.render(proposals, h,w, idx)
+    images = jax3dp3.render_multi(proposals, h,w, idx)
     weights = scorer_parallel_jit(images, gt_image, 0.05, 0.05)
     best_pose_idx = weights.argmax()
     # jax3dp3.viz.save_depth_image(images[best_pose_idx,:,:,2], "best_{}.png".format(model_names[idx]), max=max_depth)

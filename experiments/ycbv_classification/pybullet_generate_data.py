@@ -31,19 +31,19 @@ p.connect(p.GUI)
 
 model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
 model_names = os.listdir(model_dir)
-idx_1 = 9
-idx_2 = 10
+idx_1 = 0
+idx_2 = 1
 cracker_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/{}/textured_simple.obj".format(model_names[idx_1]))
 cracker_box_mesh = trimesh.load(cracker_box_path)
 cracker_box_mesh_centered = jax3dp3.mesh.center_mesh(cracker_box_mesh)
-cracker_box_centered_path = "/tmp/cracker_box/cracker_box.obj"
+cracker_box_centered_path = "/tmp/obj1/obj.obj"
 os.makedirs(os.path.dirname(cracker_box_centered_path),exist_ok=True)
 cracker_box_mesh_centered.export(cracker_box_centered_path)
 
 sugar_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/{}/textured_simple.obj".format(model_names[idx_2]))
 sugar_box_mesh = trimesh.load(sugar_box_path)
 sugar_box_mesh_centered = jax3dp3.mesh.center_mesh(sugar_box_mesh)
-sugar_box_centered_path = "/tmp/sugar_box/sugar_box.obj"
+sugar_box_centered_path = "/tmp/obj2/obj.obj"
 os.makedirs(os.path.dirname(sugar_box_centered_path),exist_ok=True)
 sugar_box_mesh_centered.export(sugar_box_centered_path)
 
@@ -54,7 +54,8 @@ table_mesh = jax3dp3.mesh.center_mesh(jax3dp3.mesh.make_table_mesh(
     0.01,
     0.01
 ))
-table_mesh_path  = "/tmp/table.obj"
+table_mesh_path  = "/tmp/table/table.obj"
+os.makedirs(os.path.dirname(table_mesh_path),exist_ok=True)
 table_mesh.export(table_mesh_path)
 
 table, table_dims = jax3dp3.pybullet.add_mesh(table_mesh_path)
@@ -124,30 +125,47 @@ pr2_urdf = os.path.join(jax3dp3.utils.get_assets_dir(), "robots/pr2/pr2.urdf")
 robot = p.loadURDF(pr2_urdf, useFixedBase=True)
 
 
-new_robot_pose = t3d.transform_from_pos(jnp.array([-1.0, 0.0, 0.0]))
-jax3dp3.pybullet.set_pose_wrapped(robot, new_robot_pose)
 
 head_joint_names = ["head_pan_joint", "head_tilt_joint"]
 head_joints = jax3dp3.pybullet.joints_from_names(robot, head_joint_names)
-conf = jax3dp3.pybullet.inverse_visibility(robot, jax3dp3.pybullet.get_pose_wrapped(object)[:3,3], verbose=True, tolerance=0.001)
-jax3dp3.pybullet.set_joint_positions(robot, head_joints, conf)
 
 
-print(jax3dp3.pybullet.get_joint_positions(robot, head_joints))
+all_data = [] 
+start_position = jnp.array([-1.0, 0.0, 0.0])
+vel = jnp.array([-0.02, 0.0, 0.0])
+num_timesteps = 50
+for t in range(num_timesteps):
+    robot_pose = t3d.transform_from_pos(start_position + vel * t)
+    jax3dp3.pybullet.set_pose_wrapped(robot, robot_pose)
+    conf = jax3dp3.pybullet.inverse_visibility(robot, jax3dp3.pybullet.get_pose_wrapped(object)[:3,3], verbose=True, tolerance=0.001)
+    jax3dp3.pybullet.set_joint_positions(robot, head_joints, conf)
 
+    cam_pose = jax3dp3.pybullet.get_link_pose_wrapped(
+        robot, jax3dp3.pybullet.link_from_name(robot,  "head_mount_kinect_rgb_optical_frame")
+    )
+    rgb, depth, segmentation = jax3dp3.pybullet.capture_image(
+        cam_pose,
+        h, w, fx,fy, cx,cy , near, far
+    )
+    all_data.append((rgb,depth,segmentation, cam_pose))
 
-cam_pose = jax3dp3.pybullet.get_link_pose_wrapped(robot, jax3dp3.pybullet.link_from_name(robot,  "head_mount_kinect_rgb_optical_frame"))
-rgb, depth, segmentation = jax3dp3.pybullet.capture_image(
-    cam_pose,
-    h, w, fx,fy, cx,cy , near, far
+jax3dp3.viz.make_gif_from_pil_images([
+    jax3dp3.viz.get_rgba_image(data[0], 255.0)
+    for data in all_data
+], "rgb.gif")
+
+np.savez("data.npz", rgb=[data[0] for data in all_data], 
+         depth=[data[1] for data in all_data],
+         segmentation=[data[2] for data in all_data],
+         params=(h,w,fx,fy,cx,cy,near,far),
+         cam_pose=[data[3] for data in all_data],
+         table_pose=poses[0],
+         table_dims=box_dims[0],
+         all_object_poses=poses
 )
-jax3dp3.viz.save_rgba_image(rgb, 255.0, "rgb.png")
-jax3dp3.viz.save_depth_image(depth, "depth.png", max=far)
-jax3dp3.viz.save_depth_image(segmentation, "seg.png", min=-1.0,max=4.0)
 
-jax3dp3.pybullet.set_arm_conf(robot, "left", jax3dp3.pybullet.COMPACT_LEFT_ARM)
 
-np.savez("data.npz", rgb=rgb, depth=depth, segmentation=segmentation, params=(h,w,fx,fy,cx,cy,near,far), cam_pose=cam_pose, table_pose=poses[0], table_dims=box_dims[0])
+
 
 
 
