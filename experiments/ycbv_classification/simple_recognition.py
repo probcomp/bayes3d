@@ -23,7 +23,7 @@ for model in model_names:
     mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"models/{}/textured_simple.obj".format(model)))
     jax3dp3.load_model(mesh, h, w)
 
-gt_model_idx = 19
+gt_model_idx = 1
 gt_mesh_name = model_names[gt_model_idx]
 
 center_of_sampling = t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.5]))
@@ -32,10 +32,8 @@ concentration = 0.01
 key = jax.random.PRNGKey(10)
 sampler_jit = jax.jit(jax3dp3.distributions.gaussian_vmf_sample)
 gt_pose = sampler_jit(key, center_of_sampling, variance, concentration)
-# gt_pose_torch = torch.tensor(np.array(gt_pose), device='cuda')
-gt_image = jax3dp3.render(jnp.stack([gt_pose, gt_pose]), h,w,gt_model_idx)[0]
+gt_image = jax3dp3.render(gt_pose, h,w,gt_model_idx)
 jax3dp3.viz.save_depth_image(gt_image[:,:,2], "gt_image.png", max=max_depth)
-
 
 def scorer(rendered_image, gt, r, outlier_prob):
     weight = jax3dp3.likelihood.threedp3_likelihood(gt, rendered_image, r, outlier_prob)
@@ -53,7 +51,7 @@ object_indices = list(range(len(model_names)))
 start= time.time()
 all_scores = []
 for idx in object_indices:
-    images = jax3dp3.render(poses_to_score, h,w, idx)
+    images = jax3dp3.render_multi(poses_to_score, h,w, idx)
     weights = scorer_parallel_jit(images, gt_image, 0.05, 0.05)
     best_pose_idx = weights.argmax()
     jax3dp3.viz.save_depth_image(images[best_pose_idx,:,:,2], "imgs/best_{}.png".format(model_names[idx]), max=max_depth)
@@ -62,5 +60,6 @@ print(gt_mesh_name)
 print(model_names[np.argmax(all_scores)])
 end= time.time()
 print ("Time elapsed:", end - start)
+
 
 from IPython import embed; embed()

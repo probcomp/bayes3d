@@ -29,9 +29,13 @@ def load_model(mesh, h, w):
         h,w
     )
 
-def render(poses, h, w, idx):
+def render_multi(poses, h, w, idx):
     poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(poses))
     images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(RENDERER_ENV.cpp_wrapper, poses_torch, PROJ_LIST, h, w, idx)
     return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
 
 
+def render(pose, h, w, idx):
+    poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(pose))
+    images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(RENDERER_ENV.cpp_wrapper, poses_torch, PROJ_LIST, h, w, idx)
+    return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
