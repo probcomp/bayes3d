@@ -38,7 +38,7 @@ def get_rgb_image(image, max_val):
             image / max_val * 255.0
         ).astype(np.int8),
         mode="RGB",
-    )
+    ).convert("RGBA")
     return img
 
 def save_rgb_image(image, max_val, filename):
@@ -58,6 +58,12 @@ def get_rgba_image(image, max_val):
 def save_rgba_image(image, max_val, filename):
     img = get_rgba_image(image, max_val)
     img.save(filename)
+
+def overlay_image(img_1, img_2, alpha=0.5):
+    return Image.blend(img_1, img_2, alpha=alpha)
+
+def resize_image(img, h, w):
+    return img.resize((w, h))
 
 ####
 

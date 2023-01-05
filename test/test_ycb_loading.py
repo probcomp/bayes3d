@@ -4,11 +4,10 @@ import trimesh
 import os
 
 test_img = jax3dp3.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv/test")
-h, w = test_img.get_image_dims()
-
+orig_h, orig_w = test_img.get_image_dims()
 fx, fy, cx, cy = test_img.get_camera_intrinsics()
-print("intrinsics:", h, w, fx, fy, cx, cy)
-h, w, fx, fy, cx, cy  = jax3dp3.camera.scale_camera_parameters(h,w,fx,fy,cx,cy, 0.5)
+print("intrinsics:", orig_h, orig_w, fx, fy, cx, cy)
+h, w, fx, fy, cx, cy  = jax3dp3.camera.scale_camera_parameters(orig_h, orig_w ,fx,fy,cx,cy, 0.25)
 print("intrinsics:", h, w, fx, fy, cx, cy)
 near = 1.0; far = 10000.0
 
@@ -24,19 +23,26 @@ for idx in range(1,22):
 cam_pose = test_img.get_camera_pose()
 object_poses = test_img.get_gt_poses()
 object_ids = test_img.get_gt_indices()
-rgb_img = test_img.get_rgb_image()
+rgb_img_data = test_img.get_rgb_image()
 
-jax3dp3.viz.save_rgb_image(rgb_img, 255.0, "rgb.png")
+rgb_img = jax3dp3.viz.get_rgb_image(rgb_img_data, 255.0)
+rgb_img.save("rgb.png")
 
 idx = 0
 all_object_poses = jnp.array(object_poses)
 
-gt_image = jax3dp3.render_multiobject(all_object_poses, h,w, [x-1 for x in object_ids])
-jax3dp3.viz.save_depth_image(gt_image[:,:,2], "render_test.png", min=near, max=far)
 
 for i in range(len(object_ids)):
     gt_image = jax3dp3.render_single_object(object_poses[i], h,w, object_ids[i]-1)
     jax3dp3.viz.save_depth_image(gt_image[:,:,2], "{}.png".format(i), min=near, max=far)
+
+gt_image = jax3dp3.render_multiobject(all_object_poses, h,w, [x-1 for x in object_ids])
+reconstruction = jax3dp3.viz.get_depth_image(gt_image[:,:,2], min=near, max=far)
+reconstruction.save("reconstruction.png")
+
+overlayed = jax3dp3.viz.overlay_image(rgb_img, jax3dp3.viz.resize_image(reconstruction, orig_h, orig_w), alpha=.8)
+overlayed.save("overlay.png")
+
 
 
 

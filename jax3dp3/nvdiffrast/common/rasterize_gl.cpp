@@ -277,6 +277,8 @@ void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width)
     RasterizeGLState& s = *stateWrapper.pState;
     s.model_counter = 0;
 
+    // std::cout << "" << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
+
     // Check that GL context was created for the correct GPU.
     // NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
 
