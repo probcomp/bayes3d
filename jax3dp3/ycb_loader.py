@@ -19,13 +19,12 @@ def remove_zero_pad(img_id):
             return img_id[i:]
 
 
-def get_test_img(scene_id, img_id, data_dirname="ycbv_test"):
+def get_test_img(scene_id, img_id, data_dir):
     if len(scene_id) < 6:
         scene_id = scene_id.rjust(6, '0')
     if len(img_id) < 6:
         img_id = img_id.rjust(6, '0')
 
-    data_dir = os.path.join(jax3dp3.utils.get_data_dir(), data_dirname)
     scene_data_dir = os.path.join(data_dir, scene_id)  # depth, mask, mask_visib, rgb; scene_camera.json, scene_gt_info.json, scene_gt.json
 
     scene_rgb_images_dir = os.path.join(scene_data_dir, 'rgb')
@@ -75,7 +74,7 @@ def get_test_img(scene_id, img_id, data_dirname="ycbv_test"):
 
 
     # Create the TestImage instance for the image
-    ycbv_img = BOPTestImage(dataset=data_dirname,
+    ycbv_img = BOPTestImage(dataset=data_dir,
                             scene_id=scene_id, 
                             img_id=img_id,
                             rgb=rgb,
@@ -85,7 +84,7 @@ def get_test_img(scene_id, img_id, data_dirname="ycbv_test"):
                             bop_obj_indices=gt_ids,
                             annotations=anno  # mask and gt poses
                             )
-    print(f"Retrieved test scene {scene_id} image {img_id} with {len(object_gt_data)} objects")
+    print(f"Retrieved test scene {scene_id} image {img_id} with {len(objects_gt_data)} objects")
     return ycbv_img
 
 
@@ -139,10 +138,10 @@ class BOPTestImage:
     annotations: list
     # default_scales: np.ndarray
 
-    def get_scene_img_ids(self) -> jnp.ndarray:
+    def get_scene_img_ids(self):
         return (self.scene_id, self.img_id)
 
-    def get_camera_intrinsics(self) -> jnp.ndarray:
+    def get_camera_intrinsics(self):
         cam_K = self.intrinsics
         fx, fy, cx, cy = cam_K[0][0], cam_K[1][1], cam_K[0][2], cam_K[1][2]
         return fx, fy, cx, cy
@@ -150,23 +149,23 @@ class BOPTestImage:
     def get_image_dims(self) -> tuple:
         return self.depth.shape
     
-    def get_camera_pose(self) -> jnp.ndarray:
+    def get_camera_pose(self):
         return self.camera_pose
 
-    def get_rgb_image(self) -> jnp.ndarray:
+    def get_rgb_image(self):
         return self.rgb
     
-    def get_depth_image(self) -> jnp.ndarray:
+    def get_depth_image(self):
         return self.depth 
 
-    def get_gt_indices(self) -> jnp.ndarray:
+    def get_gt_indices(self):
         return self.bop_obj_indices
 
-    def get_object_masks(self) -> list[jnp.ndarray]:
+    def get_object_masks(self):
         obj_masks = [anno['mask_visible'] for anno in self.annotations]
         return obj_masks
 
-    def get_gt_poses(self) -> list[jnp.ndarray]:
+    def get_gt_poses(self):
         gt_poses = [anno['gt_poses_m2c'] for anno in self.annotations]
         return gt_poses
 

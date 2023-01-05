@@ -1,41 +1,46 @@
 import jax.numpy as jnp
 import jax3dp3
-from jax3dp3.data import BOPTestImage, get_test_img
-from jax3dp3.viz import save_depth_image, get_depth_image
 import trimesh
+import os
 
-
-test_img = get_test_img('54', '1568')
+test_img = jax3dp3.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv/test")
 h, w = test_img.get_image_dims()
 
 fx, fy, cx, cy = test_img.get_camera_intrinsics()
 print("intrinsics:", h, w, fx, fy, cx, cy)
 h, w, fx, fy, cx, cy  = jax3dp3.camera.scale_camera_parameters(h,w,fx,fy,cx,cy, 0.5)
 print("intrinsics:", h, w, fx, fy, cx, cy)
-near = 1.0; far = 50.0
+near = 1.0; far = 10000.0
 
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
 
-model_object_names = os.listdir(os.path.join(jax3dp3.utils.get_assets_dir(),"bop_models"))
-model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
-model_names = os.listdir(model_dir)
-for model_name in model_names:
-    if model_name[-4:] != ".ply":
-        continue
-    mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),f"{model_name}"))
+model_dir = "/home/nishadgothoskar/data/bop/ycbv/models"
+for idx in range(1,22):
+    mesh = trimesh.load(os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply"))
     jax3dp3.load_model(mesh, h, w)
 
 
 cam_pose = test_img.get_camera_pose()
 object_poses = test_img.get_gt_poses()
 object_ids = test_img.get_gt_indices()
+rgb_img = test_img.get_rgb_image()
 
-for pose, id in zip(object_poses, object_ids):
-    pose_in_cam_frame = jnp.linalg.inv(cam_pose).dot(pose)
-    gt_image = jax3dp3.render(pose_in_cam_frame, h,w, id)
+jax3dp3.viz.save_rgb_image(rgb_img, 255.0, "rgb.png")
 
-save_depth_image(gt_image[:,:,2], "render_test.png", min=near, max=far)
-save_depth_image(test_img.get_depth_image(), "render_gt.png", min=near, max=far)
+idx = 0
+all_object_poses = jnp.array(object_poses)
+
+gt_image = jax3dp3.render_multiobject(all_object_poses, h,w, [x-1 for x in object_ids])
+jax3dp3.viz.save_depth_image(gt_image[:,:,2], "render_test.png", min=near, max=far)
+
+for i in range(len(object_ids)):
+    gt_image = jax3dp3.render_single_object(object_poses[i], h,w, object_ids[i]-1)
+    jax3dp3.viz.save_depth_image(gt_image[:,:,2], "{}.png".format(i), min=near, max=far)
+
+
+
+# save_depth_image(gt_image[:,:,2], "render_test.png", min=near, max=far)
+# save_depth_image(test_img.get_depth_image(), "render_gt.png", min=near, max=far)
 
 from IPython import embed; embed()

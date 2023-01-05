@@ -4,6 +4,8 @@ from . import mesh
 from . import utils
 from . import distributions
 from . import scene_graph
+from . import scene_graph
+from . import ycb_loader
 from .enumerations import *
 from .renderer import *
 from .likelihood import *
