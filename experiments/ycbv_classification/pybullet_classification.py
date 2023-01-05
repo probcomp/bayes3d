@@ -32,10 +32,10 @@ for model in model_names:
     mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"models/{}/textured_simple.obj".format(model)))
     mesh = jax3dp3.mesh.center_mesh(mesh)
     model_box_dims.append(jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0])
-    jax3dp3.load_model(mesh, h, w)
+    jax3dp3.load_model(mesh)
 
 
-gt_image = t3d.depth_to_point_cloud_image(cv2.resize(depth * (segmentation == 2), (w,h),interpolation=0), fx,fy,cx,cy)
+gt_image = t3d.depth_to_point_cloud_image(cv2.resize(depth * (segmentation == 1), (w,h),interpolation=0), fx,fy,cx,cy)
 jax3dp3.viz.save_depth_image(gt_image[:,:,2], "gt_image.png", max=max_depth)
 
 contact_params = jnp.array([0.0, 0.0, -jnp.pi/4])
@@ -59,10 +59,10 @@ all_scores = []
 for idx in object_indices:
     pose_proposals = poses_from_contact_params_sweep(contact_params_sweep, face_params, table_dims, model_box_dims[idx], table_pose)
     proposals = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), pose_proposals)
-    images = jax3dp3.render_multi(proposals, h,w, idx)
+    images = jax3dp3.render_parallel(proposals, idx)
     weights = scorer_parallel_jit(images, gt_image, 0.05, 0.05)
     best_pose_idx = weights.argmax()
-    # jax3dp3.viz.save_depth_image(images[best_pose_idx,:,:,2], "best_{}.png".format(model_names[idx]), max=max_depth)
+    jax3dp3.viz.save_depth_image(images[best_pose_idx,:,:,2], "imgs/best_{}.png".format(model_names[idx]), max=max_depth)
     all_scores.append(weights[best_pose_idx])
 print(model_names[np.argmax(all_scores)])
 end= time.time()

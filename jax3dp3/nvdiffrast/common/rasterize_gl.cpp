@@ -269,13 +269,16 @@ void RasterizeGLStateWrapper::releaseContext(void)
 
 void threedp3_likelihood(float *pos, float *latent_points, float *likelihoods, float *obs_image, float r, int width, int height, int depth);
 
-void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width)
+void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width, int num_layers)
 {
-    int depth = 1024;
+
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
     s.model_counter = 0;
+    s.img_width = width;
+    s.img_height = height;
+    s.num_layers = num_layers;
 
     // std::cout << "" << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
 
@@ -303,20 +306,15 @@ void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width)
         s.cudaPrevOutBuffer = 0;
     }
 
-
-    // New framebuffer size.
-    s.width  = (width > s.width) ? width : s.width;
-    s.height = (height > s.height) ? height : s.height;
-    s.depth  = (depth > s.depth) ? depth : s.depth;
-    s.width  = ROUND_UP(s.width, 32);
-    s.height = ROUND_UP(s.height, 32);
-    std::cout << "Increasing frame buffer size to (width, height, depth) = (" << s.width << ", " << s.height << ", " << s.depth << ")" << std::endl;
+    s.width  = ROUND_UP(s.img_width, 32);
+    s.height = ROUND_UP(s.img_height, 32);
+    std::cout << "Increasing frame buffer size to (width, height, depth) = (" << s.width << ", " << s.height << ", " << s.num_layers << ")" << std::endl;
 
     // Allocate color buffers.
     for (int i=0; i < num_outputs; i++)
     {
         NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
-        NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
+        NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.num_layers, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
         NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
         NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
         NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
@@ -325,7 +323,7 @@ void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width)
 
     // Allocate depth/stencil buffer.
     NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glDepthStencilBuffer));
-    NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, s.width, s.height, s.depth, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0));
+    NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, s.width, s.height, s.num_layers, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0));
 
     // (Re-)register all GL buffers into Cuda.
     for (int i=0; i < num_outputs; i++)
@@ -334,9 +332,8 @@ void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width)
     return;
 }
 
-void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, int height, int width)
+void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri)
 {
-    int depth = 1024;
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
@@ -356,8 +353,6 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
     NVDR_CHECK(pos.sizes().size() == 2 && pos.size(0) > 0 && pos.size(1) == 4, "range mode - pos must have shape [>0, 4]");
     NVDR_CHECK(tri.sizes().size() == 2 && tri.size(0) > 0 && tri.size(1) == 3, "tri must have shape [>0, 3]");
 
-    // Get output shape.
-    NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
 
     // Get position and triangle buffer sizes in int32/float32.
     int posCount = 4 * pos.size(0);
@@ -418,12 +413,11 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
     NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glTriPtr, triPtr, triCount * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream));
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
 
-    uint sub_total_poses = 1024;
     if (s.cudaPoseTexture)
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPoseTexture));
     NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPoseTexture));
     NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, s.glPoseTexture));
-    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, sub_total_poses, 0, GL_RGBA, GL_FLOAT, 0));
+    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, s.num_layers, 0, GL_RGBA, GL_FLOAT, 0));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
@@ -432,17 +426,7 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
     s.model_counter = s.model_counter + 1;
 }
 
-void load_obs_image(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor obs_image){
-    NVDR_CHECK_DEVICE(obs_image);
-    NVDR_CHECK_CONTIGUOUS(obs_image);
-    NVDR_CHECK_F32(obs_image);
-    RasterizeGLState& s = *stateWrapper.pState;
-    unsigned int bytes = obs_image.size(0)*obs_image.size(1)*4*sizeof(float);
-    cudaMalloc((void**)&s.obs_image, bytes);
-    cudaMemcpy(s.obs_image, obs_image.data_ptr<float>(),  bytes, cudaMemcpyDeviceToDevice);
-}
-
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, uint height, uint width, const std::vector<int> indices)
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices)
 {
     NVDR_CHECK_DEVICE(pose);
     NVDR_CHECK_CONTIGUOUS(pose);
@@ -461,7 +445,6 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
 
     uint num_total_poses = pose.size(0);
     uint num_objects = pose.size(1);
-    uint sub_total_poses = 1024;
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
@@ -484,13 +467,13 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
 
     // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    torch::Tensor output_torch_tensor = torch::empty({num_total_poses,height,width,4}, opts);
+    torch::Tensor output_torch_tensor = torch::empty({num_total_poses,s.img_height, s.img_width,4}, opts);
 
-    for(int start_pose_idx=0; start_pose_idx < num_total_poses; start_pose_idx+=sub_total_poses)
+    for(int start_pose_idx=0; start_pose_idx < num_total_poses; start_pose_idx+=s.num_layers)
     {
-        int poses_on_this_iter = std::min(num_total_poses-start_pose_idx, sub_total_poses);
+        int poses_on_this_iter = std::min(num_total_poses-start_pose_idx, s.num_layers);
         // Set viewport, clear color buffer(s) and depth/stencil buffer.
-        NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
+        NVDR_CHECK_GL_ERROR(glViewport(0, 0, s.img_width, s.img_height));
         NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
 
         for(int object_idx=0; object_idx < indices.size(); object_idx++){
@@ -523,12 +506,12 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
         cudaMemcpy3DParms p = {0};
         p.srcArray = array;
-        p.dstPtr.ptr = output_torch_tensor.data_ptr<float>() + start_pose_idx*height*width*4;
-        p.dstPtr.pitch = width * 4 * sizeof(float);
-        p.dstPtr.xsize = width;
-        p.dstPtr.ysize = height;
-        p.extent.width = width;
-        p.extent.height = height;
+        p.dstPtr.ptr = output_torch_tensor.data_ptr<float>() + start_pose_idx*s.img_height*s.img_width*4;
+        p.dstPtr.pitch = s.img_width * 4 * sizeof(float);
+        p.dstPtr.xsize = s.img_width;
+        p.dstPtr.ysize = s.img_height;
+        p.extent.width = s.img_width;
+        p.extent.height = s.img_height;
         p.extent.depth = poses_on_this_iter;
         p.kind = cudaMemcpyDeviceToDevice;
         NVDR_CHECK_CUDA_ERROR(cudaMemcpy3D(&p));
@@ -551,7 +534,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // Ops.
     m.def("setup", &setup, "rasterize forward op (opengl)");
     m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
-    m.def("load_obs_image", &load_obs_image, "rasterize forward op (opengl)");
     m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
 }
 
