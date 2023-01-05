@@ -51,7 +51,7 @@ print("gt_poses.shape", gt_poses.shape)
 
 
 
-gt_images = jax3dp3.render_multi(gt_poses, h,w, 0)
+gt_images = jax3dp3.render_parallel(gt_poses, h,w, 0)
 print("gt_images.shape", gt_images.shape)
 print((gt_images[0,:,:,-1] > 0 ).sum())
 
@@ -71,12 +71,12 @@ start = time.time()
 pose_estimates_over_time = []
 for gt_image in gt_images:
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, translation_deltas)
-    images = jax3dp3.render_multi(proposals, h,w, 0)
+    images = jax3dp3.render_parallel(proposals, h,w, 0)
     weights_new = scorer_parallel_jit(images, gt_image, 0.05, 0.1)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, rotation_deltas)
-    images = jax3dp3.render_multi(proposals, h,w, 0)
+    images = jax3dp3.render_parallel(proposals, h,w, 0)
     weights_new = scorer_parallel_jit(images, gt_image, 0.05, 0.1)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
@@ -90,7 +90,7 @@ viz_images = []
 max_depth = 10.0
 for i in range(gt_images.shape[0]):
     gt_img = jax3dp3.viz.get_depth_image(gt_images[i,:,:,2], max=max_depth)
-    rendered_image = jax3dp3.render(pose_estimates_over_time[i], h,w, 0)
+    rendered_image = jax3dp3.render_single_object(pose_estimates_over_time[i], h,w, 0)
     rendered_img = jax3dp3.viz.get_depth_image(rendered_image[:,:,2], max=max_depth)
     viz_images.append(
         jax3dp3.viz.multi_panel(
