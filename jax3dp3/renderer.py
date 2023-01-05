@@ -29,13 +29,23 @@ def load_model(mesh, h, w):
         h,w
     )
 
-def render_multi(poses, h, w, idx):
+def render_to_torch(poses, h, w, idx):
     poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(poses))
     images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(RENDERER_ENV.cpp_wrapper, poses_torch, PROJ_LIST, h, w, idx)
+    return images_torch
+
+def render_single_object(pose, h, w, idx):
+    images_torch = render_to_torch(pose[None, None, :, :], h,w, [idx])
+    return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+
+def render_parallel(poses, h, w, idx):
+    images_torch = render_to_torch(poses[:, None, :, :], h,w, [idx])
     return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
 
-
-def render(pose, h, w, idx):
-    poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(pose))
-    images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(RENDERER_ENV.cpp_wrapper, poses_torch, PROJ_LIST, h, w, idx)
+def render_multiobject(poses, h, w, indices):
+    images_torch = render_to_torch(poses[None, :, :, :], h,w, indices)
     return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+
+def render_multiobject_parallel(poses, h, w, indices):
+    images_torch = render_to_torch(poses, h,w, indices)
+    return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
