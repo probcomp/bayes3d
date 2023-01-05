@@ -8,6 +8,10 @@ import os
 def get_assets_dir():
     return os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
 
+def get_data_dir():
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)),"data")
+
+
 def extract_2d_patches(data: jnp.ndarray, filter_shape: Tuple[int, int]) -> jnp.ndarray:
     """For each pixel, extract 2D patches centered at that pixel.
     Args:
