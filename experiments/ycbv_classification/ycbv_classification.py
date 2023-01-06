@@ -22,8 +22,9 @@ segmentation mask -> -1 and obj indices
 
 ## choose a test image and object
 test_img = jax3dp3.ycb_loader.get_test_img('49', '570', f"{jax3dp3.utils.get_data_dir()}/ycbv_test")
-depth = test_img.get_depth_image()
-obj_number = 2  # 1 doesnt work
+depth_data = test_img.get_depth_image()
+rgb_img_data = test_img.get_rgb_image()
+obj_number = 1  # 2 ok 
 segmentation = test_img.get_object_masks()[obj_number]
 gt_obj_idx = test_img.get_gt_indices()[obj_number]
 
@@ -34,7 +35,9 @@ fx, fy, cx, cy = test_img.get_camera_intrinsics()
 print("intrinsics:", orig_h, orig_w, fx, fy, cx, cy)
 h, w, fx, fy, cx, cy  = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,fx,fy,cx,cy, 0.40)
 print("intrinsics:", h, w, fx, fy, cx, cy)
-near = 1.0; far = max_depth = 10000.0
+
+near = jnp.min(depth_data[depth_data != 0]) * 0.95
+far = jnp.max(depth_data) * 1.05
 
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far, num_layers = 128)
 
@@ -53,18 +56,17 @@ for idx in range(num_models):
 
 ## TODO: make ONE mask that has indices (and -1 otherwise)
 # from IPython import embed; embed()
-gt_image = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth * (segmentation == 255.0)), (w,h),interpolation=0), fx,fy,cx,cy)
-depth_img = jax3dp3.viz.get_depth_image(gt_image[:,:,2], max=max_depth)
-depth_img.save("depth_image.png")
-rgb_image = test_img.get_rgb_image()
-jax3dp3.viz.save_rgb_image(rgb_image, max_val=255.0, filename="gt_rgb.png")
+gt_img = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth_data * (segmentation == 255.0)), (w,h),interpolation=0), fx,fy,cx,cy)
+depth_img = jax3dp3.viz.get_depth_image(gt_img[:,:,2], max=far).resize((w,h))
+rgb_img = jax3dp3.viz.get_rgb_image(rgb_img_data, max_val=255.0).resize((w,h))
+gt_img_complement = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth_data * (segmentation != 255.0)), (w,h),interpolation=0), fx,fy,cx,cy)
 
-gt_image_complement = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth * (segmentation != 255.0)), (w,h),interpolation=0), fx,fy,cx,cy)
-jax3dp3.viz.save_depth_image(gt_image_complement[:, :, 2], "gt_img_complement.png", max=max_depth)
+# segmentation = jnp.asarray(cv2.resize(np.asarray(segmentation), (w,h), interpolation=0))
+depth_img.save("gt_depth_image.png")
+rgb_img.save("gt_rgb.png")
+jax3dp3.viz.save_depth_image(gt_img_complement[:, :, 2], "gt_img_complement.png", max=far)
 
-segmentation = jnp.asarray(cv2.resize(np.asarray(segmentation), (w,h), interpolation=0))
-
-non_zero_points = gt_image[gt_image[:,:,2]>0,:3]
+non_zero_points = gt_img[gt_img[:,:,2]>0,:3]
 _, centroid_pose = jax3dp3.utils.axis_aligned_bounding_box(non_zero_points)
 rotation_deltas = jax3dp3.enumerations.make_rotation_grid_enumeration(60, 40)
 
@@ -83,19 +85,27 @@ start= time.time()
 all_scores = []
 for idx in range(num_models):
     images_unmasked = jax3dp3.render_parallel(poses_to_score, idx)
-    blocked = images_unmasked[:,:,:,2] >= gt_image_complement[None,:,:,2] 
-    nonzero = gt_image_complement[None, :, :, 2] != 0
+    blocked = images_unmasked[:,:,:,2] >= gt_img_complement[None,:,:,2] 
+    nonzero = gt_img_complement[None, :, :, 2] != 0
 
     images = images_unmasked * (1-(blocked * nonzero))[:,:,:, None] 
-    # images = images_unmasked * (segmentation == 255.0)[None, :, :, None]
-    # images = images_unmasked
 
-    weights = scorer_parallel_jit(images, gt_image, 0.1, 0.05)
+    weights = scorer_parallel_jit(images, gt_img, 0.1, 0.05)
     best_pose_idx = weights.argmax()
-    best_model_img = jax3dp3.viz.get_depth_image(images[best_pose_idx,:,:,2], max=max_depth)
-    overlayed = jax3dp3.viz.overlay_image(depth_img, best_model_img, alpha=0.8)
-    overlayed.save(f"imgs/best_{model_names[idx]}.png")
+  
     all_scores.append(weights[best_pose_idx])
+
+    best_model_img = jax3dp3.viz.get_depth_image(images[best_pose_idx,:,:,2], max=far)
+    overlayed = jax3dp3.viz.overlay_image(depth_img, best_model_img, alpha=0.8)
+
+    multi = jax3dp3.viz.multi_panel(
+            [rgb_img, best_model_img, depth_img, overlayed],
+            ["Scene", "Best pose rendered", "GT depth", "Overlay"],
+            middle_width=10,
+            top_border=50,
+            fontsize=20
+        )
+    multi.save(f"imgs/best_{idx}.png")
 best_model = model_names[np.argmax(all_scores)]
 end= time.time()
  
