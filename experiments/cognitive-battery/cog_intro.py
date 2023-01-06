@@ -102,9 +102,6 @@ for obj_id in jnp.unique(seg_img):
     init_poses.append(init_pose)
 
     shape, dim = jax3dp3.jax_rendering.get_rectangular_prism_shape(dims)
-    # print('dims:');print(dims)
-    # print('center_of_box:');print(center_of_box)
-    # print("\n")
     shape_planes.append(shape)
     shape_dims.append(dim)
     # break
