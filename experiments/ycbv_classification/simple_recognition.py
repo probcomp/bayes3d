@@ -48,8 +48,54 @@ poses_to_score = jnp.einsum("ij,ajk->aik", centroid_pose, rotation_deltas)
 
 object_indices = list(range(len(model_names)))
 
+import jax.experimental.host_callback as hcb
+
+dummy = jnp.zeros((1000,h,w,4))
+
+def f(p, device):
+    return jnp.zeros((1000,h,w,4))
+
+_ret = jax3dp3.render_multi(poses_to_score,h,w,0)
+
+import numpy as np
+
+def rm_wrapper(poses_idx, device=None):
+    poses, idx = poses_idx
+    result = jax3dp3.render_multi(jnp.asarray(poses),h,w,idx)
+    return result
+# rm_wrapper((poses_to_score, 0))
+
+# def callback_renderer(poses_to_score, idx):
+#     return hcb.call(rm_wrapper, (poses_to_score, idx), result_shape=_ret, call_with_device=True)
+# callback_renderer_jit = jax.jit(callback_renderer)
+
+def callback_renderer(poses_to_score, idx):
+    return jax.pure_callback(rm_wrapper, 
+        jax.ShapeDtypeStruct((poses_to_score.shape[0],h,w,4),'float32'), 
+        (poses_to_score, idx))
+
+
+vmap_wrapper = jax.vmap(rm_wrapper, in_axes=((None, (0,)),))  # fails
+vmap_cbr = jax.vmap(callback_renderer, in_axes=(None,0))
+
+vmap_cbr_jit = jax.jit(vmap_cbr)
+
+
+from IPython import embed; embed()
+
+hcb.call(rm_wrapper, poses_to_score, 
+        result_shape=jax.ShapeDtypeStruct((1000,h,w,4), poses_to_score.dtype),call_with_device=True)
+
+
+ret = hcb.call(rm_wrapper, 
+        (poses_to_score, 0), 
+        result_shape=(poses_to_score.shape[0], h, w, 4, poses_to_score.dtype),
+        call_with_device=True)
+
+from IPython import embed; embed()
+
 start= time.time()
-all_scores = []
+all_scores = [] 
 for idx in object_indices:
     images = jax3dp3.render_parallel(poses_to_score, idx)
     weights = scorer_parallel_jit(images, gt_image, 0.01, 0.2)
@@ -63,6 +109,7 @@ print ("Time elapsed:", end - start)
 
 print(np.array(model_names)[np.argsort(all_scores)])
 print(np.array(all_scores)[np.argsort(all_scores)])
+
 
 
 from IPython import embed; embed()

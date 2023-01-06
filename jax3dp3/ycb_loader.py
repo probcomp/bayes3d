@@ -67,7 +67,7 @@ def get_test_img(scene_id, img_id, data_dir):
         cam_t_m2c = jnp.array(object_gt_data['cam_t_m2c']).reshape(3,1)
         cam_pose_m2c = jnp.vstack([jnp.hstack([cam_R_m2c, cam_t_m2c]), jnp.array([0,0,0,1])])
         
-        obj_id = object_gt_data['obj_id']
+        obj_id = object_gt_data['obj_id'] - 1
 
         gt_ids.append(obj_id)
         anno.append({'mask_visible': mask_visible, 'gt_poses_m2c': cam_pose_m2c})

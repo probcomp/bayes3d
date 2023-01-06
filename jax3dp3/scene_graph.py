@@ -1,6 +1,5 @@
 from .transforms_3d import rotation_from_axis_angle, transform_from_rot_and_pos, transform_from_pos, transform_from_axis_angle
 import jax.numpy as jnp
-import networkx as nx
 import jax
 
 def get_contact_planes(dimensions):
