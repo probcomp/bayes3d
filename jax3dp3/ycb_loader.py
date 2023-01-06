@@ -78,7 +78,7 @@ def get_test_img(scene_id, img_id, data_dir):
                             scene_id=scene_id, 
                             img_id=img_id,
                             rgb=rgb,
-                            depth=depth,
+                            depth=depth * cam_depth_scale,
                             intrinsics=cam_K,
                             camera_pose=cam_pose_w2c,
                             bop_obj_indices=gt_ids,
