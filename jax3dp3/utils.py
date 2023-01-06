@@ -2,10 +2,15 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 import jax
+import jax3dp3.transforms_3d as t3d
 import os
 
 def get_assets_dir():
     return os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
+
+def get_data_dir():
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)),"data")
+
 
 def extract_2d_patches(data: jnp.ndarray, filter_shape: Tuple[int, int]) -> jnp.ndarray:
     """For each pixel, extract 2D patches centered at that pixel.
@@ -44,24 +49,6 @@ def extract_2d_patches(data: jnp.ndarray, filter_shape: Tuple[int, int]) -> jnp.
     )
     return extracted_patches
 
-def make_centered_grid_enumeration_3d_points(x,y,z,num_x,num_y,num_z):
-    deltas = jnp.stack(jnp.meshgrid(
-        jnp.linspace(-x,x,num_x),
-        jnp.linspace(-y,y,num_y),
-        jnp.linspace(-z,z,num_z)
-    ),
-        axis=-1)
-    deltas = deltas.reshape(-1,3)
-    return deltas
-
-def make_centered_grid_enumeration_2d_points(min_x,max_x,min_y,max_y,num_x,num_y):
-    deltas = jnp.stack(jnp.meshgrid(
-        jnp.linspace(min_x,max_x,num_x),
-        jnp.linspace(min_y,max_y,num_y),
-    ),
-        axis=-1)
-    deltas = deltas.reshape(-1,2)
-    return deltas
 
 def make_cube_point_cloud(side_width, num_points):
     side_half_width = side_width / 2.0
@@ -85,3 +72,9 @@ def make_cube_point_cloud(side_width, num_points):
     object_model_cloud = np.vstack(all_faces)
     return jnp.array(object_model_cloud)
 
+def axis_aligned_bounding_box(object_points):
+    maxs = jnp.max(object_points,axis=0)
+    mins = jnp.min(object_points,axis=0)
+    dims = (maxs - mins)
+    center = (maxs + mins) / 2
+    return dims, t3d.transform_from_pos(center)    

@@ -8,6 +8,12 @@ pip install -r requirements.txt
 python setup.py develop
 ```
 
+Add the following to `bashrc`
+```
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+```
+
+
 Install `jax` and `jaxlib`
 ```
 # Installs the wheel compatible with Cuda >= 11.4 and cudnn >= 8.2

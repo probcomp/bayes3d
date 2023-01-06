@@ -90,6 +90,14 @@ def quaternion_to_rotation_matrix(Q):
                             
     return rot_matrix
 
+
+def rotation_matrix_to_xyzw(matrix):
+    wxyz = rotation_matrix_to_quaternion(matrix)
+    return jnp.array([*wxyz[1:], wxyz[0]])
+
+def xyzw_to_rotation_matrix(xyzw):
+    return quaternion_to_rotation_matrix(jnp.array([xyzw[-1], *xyzw[:-1]]))
+
 def rotation_matrix_to_quaternion(matrix):
 
     def case0(m):

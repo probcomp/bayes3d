@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
 from jax3dp3.utils import depth_to_coords_in_camera
 from jax3dp3.transforms_3d import transform_from_pos
-from jax3dp3.shape import (
+from jax3dp3.rendering.shape import (
     get_rectangular_prism_shape,
 )
 from jax3dp3.likelihood import threedp3_likelihood
 import jax.numpy as jnp
 import jax
 from scipy.spatial.transform import Rotation as R
-from jax3dp3.rendering import render_planes_multiobject
+from jax3dp3.rendering.jax_rendering import render_planes_multiobject
 from jax3dp3.enumerations import make_translation_grid_enumeration
 from jax3dp3.enumerations_procedure import enumerative_inference_single_frame
 from jax3dp3.batched_scorer import batched_scorer_parallel
