@@ -9,11 +9,21 @@ import jax
 import jax3dp3
 import jax3dp3.transforms_3d as t3d
 
+"""
+#TODO
+multipanel: GT and rendered and overlay
+select min/max depths 
+
+param settings for #1 (rotation incorrect) (r/outlier)
+see gridding test.py trans/rot 
+segmentation mask -> -1 and obj indices
+"""
+
 
 ## choose a test image and object
-test_img = jax3dp3.ycb_loader.get_test_img('52', '1', f"{jax3dp3.utils.get_data_dir()}/ycbv_test")
+test_img = jax3dp3.ycb_loader.get_test_img('49', '570', f"{jax3dp3.utils.get_data_dir()}/ycbv_test")
 depth = test_img.get_depth_image()
-obj_number = 2
+obj_number = 2  # 1 doesnt work
 segmentation = test_img.get_object_masks()[obj_number]
 gt_obj_idx = test_img.get_gt_indices()[obj_number]
 
@@ -22,7 +32,7 @@ gt_obj_idx = test_img.get_gt_indices()[obj_number]
 orig_h, orig_w = test_img.get_image_dims()
 fx, fy, cx, cy = test_img.get_camera_intrinsics()
 print("intrinsics:", orig_h, orig_w, fx, fy, cx, cy)
-h, w, fx, fy, cx, cy  = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,fx,fy,cx,cy, 0.30)
+h, w, fx, fy, cx, cy  = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,fx,fy,cx,cy, 0.40)
 print("intrinsics:", h, w, fx, fy, cx, cy)
 near = 1.0; far = max_depth = 10000.0
 
@@ -49,6 +59,11 @@ depth_img.save("depth_image.png")
 rgb_image = test_img.get_rgb_image()
 jax3dp3.viz.save_rgb_image(rgb_image, max_val=255.0, filename="gt_rgb.png")
 
+gt_image_complement = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth * (segmentation != 255.0)), (w,h),interpolation=0), fx,fy,cx,cy)
+jax3dp3.viz.save_depth_image(gt_image_complement[:, :, 2], "gt_img_complement.png", max=max_depth)
+
+segmentation = jnp.asarray(cv2.resize(np.asarray(segmentation), (w,h), interpolation=0))
+
 non_zero_points = gt_image[gt_image[:,:,2]>0,:3]
 _, centroid_pose = jax3dp3.utils.axis_aligned_bounding_box(non_zero_points)
 rotation_deltas = jax3dp3.enumerations.make_rotation_grid_enumeration(60, 40)
@@ -67,8 +82,15 @@ scorer_parallel_jit = jax.jit(scorer_parallel)
 start= time.time()
 all_scores = []
 for idx in range(num_models):
-    images = jax3dp3.render_parallel(poses_to_score, idx)
-    weights = scorer_parallel_jit(images, gt_image, 0.05, 0.1)
+    images_unmasked = jax3dp3.render_parallel(poses_to_score, idx)
+    blocked = images_unmasked[:,:,:,2] >= gt_image_complement[None,:,:,2] 
+    nonzero = gt_image_complement[None, :, :, 2] != 0
+
+    images = images_unmasked * (1-(blocked * nonzero))[:,:,:, None] 
+    # images = images_unmasked * (segmentation == 255.0)[None, :, :, None]
+    # images = images_unmasked
+
+    weights = scorer_parallel_jit(images, gt_image, 0.1, 0.05)
     best_pose_idx = weights.argmax()
     best_model_img = jax3dp3.viz.get_depth_image(images[best_pose_idx,:,:,2], max=max_depth)
     overlayed = jax3dp3.viz.overlay_image(depth_img, best_model_img, alpha=0.8)
