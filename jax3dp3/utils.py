@@ -4,6 +4,7 @@ from typing import Tuple
 import jax
 import jax3dp3.transforms_3d as t3d
 import os
+import pyransac3d
 
 def get_assets_dir():
     return os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
@@ -77,4 +78,16 @@ def axis_aligned_bounding_box(object_points):
     mins = jnp.min(object_points,axis=0)
     dims = (maxs - mins)
     center = (maxs + mins) / 2
-    return dims, t3d.transform_from_pos(center)    
+    return dims, t3d.transform_from_pos(center)
+
+def find_plane(point_cloud, threshold):
+    plane = pyransac3d.Plane()
+    plane_eq, _ = plane.fit(point_cloud, threshold)
+    plane_eq = np.array(plane_eq)
+    plane_normal = np.array(plane_eq[:3])
+    point_on_plane = plane_normal * -plane_eq[3]
+    plane_x = np.cross(plane_normal, np.array([1.0, 0.0, 0.0]))
+    plane_y = np.cross(plane_normal, plane_x)
+    R = np.vstack([plane_x, plane_y, plane_normal]).T
+    plane_pose = t3d.transform_from_rot_and_pos(R, point_on_plane)
+    return plane_pose

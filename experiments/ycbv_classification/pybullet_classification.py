@@ -35,6 +35,22 @@ for model in model_names:
     jax3dp3.load_model(mesh)
 
 
+gt_image_full = t3d.depth_to_point_cloud_image(cv2.resize(depth, (w,h),interpolation=0), fx,fy,cx,cy)
+jax3dp3.viz.save_depth_image(gt_image_full[:,:,2], "gt_image_full.png", max=max_depth)
+
+gt_point_cloud = np.array(gt_image_full.reshape(-1,3))
+plane_pose =  jax3dp3.utils.find_plane(gt_point_cloud[gt_point_cloud[:,2]<far,:], 0.02)
+points_in_table_frame = t3d.apply_transform(gt_point_cloud, jnp.linalg.inv(plane_pose))
+inliers = (jnp.abs(points_in_table_frame[:,2]) < 0.02)
+inliers_img = inliers.reshape(gt_image_full.shape[:2])
+jax3dp3.viz.save_depth_image(gt_image_full[:,:,2] * inliers_img, "gt_image_masked.png", max=max_depth)
+
+from IPython import embed; embed()
+
+
+
+
+
 gt_image = t3d.depth_to_point_cloud_image(cv2.resize(depth * (segmentation == 1), (w,h),interpolation=0), fx,fy,cx,cy)
 jax3dp3.viz.save_depth_image(gt_image[:,:,2], "gt_image.png", max=max_depth)
 
