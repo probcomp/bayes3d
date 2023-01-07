@@ -91,6 +91,22 @@ def multi_panel(images, labels, middle_width=10, top_border=20, fontsize=20):
     return dst
 
 
+def multi_panel_vertical(images, middle_width=10, top_border=20, fontsize=20):
+    num_images = len(images)
+    w = images[0].width
+    h = images[0].height
+    dst = Image.new(
+        "RGBA", (w, num_images * h + (num_images - 1) * middle_width + top_border), (255, 255, 255, 255)
+    )
+    for (j, img) in enumerate(images):
+        dst.paste(
+            img,
+            (0, top_border + j * h + j * middle_width)
+        )
+
+    return dst
+    
+
 
 # Max Val
 
