@@ -22,12 +22,15 @@ segmentation mask -> -1 and obj indices
 
 
 ## choose a test image and object
-test_img = jax3dp3.ycb_loader.get_test_img('49', '570', f"{jax3dp3.utils.get_data_dir()}/ycbv_test")
+scene_id = '49'     # 48 ... 59
+img_id = '1179'      
+test_img = jax3dp3.ycb_loader.get_test_img(scene_id, img_id, f"{jax3dp3.utils.get_data_dir()}/ycbv_test")
 depth_data = test_img.get_depth_image()
 rgb_img_data = test_img.get_rgb_image()
-obj_number = 2  # 1 fails 
+obj_number = 0
 segmentation = test_img.get_object_masks()[obj_number]
 gt_ycb_idx = test_img.get_gt_indices()[obj_number]
+print("GT ycb idx=", gt_ycb_idx)
 
 
 ## setup intrinsics
@@ -73,8 +76,8 @@ jax3dp3.viz.save_depth_image(gt_img_complement[:, :, 2], "gt_img_complement.png"
 
 non_zero_points = gt_img[gt_img[:,:,2]>0,:3]
 _, centroid_pose = jax3dp3.utils.axis_aligned_bounding_box(non_zero_points)
-fibonacci_sphere_points, num_planar_angle_points = 80, 60
-rotation_deltas = jax3dp3.enumerations.make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_points)
+fib_sph_pts, planar_ang_pts = 50, 20
+rotation_deltas = jax3dp3.enumerations.make_rotation_grid_enumeration(fib_sph_pts, planar_ang_pts)
 
 centroid_pose = t3d.transform_from_pos(test_img.get_gt_poses()[obj_number][:3, 3])
 poses_to_score = jnp.einsum("ij,ajk->aik", centroid_pose, rotation_deltas)
@@ -149,8 +152,8 @@ images_unmasked = jax3dp3.render_parallel(poses_to_score, idx)
 # setup parameter ranges
 max_r = 20
 min_r = 0
-likelihood_r_range = [10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 1.0] #[r for r in reversed(np.linspace(5, max_r,10))] + [r for r in reversed(np.linspace(1,5,10))] + [r for r in reversed(np.linspace(min_r,1,20))] 
-outlier_prob_range = [0.1, 0.05, 0.01, 0.004] 
+likelihood_r_range = [12.0, 10.0, 9.0, 8.0, 6.0, 4.0] #[r for r in reversed(np.linspace(5, max_r,10))] + [r for r in reversed(np.linspace(1,5,10))] + [r for r in reversed(np.linspace(min_r,1,20))] 
+outlier_prob_range = [0.05, 0.01, 0.005] 
 TOP_K_VIZ = 5
 
 # get best results
@@ -159,6 +162,7 @@ all_models_best_results = get_models_best_results(np.arange(num_models), likelih
 for likelihood_r in likelihood_r_range: # one frame in gif
     rows = []
     for outlier_prob in outlier_prob_range: # one row in gif
+
 
         params = (likelihood_r, outlier_prob)
         print(f"likelihood r ={likelihood_r}, outlier_prob = {outlier_prob}")
@@ -180,7 +184,7 @@ for likelihood_r in likelihood_r_range: # one frame in gif
         
         # initialize panel img + label
         panels = [gt_depth_img]
-        labels = [f"GT Image\n ycb model idx={gt_ycb_idx}\nFib sphere pts={fibonacci_sphere_points},\nPlanar angles={num_planar_angle_points}"]
+        labels = [f"GT Image\n ycb model idx={gt_ycb_idx}\nFib sphere pts={fib_sph_pts},\nPlanar angles={planar_ang_pts}"]
 
 
         # make panel img for each model 
@@ -219,7 +223,7 @@ for _ in range(5):
 
     
 all_images[0].save(
-    fp=f"likelihood_panels_gt_{gt_ycb_idx}.gif",
+    fp=f"panels_{scene_id}_{img_id}_obj{obj_number}_gt{gt_ycb_idx}_rot{fib_sph_pts}_{planar_ang_pts}.gif",
     format="GIF",
     append_images=all_images,
     save_all=True,
