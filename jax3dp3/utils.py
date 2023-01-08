@@ -2,9 +2,11 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 import jax
+import cv2
 import jax3dp3.transforms_3d as t3d
 import os
 import pyransac3d
+import sklearn.cluster
 
 def get_assets_dir():
     return os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
@@ -91,3 +93,38 @@ def find_plane(point_cloud, threshold):
     R = np.vstack([plane_x, plane_y, plane_normal]).T
     plane_pose = t3d.transform_from_rot_and_pos(R, point_on_plane)
     return plane_pose
+
+def find_table_pose_and_dims(point_cloud, plane_pose, inlier_threshold, segmentation_threshold):
+    points_in_plane_frame = t3d.apply_transform(point_cloud, jnp.linalg.inv(plane_pose))
+    inliers = (jnp.abs(points_in_plane_frame[:,2]) < inlier_threshold)
+    inlier_plane_points = points_in_plane_frame[inliers]
+    inlier_table_points_seg = segment_point_cloud(inlier_plane_points, segmentation_threshold)
+    
+    table_points_in_plane_frame = inlier_plane_points[inlier_table_points_seg == 0]
+    (cx,cy), (width,height), rotation_deg = cv2.minAreaRect(np.array(table_points_in_plane_frame[:,:2]))
+    pose_shift = t3d.transform_from_rot_and_pos(
+        t3d.rotation_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), jnp.deg2rad(rotation_deg)),
+        jnp.array([cx,cy, 0.0])
+    )
+    return plane_pose.dot(pose_shift), jnp.array([width, height, 0.000001])
+
+def segment_point_cloud(point_cloud, threshold):
+    c = sklearn.cluster.DBSCAN(eps=threshold).fit(point_cloud)
+    labels = c.labels_
+    return labels
+
+def segment_point_cloud_image(point_cloud_image, threshold):
+    point_cloud = point_cloud_image.reshape(-1,3)
+    non_zero = point_cloud[:,2] > 0.0
+    non_zero_indices = np.where(non_zero)[0]
+    segmentation = segment_point_cloud(point_cloud[non_zero_indices,:], threshold)
+    segmentation_img = np.ones(point_cloud.shape[0]) * -1.0 
+    print(np.unique(segmentation))
+    for (i,val) in enumerate(np.unique(segmentation)):
+        segmentation_img[non_zero_indices[segmentation == val]] = i
+    segmentation_img = segmentation_img.reshape(point_cloud_image.shape[:2])
+    return segmentation_img
+
+def point_cloud_image_to_points(point_cloud_image):
+    point_cloud = point_cloud_image.reshape(-1,3)
+    return point_cloud[point_cloud[:,2]>0.0, :]

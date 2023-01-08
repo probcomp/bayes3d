@@ -31,8 +31,8 @@ p.connect(p.GUI)
 
 model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
 model_names = os.listdir(model_dir)
-idx_1 = 0
-idx_2 = 1
+idx_1 = 3
+idx_2 = 4
 cracker_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/{}/textured_simple.obj".format(model_names[idx_1]))
 cracker_box_mesh = trimesh.load(cracker_box_path)
 cracker_box_mesh_centered = jax3dp3.mesh.center_mesh(cracker_box_mesh)
@@ -50,7 +50,7 @@ sugar_box_mesh_centered.export(sugar_box_centered_path)
 table_mesh = jax3dp3.mesh.center_mesh(jax3dp3.mesh.make_table_mesh(
     1.0,
     2.0,
-    0.8,
+    0.7,
     0.01,
     0.01
 ))
