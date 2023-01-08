@@ -158,6 +158,15 @@ class BOPTestImage:
     def get_depth_image(self):
         return self.depth 
 
+    def get_segmentation_image(self):
+        segmentation = np.zeros((self.get_image_dims()))
+
+        for obj_number in range(len(self.get_gt_indices())):
+            segmentation_obj = self.get_object_masks()[obj_number]
+            segmentation[segmentation_obj == 255.0] = obj_number
+
+        return segmentation
+
     def get_gt_indices(self):
         return self.bop_obj_indices
 
@@ -169,7 +178,9 @@ class BOPTestImage:
         gt_poses = [anno['gt_poses_m2c'] for anno in self.annotations]
         return gt_poses
 
-
+    def get_gt_poses_world_frame(self):
+        gt_poses_world_frame = [pose @ self.camera_pose for pose in self.get_gt_poses()]
+        return gt_poses_world_frame
 
 
 
