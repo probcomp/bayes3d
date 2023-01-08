@@ -32,6 +32,7 @@ segmentation = test_img.get_object_masks()[obj_number]
 gt_ycb_idx = test_img.get_gt_indices()[obj_number]
 print("GT ycb idx=", gt_ycb_idx)
 
+from IPython import embed; embed()
 
 ## setup intrinsics
 orig_h, orig_w = test_img.get_image_dims()
