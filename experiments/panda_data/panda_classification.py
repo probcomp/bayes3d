@@ -9,7 +9,7 @@ import time
 import jax3dp3
 import pickle
 
-file = open("./panda_dataset/scene_6.pkl",'rb')
+file = open("./panda_dataset/scene_1.pkl",'rb')
 all_data = pickle.load(file)
 file.close()
 
@@ -76,7 +76,7 @@ jax3dp3.viz.save_depth_image(segmentation_img + 1, "seg.png", max=segmentation_i
 unique, counts =  np.unique(segmentation_img, return_counts=True)
 print(unique[np.argsort(-counts)])
 
-gt_image_single_object = gt_image_full * (segmentation_img ==2)[:,:,None]
+gt_image_single_object = gt_image_full * (segmentation_img ==5)[:,:,None]
 gt_img_viz = jax3dp3.viz.get_depth_image(gt_image_single_object[:,:,2],  max=max_depth)
 gt_img_viz.save("gt_image_single_object.png")
 
@@ -99,38 +99,38 @@ center_x, center_y, _ = ( gt_points_in_table_frame_filtered.min(0) + gt_points_i
 
 table_face_param = 2
 
-grid_width = 0.1
-contact_params_sweep = jax3dp3.make_translation_grid_enumeration_3d(center_x-grid_width, center_y-grid_width, 0.0, center_x+grid_width, center_y+grid_width, jnp.pi*2, 11, 11, 10)
-poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from_contact, in_axes=(0, None, None, None, None)))
+grid_width = 0.05
+contact_params_sweep = jax3dp3.make_translation_grid_enumeration_3d(center_x-grid_width, center_y-grid_width, 0.0, center_x+grid_width, center_y+grid_width, jnp.pi*2, 9, 9, 10)
+contact_params_sweep_extended = jnp.tile(contact_params_sweep, (6,1))
+face_params = jnp.hstack(
+    [
+        jnp.full((contact_params_sweep.shape[0]*6,),table_face_param).reshape(-1,1),
+        jnp.repeat(jnp.arange(6),contact_params_sweep.shape[0]).reshape(-1,1)
+    ]
+)
+
+poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from_contact, in_axes=(0, 0, None, None, None)))
 scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
 
 
 
 object_indices = list(range(len(model_names)))
-start= time.time()
+start = time.time()
 all_scores = []
-model_indices = []
-params = []
 for idx in object_indices:
-    for child_face in range(6):
-        face_params = jnp.array([table_face_param, child_face])
-        pose_proposals = poses_from_contact_params_sweep(contact_params_sweep, face_params, table_dims, model_box_dims[idx], table_pose)
-        # proposals = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), pose_proposals)
-        proposals = pose_proposals
-        images = jax3dp3.render_parallel(proposals, idx)
-        weights = scorer_parallel_jit(gt_image_single_object, images, 0.05, 0.1, 1**3)
-        best_pose_idx = weights.argmax()
-        filename = "imgs/best_{}_face_{}.png".format(model_names[idx], child_face)
-        pred = jax3dp3.viz.get_depth_image(
-            images[best_pose_idx,:,:,2], max=max_depth
-        )
-        # pred.save(filename)
-        jax3dp3.viz.overlay_image(gt_img_viz, pred,alpha=0.5).save(filename)
-        all_scores.append(weights[best_pose_idx])
-        model_indices.append(idx)
-        params.append((child_face,))
-print(model_names[model_indices[np.argmax(all_scores)]])
-print(params[np.argmax(all_scores)])
+    pose_proposals = poses_from_contact_params_sweep(contact_params_sweep_extended, face_params, table_dims, model_box_dims[idx], table_pose)
+    proposals = pose_proposals
+    images = jax3dp3.render_parallel(proposals, idx)
+    weights = scorer_parallel_jit(gt_image_single_object, images, 0.05, 0.1, 1**3)
+    best_pose_idx = weights.argmax()
+    filename = "imgs/best_{}.png".format(model_names[idx])
+    pred = jax3dp3.viz.get_depth_image(
+        images[best_pose_idx,:,:,2], max=max_depth
+    )
+    # pred.save(filename)
+    jax3dp3.viz.overlay_image(gt_img_viz, pred,alpha=0.5).save(filename)
+    all_scores.append(weights[best_pose_idx])
+print(model_names[np.argmax(all_scores)])
 end= time.time()
 print ("Time elapsed:", end - start)
 
