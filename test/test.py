@@ -58,10 +58,10 @@ gt_images = jax3dp3.render_parallel(gt_poses,0)
 print("gt_images.shape", gt_images.shape)
 print((gt_images[0,:,:,-1] > 0 ).sum())
 
-def scorer(rendered_image, gt, r, outlier_prob):
-    weight = jax3dp3.likelihood.threedp3_likelihood(gt, rendered_image, r, outlier_prob)
+def scorer(rendered_image, gt, r, outlier_prob, outlier_volume):
+    weight = jax3dp3.likelihood.threedp3_likelihood(gt, rendered_image, r, outlier_prob, outlier_volume)
     return weight
-scorer_parallel = jax.vmap(scorer, in_axes=(0, None, None, None))
+scorer_parallel = jax.vmap(scorer, in_axes=(0, None, None, None, None))
 scorer_parallel_jit = jax.jit(scorer_parallel)
 
 translation_deltas = jax3dp3.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
@@ -75,12 +75,12 @@ pose_estimates_over_time = []
 for gt_image in gt_images:
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, translation_deltas)
     images = jax3dp3.render_parallel(proposals, 0)
-    weights_new = scorer_parallel_jit(images, gt_image, 0.05, 0.1)
+    weights_new = scorer_parallel_jit(images, gt_image, 0.05, 0.1, 10**3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, rotation_deltas)
     images = jax3dp3.render_parallel(proposals, 0)
-    weights_new = scorer_parallel_jit(images, gt_image, 0.05, 0.1)
+    weights_new = scorer_parallel_jit(images, gt_image, 0.05, 0.1, 10**3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     pose_estimates_over_time.append(pose_estimate)
