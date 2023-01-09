@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import jax
 import jax3dp3.transforms_3d as t3d
 
-def get_contact_planes(dimensions):
+def contact_planes(dimensions):
     return jnp.stack(
         [
             t3d.transform_from_pos(jnp.array([0.0, dimensions[1]/2.0, 0.0])).dot(t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), -jnp.pi/2)),
@@ -29,8 +29,8 @@ def relative_pose_from_contact(
     face_params,
     dims_parent, dims_child,
 ):
-    parent_plane = get_contact_planes(dims_parent)[face_params[0]]
-    child_plane = get_contact_planes(dims_child)[face_params[1]]
+    parent_plane = contact_planes(dims_parent)[face_params[0]]
+    child_plane = contact_planes(dims_child)[face_params[1]]
     contact_transform = get_contact_transform(contact_params)
     return (parent_plane.dot(contact_transform)).dot(jnp.linalg.inv(child_plane))
 
@@ -40,10 +40,18 @@ def pose_from_contact(
     dims_parent, dims_child,
     parent_pose
 ):
-    parent_plane = get_contact_planes(dims_parent)[face_params[0]]
-    child_plane = get_contact_planes(dims_child)[face_params[1]]
+    parent_plane = contact_planes(dims_parent)[face_params[0]]
+    child_plane = contact_planes(dims_child)[face_params[1]]
     contact_transform = get_contact_transform(contact_params)
     return parent_pose.dot(parent_plane.dot(contact_transform)).dot(jnp.linalg.inv(child_plane))
+
+def get_contact_plane(
+    parent_pose,
+    dims_parent,
+    parent_face,
+):
+    parent_plane = contact_planes(dims_parent)[parent_face]
+    return parent_pose.dot(parent_plane)
 
 ## Get poses
 
@@ -62,3 +70,4 @@ def absolute_poses_from_scene_graph(start_poses, box_dims, edges, contact_params
         new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0,))(poses, box_dims, edges, contact_params, face_params)
         return (new_poses, new_poses)
     return jax.lax.scan(_f, start_poses, jnp.ones(edges.shape[0]))[0]
+

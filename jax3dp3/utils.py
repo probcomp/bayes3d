@@ -94,33 +94,50 @@ def find_plane(point_cloud, threshold):
     plane_pose = t3d.transform_from_rot_and_pos(R, point_on_plane)
     return plane_pose
 
-def find_table_pose_and_dims(point_cloud, plane_pose, inlier_threshold, segmentation_threshold):
+def find_table_pose_and_dims(point_cloud, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.004):
+    plane_pose = find_plane(point_cloud, inlier_threshold)
     points_in_plane_frame = t3d.apply_transform(point_cloud, jnp.linalg.inv(plane_pose))
     inliers = (jnp.abs(points_in_plane_frame[:,2]) < inlier_threshold)
     inlier_plane_points = points_in_plane_frame[inliers]
     inlier_table_points_seg = segment_point_cloud(inlier_plane_points, segmentation_threshold)
+    unique_vals = jnp.unique(inlier_table_points_seg)
+    most_frequent_seg_id = unique_vals[unique_vals != -1][0]
     
-    table_points_in_plane_frame = inlier_plane_points[inlier_table_points_seg == 0]
+    table_points_in_plane_frame = inlier_plane_points[inlier_table_points_seg == most_frequent_seg_id]
+
     (cx,cy), (width,height), rotation_deg = cv2.minAreaRect(np.array(table_points_in_plane_frame[:,:2]))
     pose_shift = t3d.transform_from_rot_and_pos(
         t3d.rotation_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), jnp.deg2rad(rotation_deg)),
         jnp.array([cx,cy, 0.0])
     )
-    return plane_pose.dot(pose_shift), jnp.array([width, height, 0.000001])
+    table_pose = plane_pose.dot(pose_shift)
+    if table_pose[2,2] > 0:
+        table_pose = table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
+    return table_pose, jnp.array([width, height, 1e-10])
 
-def segment_point_cloud(point_cloud, threshold):
+def segment_point_cloud(point_cloud, threshold=0.01, min_points_in_cluster=0):
     c = sklearn.cluster.DBSCAN(eps=threshold).fit(point_cloud)
     labels = c.labels_
+    unique, counts =  np.unique(labels, return_counts=True)
+    for val in unique[counts < min_points_in_cluster]:
+        labels[labels == val] = -1
     return labels
 
-def segment_point_cloud_image(point_cloud_image, threshold):
+def segment_point_cloud_image(point_cloud_image, threshold=0.01, min_points_in_cluster=0):
     point_cloud = point_cloud_image.reshape(-1,3)
     non_zero = point_cloud[:,2] > 0.0
     non_zero_indices = np.where(non_zero)[0]
-    segmentation = segment_point_cloud(point_cloud[non_zero_indices,:], threshold)
+    segmentation = segment_point_cloud(point_cloud[non_zero_indices,:], threshold=threshold, min_points_in_cluster=min_points_in_cluster)
+    unique, counts =  np.unique(segmentation, return_counts=True)
     segmentation_img = np.ones(point_cloud.shape[0]) * -1.0 
-    print(np.unique(segmentation))
-    for (i,val) in enumerate(np.unique(segmentation)):
+    for (i,val) in enumerate(unique[unique != -1]):
         segmentation_img[non_zero_indices[segmentation == val]] = i
     segmentation_img = segmentation_img.reshape(point_cloud_image.shape[:2])
     return segmentation_img
+
+def get_largest_cluster_id_from_segmentation(segmentation_array_or_img):
+    unique, counts =  jnp.unique(segmentation_array_or_img, return_counts=True)
+    non_neg_one = (unique != -1)
+    unique = unique[non_neg_one]
+    counts = counts[non_neg_one]
+    return unique[counts.argmax()]

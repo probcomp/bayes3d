@@ -3,6 +3,9 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 
+def inverse(t):
+    return jnp.linalg.inv(t)
+
 def transform_from_pos(t):
     return jnp.vstack(
         [jnp.hstack([jnp.eye(3), t.reshape(3,1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
