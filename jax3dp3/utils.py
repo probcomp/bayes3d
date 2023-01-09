@@ -124,7 +124,3 @@ def segment_point_cloud_image(point_cloud_image, threshold):
         segmentation_img[non_zero_indices[segmentation == val]] = i
     segmentation_img = segmentation_img.reshape(point_cloud_image.shape[:2])
     return segmentation_img
-
-def point_cloud_image_to_points(point_cloud_image):
-    point_cloud = point_cloud_image.reshape(-1,3)
-    return point_cloud[point_cloud[:,2]>0.0, :]

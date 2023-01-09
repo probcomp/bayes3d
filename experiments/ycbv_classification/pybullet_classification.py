@@ -46,11 +46,12 @@ plane_pose =  jax3dp3.utils.find_plane(
     gt_point_cloud_full[(0.0 < gt_point_cloud_full[:,2]) * (gt_point_cloud_full[:,2] < far),:],
     0.001
 )
-table_pose, table_dims = jax3dp3.utils.find_table_pose_and_dims(gt_point_cloud_full, plane_pose, 0.02, 0.04)
-
+table_pose, table_dims = jax3dp3.utils.find_table_pose_and_dims(gt_point_cloud_full, plane_pose, 0.002, 0.004)
+if table_pose[2,3] > 0:
+    table_pose = table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
 
 points_in_plane_frame = t3d.apply_transform(gt_point_cloud_full, jnp.linalg.inv(table_pose))
-inliers = (jnp.abs(points_in_plane_frame[:,2]) < 0.02)
+inliers = (jnp.abs(points_in_plane_frame[:,2]) < 0.01)
 inliers_img = inliers.reshape(gt_image_full.shape[:2])
 non_table_img = gt_image_full * (1 -inliers_img)[:,:,None]
 table_img = gt_image_full * (inliers_img)[:,:,None]
@@ -62,23 +63,51 @@ segmentation_img = jax3dp3.utils.segment_point_cloud_image(non_table_img, 0.04)
 jax3dp3.viz.save_depth_image(segmentation_img + 1, "seg.png", max=5.0)
 
 
-gt_image_single_object = gt_image_full * (segmentation_img == 0)[:,:,None]
+gt_image_single_object = gt_image_full * (segmentation_img == 1)[:,:,None]
 gt_img_viz = jax3dp3.viz.get_depth_image(gt_image_single_object[:,:,2],  max=max_depth)
 gt_img_viz.save("gt_image_single_object.png")
 
-gt_image_single_object_cloud = jax3dp3.utils.point_cloud_image_to_points(gt_image_single_object)
-center_x, center_y, _ = jnp.mean(t3d.apply_transform(gt_image_single_object_cloud, jnp.linalg.inv(table_pose)),axis=0)
+gt_image_single_object_cloud = t3d.point_cloud_image_to_points(gt_image_single_object)
+cam_pose = jnp.eye(4)
+gt_points_in_table_frame = t3d.apply_transform(
+    t3d.apply_transform(gt_image_single_object_cloud, cam_pose), 
+    jnp.linalg.inv(table_pose)
+)
+
+point_seg = jax3dp3.utils.segment_point_cloud(gt_points_in_table_frame, 10.0)
+gt_points_in_table_frame_filtered = gt_points_in_table_frame[point_seg == 0]
+import matplotlib.pyplot as plt
+plt.clf()
+plt.scatter(gt_points_in_table_frame_filtered[:,0],gt_points_in_table_frame_filtered[:,1])
+plt.savefig("scatter.png")
+
+center_x, center_y, _ = ( gt_points_in_table_frame_filtered.min(0) + gt_points_in_table_frame_filtered.max(0))/2
 
 table_face_param = 2
 
 face_params = jnp.array([table_face_param,3])
 
-grid_width = 0.05
-contact_params_sweep = jax3dp3.make_translation_grid_enumeration_3d(center_x-grid_width, center_y-grid_width, 0.0, center_x+grid_width, center_y+grid_width, jnp.pi*2, 11, 11, 36)
+grid_width = 0.00
+contact_params_sweep = jax3dp3.make_translation_grid_enumeration_3d(center_x-grid_width, center_y-grid_width, 0.0, center_x+grid_width, center_y+grid_width, jnp.pi*2, 11, 11, 10)
 poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from_contact, in_axes=(0, None, None, None, None)))
-scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None)))
+scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
+
+idx = 4
+pose_proposals = poses_from_contact_params_sweep(contact_params_sweep, face_params, table_dims, model_box_dims[idx], table_pose)
+proposals = pose_proposals
+images = jax3dp3.render_parallel(proposals, idx)
+jax3dp3.viz.save_depth_image(images[0,:,:,2], "rendererd.png", max=1.5)
+
+renderered_points_in_table_frame = t3d.apply_transform(
+    t3d.point_cloud_image_to_points(images[0,:,:,:]),
+    jnp.linalg.inv(table_pose)
+)
 
 
+plt.clf()
+plt.scatter(gt_points_in_table_frame_filtered[:,0],gt_points_in_table_frame_filtered[:,1])
+plt.scatter(renderered_points_in_table_frame[:,0],renderered_points_in_table_frame[:,1])
+plt.savefig("scatter.png")
 
 object_indices = list(range(len(model_names)))
 start= time.time()
@@ -88,7 +117,7 @@ for idx in object_indices:
     # proposals = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), pose_proposals)
     proposals = pose_proposals
     images = jax3dp3.render_parallel(proposals, idx)
-    weights = scorer_parallel_jit(gt_image_single_object, images, 0.02, 0.1)
+    weights = scorer_parallel_jit(gt_image_single_object, images, 0.02, 0.1, 1**3)
     best_pose_idx = weights.argmax()
     filename = "imgs/best_{}.png".format(model_names[idx])
     pred = jax3dp3.viz.get_depth_image(

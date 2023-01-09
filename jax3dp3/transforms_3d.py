@@ -39,6 +39,10 @@ def transform_from_axis_angle(axis, angle):
 def add_homogenous_ones(cloud):
     return jnp.concatenate([cloud, jnp.ones((*cloud.shape[:-1],1))],axis=-1)
 
+def point_cloud_image_to_points(point_cloud_image):
+    point_cloud = point_cloud_image[:,:,:3].reshape(-1,3)
+    return point_cloud[point_cloud[:,2]>0.0, :]
+
 # move point cloud to a specified pose
 # coords: (N,3) point cloud
 # pose: (4,4) pose matrix. rotation matrix in top left (3,3) and translation in (:3,3)

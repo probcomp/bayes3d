@@ -1,25 +1,25 @@
-from .transforms_3d import rotation_from_axis_angle, transform_from_rot_and_pos, transform_from_pos, transform_from_axis_angle
 import jax.numpy as jnp
 import jax
+import jax3dp3.transforms_3d as t3d
 
 def get_contact_planes(dimensions):
     return jnp.stack(
         [
-            transform_from_pos(jnp.array([0.0, dimensions[1]/2.0, 0.0])).dot(transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), -jnp.pi/2)),
-            transform_from_pos(jnp.array([0.0, -dimensions[1]/2.0, 0.0])).dot(transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi/2)),
-            transform_from_pos(jnp.array([0.0, 0.0, dimensions[2]/2.0])).dot(transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), 0.0)),
-            transform_from_pos(jnp.array([0.0, 0.0, -dimensions[2]/2.0])).dot(transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)),
-            transform_from_pos(jnp.array([-dimensions[0]/2.0, 0.0, 0.0])).dot(transform_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), -jnp.pi/2)),
-            transform_from_pos(jnp.array([dimensions[0]/2.0, 0.0, 0.0])).dot(transform_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), jnp.pi/2)),
+            t3d.transform_from_pos(jnp.array([0.0, dimensions[1]/2.0, 0.0])).dot(t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), -jnp.pi/2)),
+            t3d.transform_from_pos(jnp.array([0.0, -dimensions[1]/2.0, 0.0])).dot(t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi/2)),
+            t3d.transform_from_pos(jnp.array([0.0, 0.0, dimensions[2]/2.0])).dot(t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), 0.0)),
+            t3d.transform_from_pos(jnp.array([0.0, 0.0, -dimensions[2]/2.0])).dot(t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)),
+            t3d.transform_from_pos(jnp.array([-dimensions[0]/2.0, 0.0, 0.0])).dot(t3d.transform_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), -jnp.pi/2)),
+            t3d.transform_from_pos(jnp.array([dimensions[0]/2.0, 0.0, 0.0])).dot(t3d.transform_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), jnp.pi/2)),
         ]
     )
 
 def get_contact_transform(contact_params):
     x,y,angle = contact_params
     return (
-        transform_from_pos(jnp.array([x,y, 0.0])).dot(
-            transform_from_axis_angle(jnp.array([1.0, 1.0, 0.0]), jnp.pi).dot(
-                transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), angle)
+        t3d.transform_from_pos(jnp.array([x,y, 0.0])).dot(
+            t3d.transform_from_axis_angle(jnp.array([1.0, 1.0, 0.0]), jnp.pi).dot(
+                t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), angle)
             )
         )
     )
