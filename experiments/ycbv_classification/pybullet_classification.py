@@ -62,7 +62,7 @@ segmentation_img = jax3dp3.utils.segment_point_cloud_image(non_table_img, 0.04)
 jax3dp3.viz.save_depth_image(segmentation_img + 1, "seg.png", max=5.0)
 
 
-gt_image_single_object = gt_image_full * (segmentation_img == 1)[:,:,None]
+gt_image_single_object = gt_image_full * (segmentation_img == 0)[:,:,None]
 gt_img_viz = jax3dp3.viz.get_depth_image(gt_image_single_object[:,:,2],  max=max_depth)
 gt_img_viz.save("gt_image_single_object.png")
 
@@ -73,10 +73,10 @@ table_face_param = 2
 
 face_params = jnp.array([table_face_param,3])
 
-grid_width = 0.1
+grid_width = 0.05
 contact_params_sweep = jax3dp3.make_translation_grid_enumeration_3d(center_x-grid_width, center_y-grid_width, 0.0, center_x+grid_width, center_y+grid_width, jnp.pi*2, 11, 11, 36)
 poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from_contact, in_axes=(0, None, None, None, None)))
-scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(0, None, None, None)))
+scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None)))
 
 
 
@@ -88,7 +88,7 @@ for idx in object_indices:
     # proposals = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), pose_proposals)
     proposals = pose_proposals
     images = jax3dp3.render_parallel(proposals, idx)
-    weights = scorer_parallel_jit(images, gt_image_single_object, 0.02, 0.1)
+    weights = scorer_parallel_jit(gt_image_single_object, images, 0.02, 0.1)
     best_pose_idx = weights.argmax()
     filename = "imgs/best_{}.png".format(model_names[idx])
     pred = jax3dp3.viz.get_depth_image(

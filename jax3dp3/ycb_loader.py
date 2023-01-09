@@ -19,12 +19,13 @@ def remove_zero_pad(img_id):
             return img_id[i:]
 
 
-def get_test_img(scene_id, img_id, data_dir):
+def get_test_img(scene_id, img_id, ycb_dir):
     if len(scene_id) < 6:
         scene_id = scene_id.rjust(6, '0')
     if len(img_id) < 6:
         img_id = img_id.rjust(6, '0')
 
+    data_dir = os.path.join(ycb_dir, "test")
     scene_data_dir = os.path.join(data_dir, scene_id)  # depth, mask, mask_visib, rgb; scene_camera.json, scene_gt_info.json, scene_gt.json
 
     scene_rgb_images_dir = os.path.join(scene_data_dir, 'rgb')
@@ -50,6 +51,8 @@ def get_test_img(scene_id, img_id, data_dir):
     cam_R_w2c = jnp.array(image_cam_data['cam_R_w2c']).reshape(3,3)
     cam_t_w2c = jnp.array(image_cam_data['cam_t_w2c']).reshape(3,1)
     cam_pose_w2c = jnp.vstack([jnp.hstack([cam_R_w2c, cam_t_w2c]), jnp.array([0,0,0,1])])
+    cam_pose = jnp.linalg.inv(cam_pose_w2c)
+
     cam_depth_scale = image_cam_data['depth_scale']
 
     # get {visible mask, ID, pose} for each object in the scene
@@ -63,14 +66,14 @@ def get_test_img(scene_id, img_id, data_dir):
     for object_gt_data, mask_visib_image_path in zip(objects_gt_data, mask_visib_image_paths):
         mask_visible = jnp.array(Image.open(mask_visib_image_path))
 
-        cam_R_m2c = jnp.array(object_gt_data['cam_R_m2c']).reshape(3,3)
-        cam_t_m2c = jnp.array(object_gt_data['cam_t_m2c']).reshape(3,1)
-        cam_pose_m2c = jnp.vstack([jnp.hstack([cam_R_m2c, cam_t_m2c]), jnp.array([0,0,0,1])])
+        model_R = jnp.array(object_gt_data['cam_R_m2c']).reshape(3,3)
+        model_t = jnp.array(object_gt_data['cam_t_m2c']).reshape(3,1)
+        model_pose = jnp.vstack([jnp.hstack([model_R, model_t]), jnp.array([0,0,0,1])])
         
         obj_id = object_gt_data['obj_id'] - 1
 
         gt_ids.append(obj_id)
-        anno.append({'mask_visible': mask_visible, 'gt_poses_m2c': cam_pose_m2c})
+        anno.append({'mask_visible': mask_visible, 'gt_poses_m2c': model_pose})
 
 
     # Create the TestImage instance for the image
@@ -80,7 +83,7 @@ def get_test_img(scene_id, img_id, data_dir):
                             rgb=rgb,
                             depth=depth * cam_depth_scale,
                             intrinsics=cam_K,
-                            camera_pose=cam_pose_w2c,
+                            camera_pose=cam_pose,
                             bop_obj_indices=gt_ids,
                             annotations=anno  # mask and gt poses
                             )
@@ -159,7 +162,7 @@ class BOPTestImage:
         return self.depth 
 
     def get_segmentation_image(self):
-        segmentation = np.zeros((self.get_image_dims()))
+        segmentation = np.ones((self.get_image_dims())) * -1.0
 
         for obj_number in range(len(self.get_gt_indices())):
             segmentation_obj = self.get_object_masks()[obj_number]
