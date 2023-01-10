@@ -10,33 +10,13 @@ import jax
 import jax3dp3
 import jax3dp3.transforms_3d as t3d
 
-"""
-#TODO
-
-Karen
-1. add gridding over 6 contact faces
-2. factor out the masked rendering with complement image
-3. get model actual names for viz
-
-Nishad
-1. Finalize table detection
-2. ...
-
-
-(lower priority)
-see gridding test.py trans/rot 
-select min/max depths for better visualization so you can see the color range
-
-"""
-
-## choose a test image  
-scene_id = '49'     # 48 ... 59
+## Setup
+scene_id = '49'     
 img_id = '570'      
 test_img = jax3dp3.ycb_loader.get_test_img(scene_id, img_id, os.environ["YCB_DIR"])
 depth_data = test_img.get_depth_image()
 rgb_img_data = test_img.get_rgb_image()
 
-## choose gt object
 gt_obj_number = 3
 segmentation = test_img.get_segmentation_image() 
 gt_ycb_idx = test_img.get_gt_indices()[gt_obj_number]
@@ -76,10 +56,11 @@ for idx in range(num_models):
 gt_img = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth_data * (segmentation == gt_obj_number)), (w,h),interpolation=0), fx,fy,cx,cy)
 gt_depth_img = jax3dp3.viz.get_depth_image(gt_img[:,:,2], max=far).resize((w,h))
 rgb_img = jax3dp3.viz.get_rgb_image(rgb_img_data, max_val=255.0).resize((w,h))
-gt_img_complement = jax3dp3.renderer.get_gt_img_complement(depth_data, segmentation, gt_obj_number, h, w, fx, fy, cx, cy)
-
 gt_depth_img.save("gt_depth_image.png")
 rgb_img.save("gt_rgb.png")
+
+## Get complement img
+gt_img_complement = jax3dp3.renderer.get_gt_img_complement(depth_data, segmentation, gt_obj_number, h, w, fx, fy, cx, cy)
 jax3dp3.viz.save_depth_image(gt_img_complement[:, :, 2], "gt_img_complement.png", max=far)
 
 
@@ -98,15 +79,14 @@ contact_params_sweep = jax3dp3.make_translation_grid_enumeration_3d(
 )
 poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from_contact, in_axes=(0, None, None, None, None, None)))
 
-
-# pick an obj, get best pose(s), render masked image(s)
+# render hypotheses
 max_depth = far
 idx = gt_ycb_idx
 pose_proposals = poses_from_contact_params_sweep(contact_params_sweep, face_params[0], face_params[1], table_dims, model_box_dims[idx], table_pose)
 proposals = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), pose_proposals)  # score in camera frame
 images_unmasked = jax3dp3.render_parallel(proposals, idx)
 
-# multiple masked images
+## render multiple masked images
 images = jax3dp3.renderer.get_masked_images(images_unmasked, gt_img_complement)
 best_pose_idx = 586
 unmasked = jax3dp3.viz.get_depth_image(
@@ -119,7 +99,7 @@ pred = jax3dp3.viz.get_depth_image(
 pred.save("best_render_masked_1.png")
 
 
-# single masked image
+# rneder single masked image
 image = jax3dp3.renderer.get_single_masked_image(images_unmasked[best_pose_idx], gt_img_complement)
 pred = jax3dp3.viz.get_depth_image(
     image[:,:,2], max=max_depth
