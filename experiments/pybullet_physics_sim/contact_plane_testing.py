@@ -33,7 +33,7 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath()) #used by loadURDF
 model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
 model_names = os.listdir(model_dir)
 print(model_names)
-idx = 17
+idx = 0
 cracker_box_path = os.path.join(jax3dp3.utils.get_assets_dir(), "models/{}/textured_simple.obj".format(model_names[idx]))
 cracker_box_mesh = trimesh.load(cracker_box_path)
 cracker_box_mesh_centered = jax3dp3.mesh.center_mesh(cracker_box_mesh)
@@ -65,11 +65,11 @@ for i in range(6):
 
     gravZ=-10
     p.setGravity(0, 0, gravZ)
-    p.setTimeStep(0.01)
+    p.setTimeStep(0.005)
 
 
-    for _ in range(100):
+    for _ in range(250):
         p.stepSimulation()
-        time.sleep(0.05)
+        time.sleep(0.01)
 
 from IPython import embed; embed()
