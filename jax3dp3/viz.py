@@ -67,13 +67,30 @@ def resize_image(img, h, w):
 
 ####
 
-def multi_panel(images, labels, middle_width=10, top_border=20, fontsize=20):
+def multi_panel(images, labels=None, middle_width=10, top_border=20, fontsize=20, bottom_text=None, bottom_fontsize=10):
     num_images = len(images)
     w = images[0].width
     h = images[0].height
+
     dst = Image.new(
         "RGBA", (num_images * w + (num_images - 1) * middle_width, h + top_border), (255, 255, 255, 255)
     )
+
+    drawer = ImageDraw.Draw(dst)
+    font_bottom = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), bottom_fontsize)
+    font = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), fontsize)
+
+    bottom_border = 0
+    if bottom_text is not None:
+        msg = bottom_text
+        _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_bottom)
+        bottom_border = text_h
+
+    dst = Image.new(
+        "RGBA", (num_images * w + (num_images - 1) * middle_width, h + top_border + bottom_border + 10), (255, 255, 255, 255)
+    )
+    drawer = ImageDraw.Draw(dst)
+
     for (j, img) in enumerate(images):
         dst.paste(
             img,
@@ -81,13 +98,16 @@ def multi_panel(images, labels, middle_width=10, top_border=20, fontsize=20):
         )
 
 
-    drawer = ImageDraw.Draw(dst)
-    font = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), fontsize)
 
     if labels is not None:
         for (i, msg) in enumerate(labels):
             _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font)
             drawer.text((i * w + i * middle_width + w/2 - text_w/2, top_border/2 - text_h/2), msg, font=font, fill="black")
+
+    if bottom_text is not None:
+        msg = bottom_text
+        _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_bottom)
+        drawer.text(((num_images * w + (num_images - 1) * middle_width)/2.0 - text_w/2,  top_border + h + 5), msg, font=font_bottom, fill="black")
     return dst
 
 

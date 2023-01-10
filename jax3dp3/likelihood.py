@@ -39,3 +39,26 @@ def threedp3_likelihood(
     probs = outlier_prob * (1.0 / outlier_volume)+  jnp.nan_to_num((1.0 - outlier_prob) / num_latent_points  * counts * 1.0 / (4/3 * jnp.pi * r**3))
     log_probs = jnp.log(probs)
     return jnp.sum(jnp.where(obs_mask, log_probs, 0.0))
+
+
+def threedp3_likelihood_get_counts(
+    obs_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    r,
+):
+    filter_size = 3
+    obs_mask = obs_xyz[:,:,2] > 0.0
+    rendered_mask = rendered_xyz[:,:,2] > 0.0
+    
+    rendered_xyz_padded = jax.lax.pad(rendered_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
+    jj, ii = jnp.meshgrid(jnp.arange(obs_xyz.shape[1]), jnp.arange(obs_xyz.shape[0]))
+    indices = jnp.stack([ii,jj],axis=-1)
+    counts_obs = count_ii_jj(indices, obs_xyz, rendered_xyz_padded, r, filter_size)
+    
+    obs_xyz_padded = jax.lax.pad(obs_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
+    jj, ii = jnp.meshgrid(jnp.arange(rendered_xyz.shape[1]), jnp.arange(rendered_xyz.shape[0]))
+    indices = jnp.stack([ii,jj],axis=-1)
+    counts_rendered = count_ii_jj(indices, rendered_xyz, obs_xyz_padded, r, filter_size)
+    return jnp.array([
+        (obs_mask * (counts_obs > 0)).sum(), obs_mask.sum(), (rendered_mask * (counts_rendered > 0)).sum(), rendered_mask.sum()
+    ])

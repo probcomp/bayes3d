@@ -9,21 +9,8 @@ import time
 import jax3dp3
 import pickle
 
-# for i in range(1,16):
-#     file = open("./panda_dataset/scene_{}.pkl".format(i),'rb')
-#     all_data = pickle.load(file)
-#     file.close()
 
-#     t = -1
-#     data = all_data[t]
-#     print(data.keys())
-
-#     rgb = data["rgb"]
-#     rgb_viz = jax3dp3.viz.get_rgb_image(rgb, 255.0)
-#     rgb_viz.save("rgb_{}.png".format(i))
-
-
-file = open("./panda_dataset/scene_13.pkl",'rb')
+file = open("./panda_dataset/scene_1.pkl",'rb')
 all_data = pickle.load(file)
 file.close()
 
@@ -110,10 +97,11 @@ for seg_id in segmentation_idx_to_do_pose_estimation_for:
     start = time.time()
     all_scores = []
     poses = []
+    r = 0.02
     for idx in object_indices:
         pose_proposals = get_pose_proposals_jit(model_box_dims[idx])
         images = jax3dp3.render_parallel(pose_proposals, idx)
-        weights = scorer_parallel_jit(gt_image_masked, images, 0.01, 0.01, 2**3)
+        weights = scorer_parallel_jit(gt_image_masked, images, r, 0.01, 2**3)
         best_pose_idx = weights.argmax()
         all_scores.append(weights[best_pose_idx])
         poses.append(pose_proposals[best_pose_idx])
@@ -124,12 +112,32 @@ for seg_id in segmentation_idx_to_do_pose_estimation_for:
 
     print(model_names[best_idx])
     filename = "imgs/seg_id_{}.png".format(seg_id)
-    pred = jax3dp3.viz.get_depth_image(
-        jax3dp3.render_single_object(poses[best_idx], best_idx)[:,:,2], max=max_depth
-    )
+    pred_rendered_img = jax3dp3.render_single_object(poses[best_idx], best_idx)
 
+    r_overlap_check = 0.05
+    overlap = jax3dp3.likelihood.threedp3_likelihood_get_counts(gt_image_masked, pred_rendered_img, r_overlap_check)
+
+    pred = jax3dp3.viz.get_depth_image(
+        pred_rendered_img[:,:,2], max=max_depth
+    )
     overlay = jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz, h,w), pred,alpha=0.5)
-    jax3dp3.viz.multi_panel([gt_img_viz, pred, overlay], ["Ground Truth", "Prediction\nScore: {:.2f} {:s}".format(weights[best_pose_idx], model_names[best_idx]), "Overlay"],
+    
+    bottom_text_string = "Object Class : Score\n"
+    for i in np.argsort(-all_scores):
+        bottom_text_string += (
+            "{} : {}\n".format(model_names[i], all_scores[i])
+        )
+    bottom_text_string += "\n"
+
+    jax3dp3.viz.multi_panel([gt_img_viz, pred, overlay], 
+        labels=[
+            "Ground Truth", 
+            "Prediction\nScore: {:.2f} {:s}".format(all_scores[best_idx], model_names[best_idx]), 
+            "Overlap:\n{}/{}, {}/{}".format(
+                *overlap
+            )
+        ],
+        bottom_text=bottom_text_string,
         top_border=50,
         middle_width=50,
     ).save(filename)
@@ -137,3 +145,18 @@ for seg_id in segmentation_idx_to_do_pose_estimation_for:
 
 
 from IPython import embed; embed()
+
+
+
+# for i in range(1,16):
+#     file = open("./panda_dataset/scene_{}.pkl".format(i),'rb')
+#     all_data = pickle.load(file)
+#     file.close()
+
+#     t = -1
+#     data = all_data[t]
+#     print(data.keys())
+
+#     rgb = data["rgb"]
+#     rgb_viz = jax3dp3.viz.get_rgb_image(rgb, 255.0)
+#     rgb_viz.save("rgb_{}.png".format(i))
