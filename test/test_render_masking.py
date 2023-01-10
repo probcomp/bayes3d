@@ -54,10 +54,6 @@ for idx in range(num_models):
 
 ## Get gt images from image data
 gt_img = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth_data * (segmentation == gt_obj_number)), (w,h),interpolation=0), fx,fy,cx,cy)
-gt_depth_img = jax3dp3.viz.get_depth_image(gt_img[:,:,2], max=far).resize((w,h))
-rgb_img = jax3dp3.viz.get_rgb_image(rgb_img_data, max_val=255.0).resize((w,h))
-gt_depth_img.save("gt_depth_image.png")
-rgb_img.save("gt_rgb.png")
 
 ## Get complement img
 gt_img_complement = jax3dp3.renderer.get_gt_img_complement(depth_data, segmentation, gt_obj_number, h, w, fx, fy, cx, cy)
