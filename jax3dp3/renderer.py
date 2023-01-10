@@ -5,6 +5,7 @@ import trimesh
 import jax
 import numpy as np
 import jax.dlpack
+import cv2
 
 RENDERER_ENV = None
 PROJ_LIST = None
@@ -48,3 +49,21 @@ def render_multiobject(poses, indices):
 def render_multiobject_parallel(poses, indices):
     images_torch = render_to_torch(poses, indices)
     return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+
+def get_gt_img_complement(depth_data, segmentation, obj_number_in_segmentation, h, w, fx, fy, cx, cy):
+    gt_img_complement = jax3dp3.transforms_3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth_data * (segmentation != obj_number_in_segmentation)), (w,h),interpolation=0), fx,fy,cx,cy)
+    return gt_img_complement
+
+def get_masked_images(images_unmasked, gt_img_complement):
+    blocked = images_unmasked[:,:,:,2] >= gt_img_complement[None,:,:,2] 
+    nonzero = gt_img_complement[None, :, :, 2] != 0
+
+    images = images_unmasked * (1-(blocked * nonzero))[:,:,:, None]  # rendered model images
+    return images
+
+def get_single_masked_image(image_unmasked, gt_img_complement):
+    blocked = image_unmasked[:,:,2] >= gt_img_complement[:,:,2] 
+    nonzero = gt_img_complement[:, :, 2] != 0
+
+    image = image_unmasked * (1-(blocked * nonzero))[:,:,None] # rendered model image
+    return image

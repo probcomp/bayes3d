@@ -30,23 +30,23 @@ select min/max depths for better visualization so you can see the color range
 """
 
 ## choose a test image  
-scene_id = '48'     # 48 ... 59
-img_id = '1103'      
+scene_id = '49'     # 48 ... 59
+img_id = '570'      
 test_img = jax3dp3.ycb_loader.get_test_img(scene_id, img_id, os.environ["YCB_DIR"])
 depth_data = test_img.get_depth_image()
 rgb_img_data = test_img.get_rgb_image()
 
 ## choose gt object
-obj_number = 0
+gt_obj_number = 3
 segmentation = test_img.get_segmentation_image() 
-gt_ycb_idx = test_img.get_gt_indices()[obj_number]
+gt_ycb_idx = test_img.get_gt_indices()[gt_obj_number]
 print("GT ycb idx=", gt_ycb_idx)
 
 ## retrieve poses
 def cam_frame_to_world_frame(cam_pose, pose_cf):
     return cam_pose @ pose_cf
 cam_pose = test_img.get_camera_pose()
-gt_pose = test_img.get_gt_poses()[obj_number]
+gt_pose = test_img.get_gt_poses()[gt_obj_number]
 gt_pose_wf = cam_frame_to_world_frame(cam_pose, gt_pose)
 table_pose = jnp.eye(4)  # xy plane 
 
@@ -98,14 +98,10 @@ for idx in range(num_models):
 print(f"GT bbox dims = {model_box_dims[gt_ycb_idx]}")
 
 ## setup pose inf
-
-gt_img = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth_data * (segmentation == obj_number)), (w,h),interpolation=0), fx,fy,cx,cy)
+gt_img = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth_data * (segmentation == gt_obj_number)), (w,h),interpolation=0), fx,fy,cx,cy)
 gt_depth_img = jax3dp3.viz.get_depth_image(gt_img[:,:,2], max=far).resize((w,h))
 rgb_img = jax3dp3.viz.get_rgb_image(rgb_img_data, max_val=255.0).resize((w,h))
-gt_img_complement = t3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth_data * (segmentation != obj_number)), (w,h),interpolation=0), fx,fy,cx,cy)
-nonzero = gt_img_complement[None, :, :, 2] != 0
-
-
+gt_img_complement = jax3dp3.renderer.get_gt_img_complement(depth_data, segmentation, gt_obj_number, h, w, fx, fy, cx, cy)
 
 gt_depth_img.save("gt_depth_image.png")
 rgb_img.save("gt_rgb.png")
@@ -125,7 +121,6 @@ center_x, center_y, _ = ( gt_points_in_table_frame.min(0) + gt_points_in_table_f
 print('center_x,center_y:');print(center_x,center_y)
 
 
-
 ## TODO: Get poses to score
 # centroid_pose = t3d.transform_from_pos(gt_pose[:3, 3])   # TODO comment this out and use centroid_pose from above
 # poses_to_score = jnp.einsum("ij,ajk->aik", centroid_pose, rotation_deltas)  
@@ -139,7 +134,7 @@ contact_params_sweep = jax3dp3.make_translation_grid_enumeration_3d(
     center_x+grid_width, center_y+grid_width, jnp.pi*2,
     11, 11, 10
 )
-poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from_contact, in_axes=(0, None, None, None, None)))
+poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from_contact, in_axes=(0, None, None, None, None, None)))
 scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
 
 max_depth = far
@@ -147,15 +142,12 @@ object_indices = list(range(len(model_names)))
 start= time.time()
 all_scores = []
 for idx in object_indices:
-    pose_proposals = poses_from_contact_params_sweep(contact_params_sweep, face_params, table_dims, model_box_dims[idx], table_pose)
+    pose_proposals = poses_from_contact_params_sweep(contact_params_sweep, face_params[0], face_params[1], table_dims, model_box_dims[idx], table_pose)
     # proposals = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), pose_proposals)
     # proposals = pose_proposals
     proposals = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), pose_proposals)  # score in camera frame
     images_unmasked = jax3dp3.render_parallel(proposals, idx)
-
-    blocked = images_unmasked[:,:,:,2] >= gt_img_complement[None,:,:,2] 
-    images = images_unmasked * (1-(blocked * nonzero))[:,:,:, None]  # rendered model images
-
+    images = jax3dp3.renderer.get_masked_images(images_unmasked, gt_img_complement)
 
     weights = scorer_parallel_jit(gt_img, images, 8.0, 0.1, 10**3)
     best_pose_idx = weights.argmax()
@@ -175,20 +167,18 @@ print(np.array(all_scores)[np.argsort(all_scores)])
 
 
 
-likelihood_r_range = [4.0] #[r for r in reversed(np.linspace(5, max_r,10))] + [r for r in reversed(np.linspace(1,5,10))] + [r for r in reversed(np.linspace(min_r,1,20))] 
+likelihood_r_range = [6.0] #[r for r in reversed(np.linspace(5, max_r,10))] + [r for r in reversed(np.linspace(1,5,10))] + [r for r in reversed(np.linspace(min_r,1,20))] 
 outlier_prob_range = [0.01] 
 
 
 # Get the best CAMERA FRAME pose and score for a model given r and outlier_p parameter
 def get_model_best_results(model_idx, r_range, outlier_prob_range):
     model_best_results = dict()
-    pose_proposals_wf = poses_from_contact_params_sweep(contact_params_sweep, face_params, table_dims, model_box_dims[model_idx], table_pose)
+    pose_proposals_wf = poses_from_contact_params_sweep(contact_params_sweep, face_params[0], face_params[1], table_dims, model_box_dims[model_idx], table_pose)
     poses_to_score = jnp.einsum("ij,ajk->aik", jnp.linalg.inv(cam_pose), pose_proposals_wf)  # score in camera frame
 
     images_unmasked = jax3dp3.render_parallel(poses_to_score, model_idx)
-    blocked = images_unmasked[:,:,:,2] >= gt_img_complement[None,:,:,2] 
-
-    images_of_model = images_unmasked * (1-(blocked * nonzero))[:,:,:, None]  # rendered model images
+    images_of_model = jax3dp3.renderer.get_masked_images(images_unmasked, gt_img_complement)
 
     for r in r_range:
         for outlier_prob in outlier_prob_range:
@@ -250,7 +240,6 @@ TOP_K_VIZ = 5
 ## get best results
 all_models_best_results = get_models_best_results(np.arange(num_models), likelihood_r_range, outlier_prob_range)  #  model[params] -> (best_pose_idx, best_score)
 
-
 for likelihood_r in likelihood_r_range: # one frame in gif
     rows = []
     for outlier_prob in outlier_prob_range: # one row in gif
@@ -271,20 +260,16 @@ for likelihood_r in likelihood_r_range: # one frame in gif
         top_model_idxs = [model_idxs[idx] for idx in scores_topk_idxs]
         top_pred_poses = [all_pred_poses[idx] for idx in top_model_idxs] 
         top_scores = [all_scores[idx] for idx in top_model_idxs]  
-
-        # from IPython import embed; embed()
         
         # initialize panel img + label
         panels = [gt_depth_img]
         labels = [f"GT Image\n ycb model idx={gt_ycb_idx}\n"]
 
-
         # make panel img for each model 
         for i, (pred_pose, score) in enumerate(zip(top_pred_poses, top_pred_poses)):
             model_idx = top_model_idxs[i]
             pred_image_unmasked = jax3dp3.renderer.render_single_object(pred_pose, model_idx)  # unmasked predicted depth image
-            pred_image_blocked = pred_image_unmasked[:,:,2] >= gt_img_complement[:,:,2] 
-            pred_image = pred_image_unmasked * (1-(pred_image_blocked * nonzero[0]))[:,:, None] 
+            pred_image = jax3dp3.renderer.get_single_masked_image(pred_image_unmasked, gt_img_complement)
             pred_depth_img = jax3dp3.viz.get_depth_image(pred_image[:,:,2], max=far)  # predicted depth image (as passed thru the scorer)
             panels.append(pred_depth_img)
             labels.append(f"Predicted Image \n ycb model idx={model_idx}\nr={int(likelihood_r*1000)/1000}, outlierp={outlier_prob}\n Score={int(top_scores[i]*100000)/100000}")
@@ -315,7 +300,7 @@ for _ in range(5):
 
     
 all_images[0].save(
-    fp=f"panels_{scene_id}_{img_id}_obj{obj_number}_gt{gt_ycb_idx}.gif",
+    fp=f"panels_{scene_id}_{img_id}_obj{gt_obj_number}_gt{gt_ycb_idx}.gif",
     format="GIF",
     append_images=all_images,
     save_all=True,
