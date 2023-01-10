@@ -149,7 +149,7 @@ for idx in object_indices:
     images_unmasked = jax3dp3.render_parallel(proposals, idx)
     images = jax3dp3.renderer.get_masked_images(images_unmasked, gt_img_complement)
 
-    weights = scorer_parallel_jit(gt_img, images, 8.0, 0.1, 10**3)
+    weights = scorer_parallel_jit(gt_img, images, 7.0, 0.01, 10**3)
     best_pose_idx = weights.argmax()
     filename = "imgs/best_{}.png".format(model_names[idx])
     pred = jax3dp3.viz.get_depth_image(
@@ -167,7 +167,7 @@ print(np.array(all_scores)[np.argsort(all_scores)])
 
 
 
-likelihood_r_range = [6.0] #[r for r in reversed(np.linspace(5, max_r,10))] + [r for r in reversed(np.linspace(1,5,10))] + [r for r in reversed(np.linspace(min_r,1,20))] 
+likelihood_r_range = [7.0] #[r for r in reversed(np.linspace(5, max_r,10))] + [r for r in reversed(np.linspace(1,5,10))] + [r for r in reversed(np.linspace(min_r,1,20))] 
 outlier_prob_range = [0.01] 
 
 
@@ -182,7 +182,7 @@ def get_model_best_results(model_idx, r_range, outlier_prob_range):
 
     for r in r_range:
         for outlier_prob in outlier_prob_range:
-            weights = scorer_parallel_jit(gt_img, images_of_model, r, outlier_prob, 1**3)
+            weights = scorer_parallel_jit(gt_img, images_of_model, r, outlier_prob, 10**3)
             best_pose_idx = weights.argmax()
             
             best_pose = poses_to_score[best_pose_idx]
