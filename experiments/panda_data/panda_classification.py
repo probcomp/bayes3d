@@ -101,7 +101,7 @@ for seg_id in segmentation_idx_to_do_pose_estimation_for:
     for idx in object_indices:
         pose_proposals = get_pose_proposals_jit(model_box_dims[idx])
         images = jax3dp3.render_parallel(pose_proposals, idx)
-        weights = scorer_parallel_jit(gt_image_masked, images, r, 0.01, 2**3)
+        weights = scorer_parallel_jit(gt_image_masked, images, r, 0.01, 20**3)
         best_pose_idx = weights.argmax()
         all_scores.append(weights[best_pose_idx])
         poses.append(pose_proposals[best_pose_idx])
