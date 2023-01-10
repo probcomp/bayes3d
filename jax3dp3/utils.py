@@ -7,6 +7,7 @@ import jax3dp3.transforms_3d as t3d
 import os
 import pyransac3d
 import sklearn.cluster
+from jax.scipy.special import logsumexp
 
 def get_assets_dir():
     return os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
@@ -141,3 +142,6 @@ def get_largest_cluster_id_from_segmentation(segmentation_array_or_img):
     unique = unique[non_neg_one]
     counts = counts[non_neg_one]
     return unique[counts.argmax()]
+
+def normalize_log_scores(log_p):
+    return jnp.exp(log_p - logsumexp(log_p))

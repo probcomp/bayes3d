@@ -13,3 +13,4 @@ distinctipy
 moderngl
 trimesh
 ninja
+pyransac3d

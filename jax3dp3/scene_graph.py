@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import jax
+import jax3dp3.enumerations
 import jax3dp3.transforms_3d as t3d
 
 def contact_planes(dimensions):
@@ -26,24 +27,21 @@ def get_contact_transform(contact_params):
 
 def relative_pose_from_contact(
     contact_params,
-    face_params,
+    face_parent, face_child,
     dims_parent, dims_child,
 ):
-    parent_plane = contact_planes(dims_parent)[face_params[0]]
-    child_plane = contact_planes(dims_child)[face_params[1]]
+    parent_plane = contact_planes(dims_parent)[face_parent]
+    child_plane = contact_planes(dims_child)[face_child]
     contact_transform = get_contact_transform(contact_params)
     return (parent_plane.dot(contact_transform)).dot(jnp.linalg.inv(child_plane))
 
 def pose_from_contact(
     contact_params,
-    face_params,
+    face_parent, face_child,
     dims_parent, dims_child,
     parent_pose
 ):
-    parent_plane = contact_planes(dims_parent)[face_params[0]]
-    child_plane = contact_planes(dims_child)[face_params[1]]
-    contact_transform = get_contact_transform(contact_params)
-    return parent_pose.dot(parent_plane.dot(contact_transform)).dot(jnp.linalg.inv(child_plane))
+    return parent_pose.dot(relative_pose_from_contact(contact_params, face_parent, face_child, dims_parent, dims_child))
 
 def get_contact_plane(
     parent_pose,
@@ -56,18 +54,25 @@ def get_contact_plane(
 ## Get poses
 
 
-def iter(poses, box_dims, edge, contact_params, face_params):
+def iter(poses, box_dims, edge, contact_params, face_parent, face_child):
     i, j = edge
-    rel_pose = relative_pose_from_contact(contact_params, face_params, box_dims[i], box_dims[j])
+    rel_pose = relative_pose_from_contact(contact_params, face_parent, face_child, box_dims[i], box_dims[j])
     return (
         poses[i].dot(rel_pose) * (i != -1)
         +
         poses[j] * (i == -1)
     )
 
-def absolute_poses_from_scene_graph(start_poses, box_dims, edges, contact_params, face_params):
+def absolute_poses_from_scene_graph(start_poses, box_dims, edges, contact_params, face_parent, face_child):
     def _f(poses, _):
-        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0,))(poses, box_dims, edges, contact_params, face_params)
+        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0,))(poses, box_dims, edges, contact_params, face_parent, face_child)
         return (new_poses, new_poses)
     return jax.lax.scan(_f, start_poses, jnp.ones(edges.shape[0]))[0]
 
+
+def enumerate_contact_and_face_parameters(min_x,min_y,min_angle, max_x, max_y, max_angle, num_x, num_y, num_angle, faces):
+    contact_params_sweep = jax3dp3.enumerations.make_translation_grid_enumeration_3d(min_x,min_y,min_angle, max_x, max_y, max_angle, num_x, num_y, num_angle)
+    contact_params_sweep_extended = jnp.tile(contact_params_sweep, (faces.shape[0],1))
+    face_params_sweep = jnp.repeat(faces, contact_params_sweep.shape[0])
+    return contact_params_sweep_extended, face_params_sweep
+    
