@@ -9,15 +9,15 @@ import trimesh
 import time
 import jax3dp3
 import pickle
+import os
 
-
-file = open("./panda_dataset/scene_2.pkl",'rb')
+panda_dataset_path = os.path.join(jax3dp3.utils.get_assets_dir(), "panda_dataset")
+file = open(os.path.join(panda_dataset_path, "scene_2.pkl"),'rb')
 all_data = pickle.load(file)
 file.close()
 
 t = -1
 data = all_data[t]
-print(data.keys())
 
 rgb = data["rgb"]
 rgb_viz = jax3dp3.viz.get_rgb_image(rgb, 255.0)
@@ -100,40 +100,17 @@ jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz, h,w), enumeration_vi
 
 
 images_unmasked = jax3dp3.render_parallel(poses, cube_mesh_id)
-keep_gt = jnp.logical_or(
-    images_unmasked[:,:,:,2] == 0.0,
-    (
-        (gt_image_full[None,:,:,2] != 0.0) *
-        (images_unmasked[:,:,:,2] >= gt_image_full[None,:,:,2])
-    )
-)[:,:,:,None]
-
-# images_unmasked = 10, gt_iamge =0 ==> blocked=False ==> 10
-# images_unmasked = 10, gt_iamge = 11 ==> blocked=False ==> 10
-# images_unmasked = 11, gt_iamge = 9 ==> blocked=True ==> 9
-# images_unmasked = 5, gt_iamge = 0 ==> blocked=False ==> 9
-# images_unmasked = 0, gt_iamge = 5 ==> blocked=False ==> 0
-
-
-images_apply_occlusions = (
-    images_unmasked[:,:,:,:3] * (1- keep_gt) + 
-    gt_image_full * keep_gt
-)
-jax3dp3.viz.save_depth_image(images_apply_occlusions[0, :,:,2], "img.png", 
-    min=0.1,
-    max=1.2
-)
+image_combined_with_gt = jax.vmap(jax3dp3.combine_rendered_with_groud_truth, in_axes=(0, None))(images_unmasked, gt_image_full)
 scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
 
 r = 0.0001
-weights = scorer_parallel_jit(gt_image_full, images_apply_occlusions, r, 0.001, 20**3)
+weights = scorer_parallel_jit(gt_image_full, image_combined_with_gt, r, 0.001, 20**3)
 
-order = jnp.argsort(-weights)
+best_weight = weights.max()
+good_scoring_indices = weights >= (best_weight)
+print('good_scoring_indices.sum():');print(good_scoring_indices.sum())
 
-k = 300
-top_k = order[:k]
-
-all_images_overlayed = jax3dp3.render_multiobject(poses[top_k], [cube_mesh_id for _ in range(k)])
+all_images_overlayed = jax3dp3.render_multiobject(poses[good_scoring_indices], [cube_mesh_id for _ in range(good_scoring_indices.sum())])
 enumeration_viz = jax3dp3.viz.get_depth_image(all_images_overlayed[:,:,2], max=far)
 enumeration_viz.save("best.png")
 jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz, h,w), enumeration_viz).save("overlay.png")

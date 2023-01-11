@@ -2,6 +2,7 @@ import jax3dp3.nvdiffrast.common as dr
 import torch
 import jax3dp3.camera
 import trimesh
+import jax.numpy as jnp
 import jax
 import numpy as np
 import jax.dlpack
@@ -50,18 +51,32 @@ def render_multiobject_parallel(poses, indices):
     images_torch = render_to_torch(poses, indices)
     return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
 
-def get_gt_img_complement(depth_data, segmentation, obj_number_in_segmentation, h, w, fx, fy, cx, cy):
-    gt_img_complement = jax3dp3.transforms_3d.depth_to_point_cloud_image(cv2.resize(np.asarray(depth_data * (segmentation != obj_number_in_segmentation)), (w,h),interpolation=0), fx,fy,cx,cy)
-    return gt_img_complement
 
-def get_masked_images(images_unmasked, gt_img_complement):
+
+# Complement rendering function
+def combine_rendered_with_groud_truth(rendered_image, gt_point_cloud_image):
+    keep_gt = jnp.logical_or(
+        rendered_image[:,:,2] == 0.0,
+        (
+            (gt_point_cloud_image[:,:,2] != 0.0) *
+            (rendered_image[:,:,2] >= gt_point_cloud_image[:,:,2])
+        )
+    )[...,None]
+
+    images_apply_occlusions = (
+        rendered_image[:,:,:3] * (1- keep_gt) + 
+        gt_point_cloud_image * keep_gt
+    )
+    return images_apply_occlusions
+
+def get_complement_masked_images(images_unmasked, gt_img_complement):
     blocked = images_unmasked[:,:,:,2] >= gt_img_complement[None,:,:,2] 
     nonzero = gt_img_complement[None, :, :, 2] != 0
 
     images = images_unmasked * (1-(blocked * nonzero))[:,:,:, None]  # rendered model images
     return images
 
-def get_single_masked_image(image_unmasked, gt_img_complement):
+def get_complement_masked_image(image_unmasked, gt_img_complement):
     blocked = image_unmasked[:,:,2] >= gt_img_complement[:,:,2] 
     nonzero = gt_img_complement[:, :, 2] != 0
 
