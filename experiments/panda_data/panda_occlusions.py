@@ -1,3 +1,4 @@
+
 import numpy as np
 import cv2
 import jax3dp3.transforms_3d as t3d
@@ -10,7 +11,7 @@ import jax3dp3
 import pickle
 
 
-file = open("./panda_dataset/scene_1.pkl",'rb')
+file = open("./panda_dataset/scene_2.pkl",'rb')
 all_data = pickle.load(file)
 file.close()
 
@@ -58,9 +59,15 @@ jax3dp3.load_model(cube_mesh)
 gt_image_full = t3d.depth_to_point_cloud_image(depth, fx,fy,cx,cy)
 jax3dp3.viz.save_depth_image(gt_image_full[:,:,2], "gt_image_full.png", max=far)
 gt_point_cloud_full = t3d.point_cloud_image_to_points(gt_image_full)
-table_pose, table_dims = jax3dp3.utils.find_table_pose_and_dims(gt_point_cloud_full[gt_point_cloud_full[:,2] < far, :], ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.004)
+table_pose, table_dims = jax3dp3.utils.find_table_pose_and_dims(gt_point_cloud_full[gt_point_cloud_full[:,2] < far, :],
+    ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.004
+)
 
-gt_image_table = gt_image_full * (jnp.abs(t3d.apply_transform(gt_image_full, jnp.linalg.inv(table_pose))[:,:,2]) < 0.02)[:,:,None]
+gt_image_table = gt_image_full * (
+    jnp.abs(t3d.apply_transform(gt_image_full, jnp.linalg.inv(table_pose))[:,:,2]) < 0.02
+)[:,:,None]
+jax3dp3.viz.save_depth_image(gt_image_table[:,:,2], "table.png", max=far)
+
 
 gt_image_table_points = t3d.point_cloud_image_to_points(gt_image_table)
 gt_image_table_points_in_table_frame = t3d.apply_transform(gt_image_table_points, jnp.linalg.inv(table_pose))
@@ -86,36 +93,50 @@ poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from
 pose_proposals_jit = jax.jit(lambda box_dims: poses_from_contact_params_sweep(contact_param_sweep, 2, 3, table_dims, box_dims, table_pose))
 poses = pose_proposals_jit(cube_dims)
 
+
 all_images_overlayed = jax3dp3.render_multiobject(poses, [cube_mesh_id for _ in range(poses.shape[0])])
-enumeration_viz = jax3dp3.viz.get_depth_image(images[:,:,2], max=far)
+enumeration_viz = jax3dp3.viz.get_depth_image(all_images_overlayed[:,:,2], max=far)
 jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz, h,w), enumeration_viz).save("enumeration.png")
 
+
 images_unmasked = jax3dp3.render_parallel(poses, cube_mesh_id)
-blocked = (
-    (images_unmasked[:,:,:,2] >= gt_image_full[None,:,:,2]) *
-    gt_image_full[None,:,:,2] != 0.0
+keep_gt = jnp.logical_or(
+    images_unmasked[:,:,:,2] == 0.0,
+    (
+        (gt_image_full[None,:,:,2] != 0.0) *
+        (images_unmasked[:,:,:,2] >= gt_image_full[None,:,:,2])
+    )
+)[:,:,:,None]
+
+# images_unmasked = 10, gt_iamge =0 ==> blocked=False ==> 10
+# images_unmasked = 10, gt_iamge = 11 ==> blocked=False ==> 10
+# images_unmasked = 11, gt_iamge = 9 ==> blocked=True ==> 9
+# images_unmasked = 5, gt_iamge = 0 ==> blocked=False ==> 9
+# images_unmasked = 0, gt_iamge = 5 ==> blocked=False ==> 0
+
+
+images_apply_occlusions = (
+    images_unmasked[:,:,:,:3] * (1- keep_gt) + 
+    gt_image_full * keep_gt
 )
-images_apply_occlusions = images_unmasked[:,:,:,:3] * (1- blocked)
-
-final_images = gt_image_full[None,:,:,:] * (1 - valid) + final_images_pre
-jax3dp3.viz.save_depth_image(final_images[0, :,:,2], "img.png", max=far)
-
+jax3dp3.viz.save_depth_image(images_apply_occlusions[0, :,:,2], "img.png", 
+    min=0.1,
+    max=1.2
+)
 scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
 
 r = 0.0001
-weights = scorer_parallel_jit(gt_image_full, final_images, r, 0.001, 20**3)
+weights = scorer_parallel_jit(gt_image_full, images_apply_occlusions, r, 0.001, 20**3)
 
 order = jnp.argsort(-weights)
-jax3dp3.viz.save_depth_image(images_unmasked[order[0], :,:,2], "img.png", max=far)
-jax3dp3.viz.save_depth_image(final_images_pre[order[0], :,:,2], "pre_img.png", max=far)
 
-k = 200
+k = 300
 top_k = order[:k]
 
 all_images_overlayed = jax3dp3.render_multiobject(poses[top_k], [cube_mesh_id for _ in range(k)])
-enumeration_viz = jax3dp3.viz.get_depth_image(all_images_overlayed[:,:,2], max=far).save("best.png")
-
-# jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz, h,w), enumeration_viz)
+enumeration_viz = jax3dp3.viz.get_depth_image(all_images_overlayed[:,:,2], max=far)
+enumeration_viz.save("best.png")
+jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz, h,w), enumeration_viz).save("overlay.png")
 
 from IPython import embed; embed()
 
