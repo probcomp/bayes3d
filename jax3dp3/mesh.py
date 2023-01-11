@@ -11,6 +11,11 @@ def center_mesh(mesh):
     mesh.vertices = mesh.vertices - shift
     return mesh
 
+def scale_mesh(mesh, scaling=1.0):
+    mesh.vertices = mesh.vertices * scaling
+    return mesh
+
+
 def make_table_mesh(
     table_width,
     table_length,
