@@ -17,6 +17,15 @@ test_img = jax3dp3.ycb_loader.get_test_img(scene_id, img_id, os.environ["YCB_DIR
 depth_data = test_img.get_depth_image()
 rgb_img_data = test_img.get_rgb_image()
 
+box_extents = jnp.array([200.0, 200.0, 200.0])
+cube_pose = jnp.array([[1.0, 0.0, 0.0, 0.0],   
+            [0.0, 1.0, 0.0, -1.0],   
+            [0.0, 0.0, 1.0, 8.0],   
+            [0.0, 0.0, 0.0, 1.0]])
+box = trimesh.creation.box(box_extents, cube_pose)
+
+
+
 gt_obj_number = 3
 segmentation = test_img.get_segmentation_image() 
 gt_ycb_idx = test_img.get_gt_indices()[gt_obj_number]
