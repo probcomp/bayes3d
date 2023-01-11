@@ -10,6 +10,16 @@ import jax3dp3.utils
 # import graphviz
 # import distinctipy
 
+def make_gif(images, filename):
+    images[0].save(
+        fp=filename,
+        format="GIF",
+        append_images=images,
+        save_all=True,
+        duration=100,
+        loop=0,
+    )
+
 
 def make_gif_from_pil_images(images, filename):
     images[0].save(
