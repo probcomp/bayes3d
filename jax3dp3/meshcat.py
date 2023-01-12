@@ -13,9 +13,9 @@ def set_background_color(color):
     VISUALIZER["/Background"].set_property("top_color", color)
     VISUALIZER["/Background"].set_property("bottom_color", color)
 
-def clear_visualizer():
+def clear():
     global VISUALIZER
-    jax3dp3.meshcat.VISUALIZER.delete()
+    VISUALIZER.delete()
 
 def set_pose(channel, pose):
     VISUALIZER[channel].set_transform(np.array(pose,dtype=np.float64))

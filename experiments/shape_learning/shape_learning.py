@@ -13,10 +13,14 @@ import matplotlib.pyplot as plt
 
 
 ## choose a test image  
-scene_id = '49'     # 48 ... 59
+# scene_id = '49'     # 48 ... 59
+# img_ids = ['1', '526', '762', '1575', '2196']
+
+scene_id = '48'     # 48 ... 59
+img_ids = ['1', '1094', '1576','1622','2040', '2160']
 
 ## choose gt object to learn
-obj_number = 2
+obj_number = 4
 
 def get_obj_cloud_from_img(img_id, obj_number):
 
@@ -46,14 +50,13 @@ def get_obj_cloud_from_img(img_id, obj_number):
         t3d.apply_transform(gt_image_single_object_cloud, cam_pose), 
         jnp.linalg.inv(table_pose)
     )
-    point_seg = jax3dp3.utils.segment_point_cloud(gt_image_single_object_cloud, 2.0)
-    gt_points_in_table_frame = gt_points_in_table_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
-    print(f"gt_points_in_table_frame with {len(gt_points_in_table_frame)} points")
+    # point_seg = jax3dp3.utils.segment_point_cloud(gt_image_single_object_cloud, 2.0)
+    # gt_points_in_table_frame = gt_points_in_table_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
+    # print(f"gt_points_in_table_frame with {len(gt_points_in_table_frame)} points")
 
     return gt_points_in_table_frame
 
 
-img_ids = ['1', '526', '762', '1575', '2196']
 
 
 all_cloud_list = []
@@ -73,21 +76,29 @@ for cloud in all_cloud_list:
 
 plt.savefig("cloud.png")
 
+
+jax3dp3.meshcat.setup_visualizer()
+
+jax3dp3.meshcat.show_cloud("cloud", all_cloud / 100.0)
+
 from IPython import embed; embed()
+
 
 import open3d as o3d
 pcd = o3d.geometry.PointCloud()
 pcd.points = o3d.utility.Vector3dVector(all_cloud)
 pcd.estimate_normals()
-alpha = 0.5
-radius = 0.1 #???
-radii = [0.005, 0.01, 0.02, 0.04]
+radius = 1.0 #???
 mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
-    pcd, o3d.utility.DoubleVector(radii))
-o3d.visualization.draw_geometries([pcd, mesh])
+    pcd, o3d.utility.DoubleVector([radius, radius*2.0]))
 tri_mesh = trimesh.Trimesh(np.asarray(mesh.vertices), np.asarray(mesh.triangles),
             vertex_normals=np.asarray(mesh.vertex_normals))
-tri_mesh.export("newshape.obj")
+jax3dp3.meshcat.show_trimesh("obj", jax3dp3.mesh.scale_mesh(tri_mesh, 0.1))
+# jax3dp3.meshcat.clear()
+jax3dp3.meshcat.VISUALIZER.delete()
+
+
+
 bbox = jax3dp3.utils.axis_aligned_bounding_box(cloud)
 
 from IPython import embed; embed()
