@@ -10,7 +10,8 @@ import jax3dp3
 import pickle
 
 
-file = open("./panda_dataset/scene_1.pkl",'rb')
+panda_dataset_path = os.path.join(jax3dp3.utils.get_assets_dir(), "panda_dataset")
+file = open(os.path.join(panda_dataset_path, "scene_1.pkl"),'rb')
 all_data = pickle.load(file)
 file.close()
 
@@ -87,7 +88,7 @@ for seg_id in segmentation_idx_to_do_pose_estimation_for:
     
     grid_width = 0.05
     contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
-        center_x-grid_width, center_y-grid_width, 0.0, center_x+grid_width, center_y+grid_width, jnp.pi*2, 9, 9, 10,
+        center_x-grid_width, center_y-grid_width, 0.0, center_x+grid_width, center_y+grid_width, jnp.pi*2, 13, 13, 12,
         jnp.arange(6)
     )
 

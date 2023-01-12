@@ -8876,7 +8876,7 @@ def create_table(
     return body, np.array([width, length, height])
     
 def add_mesh(
-    ycb_path,
+    ycb_path, color=None
 ):
     mesh = trimesh.load(ycb_path)
     # mesh.vertices = mesh.vertices * scale
@@ -8897,7 +8897,7 @@ def add_mesh(
         collision_geometry, pose=geometry_pose
     )
     visual_id = create_visual_shape(
-        visual_geometry, color=None, pose=geometry_pose
+        visual_geometry, color=color, pose=geometry_pose
     )
     body = DEFAULT_CLIENT.createMultiBody(
         baseMass=1.0,
