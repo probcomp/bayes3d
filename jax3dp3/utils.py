@@ -8,6 +8,14 @@ import os
 import pyransac3d
 import sklearn.cluster
 from jax.scipy.special import logsumexp
+import time
+
+def time_code_block(func, args):
+    start = time.time()
+    output = func(*args)
+    print(output[0])
+    end = time.time()
+    print ("Time elapsed:", end - start)
 
 def get_assets_dir():
     return os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
