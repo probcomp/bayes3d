@@ -15,6 +15,19 @@ def scale_mesh(mesh, scaling=1.0):
     mesh.vertices = mesh.vertices * scaling
     return mesh
 
+def export_mesh(mesh, filename):
+    normals = mesh.face_normals
+    normals = mesh.vertex_normals
+    with open(filename,"w") as f:
+        f.write(trimesh.exchange.obj.export_obj(mesh, include_normals=True))
+
+def make_cuboid_mesh(dimensions):
+    mesh = trimesh.creation.box(
+        dimensions,
+        np.eye(4)
+    )
+    return mesh
+
 
 def make_table_mesh(
     table_width,

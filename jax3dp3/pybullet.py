@@ -8926,28 +8926,37 @@ def get_link_pose_wrapped(body, link):
     position, orientation = get_link_pose(body, link)
     return convert_from_pybullet_pose(position, orientation)
 
-def capture_image(camera_pose, height,width, fx,fy, cx,cy, near,far):
-    opengl_mtx = np.array(
-        [
-            [2*fx/width, 0.0, (width -2*cx)/width, 0.0],
-            [0.0, 2*fy/height, (-height + 2*cy)/height, 0.0],
-            [0.0, 0.0, (-far - near) / (far - near), -2.0*far*near/(far-near)],
-            [0.0, 0.0, -1.0, 0.0]
-        ]
+def capture_image(cam_pose, height,width, fx,fy, cx,cy, near,far):
+    # opengl_mtx = np.array(
+    #     [
+    #         [2*fx/width, 0.0, (width -2*cx)/width, 0.0],
+    #         [0.0, 2*fy/height, (-height + 2*cy)/height, 0.0],
+    #         [0.0, 0.0, (-far - near) / (far - near), -2.0*far*near/(far-near)],
+    #         [0.0, 0.0, -1.0, 0.0]
+    #     ]
+    # )
+    # projMatrix = tuple(np.array(opengl_mtx).T.reshape(-1)),
+    ### This stuff is wrong. But i don't know why
+
+    projMatrix = (
+        2*fx/width,0,0,0,
+        0,2*fy/height,0,0,
+        2*(cx/width)-1,2*(cy/height)-1,-(far+near)/(far-near),
+        -1,0,0,-2*far*near/(far-near),0
     )
-    projMatrix = opengl_mtx
 
     mat = np.array(t3d.transform_from_rot( t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]),jnp.pi)))
-    viewMatrix = np.array(camera_pose).dot(mat)
+    viewMatrix = tuple(np.linalg.inv(np.array(cam_pose).dot(mat)).T.reshape(-1))
 
     _,_, rgb, depth, segmentation = p.getCameraImage(width, height,
-        tuple(np.linalg.inv(np.array(viewMatrix)).T.reshape(-1)),
-        tuple(np.array(projMatrix).T.reshape(-1)),
+        viewMatrix,
+        projMatrix,
         renderer=p.ER_BULLET_HARDWARE_OPENGL
     )
     rgb = np.array(rgb).reshape((height,width,4))
     depth_buffer = np.array(depth).reshape((height,width))
     depth = far * near / (far - (far - near) * depth_buffer)
+    depth[depth > far] = 0.0
     segmentation = np.array(segmentation).reshape((height,width))
     return rgb, depth, segmentation
 

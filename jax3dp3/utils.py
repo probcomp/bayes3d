@@ -109,8 +109,7 @@ def find_table_pose_and_dims(point_cloud, ransac_threshold=0.001, inlier_thresho
     inliers = (jnp.abs(points_in_plane_frame[:,2]) < inlier_threshold)
     inlier_plane_points = points_in_plane_frame[inliers]
     inlier_table_points_seg = segment_point_cloud(inlier_plane_points, segmentation_threshold)
-    unique_vals = jnp.unique(inlier_table_points_seg)
-    most_frequent_seg_id = unique_vals[unique_vals != -1][0]
+    most_frequent_seg_id = get_largest_cluster_id_from_segmentation(inlier_table_points_seg)
     
     table_points_in_plane_frame = inlier_plane_points[inlier_table_points_seg == most_frequent_seg_id]
 

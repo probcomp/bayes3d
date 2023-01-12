@@ -22,34 +22,42 @@ p.connect(p.GUI)
 # p.connect(p.DIRECT)
 
 
-prism_1 = trimesh.creation.box(np.array([2.0, 0.5, 0.5]))
+prism_1 = trimesh.creation.box(np.array([4.0, 1.5, 1.5]))
 prism_1_path = os.path.join(jax3dp3.utils.get_assets_dir(), "rectangular_prism_1.obj")
-prism_1.export(prism_1_path)
+jax3dp3.mesh.export_mesh(prism_1, prism_1_path)
 
-prism_2 = trimesh.creation.box(np.array([3.0, 0.5, 0.5]))
+prism_2 = trimesh.creation.box(np.array([2.0, 1.5, 1.5]))
 prism_2_path = os.path.join(jax3dp3.utils.get_assets_dir(), "rectangular_prism_2.obj")
-prism_2.export(prism_2_path)
+jax3dp3.mesh.export_mesh(prism_2, prism_2_path)
 
-occluder = trimesh.creation.box(np.array([3.0, 0.1, 3.0]))
+occluder = trimesh.creation.box(np.array([5.0, 0.1, 3.0]))
 occluder_path = os.path.join(jax3dp3.utils.get_assets_dir(), "occulder.obj")
-occluder.export(occluder_path)
+occluder.export(occluder_path,include_normals=True)
+jax3dp3.mesh.export_mesh(occluder, occluder_path)
 
 table_mesh = jax3dp3.mesh.center_mesh(jax3dp3.mesh.make_table_mesh(
-    10.0,
-    6.0,
+    15.0,
+    11.0,
     5.0,
     0.3,
     0.1
 ))
 table_mesh_path  = "/tmp/table/table.obj"
 os.makedirs(os.path.dirname(table_mesh_path),exist_ok=True)
-table_mesh.export(table_mesh_path)
+jax3dp3.mesh.export_mesh(table_mesh, table_mesh_path)
 
 all_pybullet_objects = []
 box_dims = []
 
-for path in [table_mesh_path, occluder_path, prism_1_path, prism_2_path]:
-    obj, obj_dims = jax3dp3.pybullet.add_mesh(path,color=[1.0, 0.0, 0.0, 1.0])
+colors = [
+    [214/255.0, 209/255.0, 197/255.0, 1.0],
+    [224/255.0, 158/255.0, 72/255.0, 1.0],
+    [113/255.0, 133/255.0, 189/255.0, 1.0],
+    [113/255.0, 133/255.0, 189/255.0, 1.0],
+]
+paths = [table_mesh_path, occluder_path, prism_1_path, prism_2_path]
+for(c,path) in zip(colors, paths):
+    obj, obj_dims = jax3dp3.pybullet.add_mesh(path,color=c)
     all_pybullet_objects.append(obj)
     box_dims.append(obj_dims)
 
@@ -73,9 +81,9 @@ edges = jnp.array([
 contact_params = jnp.array(
     [
         [0.0, 0.0, 0.0],
-        [0.0, 0.0, -jnp.pi/2],
-        [0.2, 0.2,  0.0],
-        [0.2, 0.2,  0.0],
+        [0.0, -3.0, -jnp.pi/2],
+        [1.5, 0.0,  -jnp.pi/2],
+        [0.0, 0.0,  -jnp.pi/2],
     ]
 )
 
@@ -93,30 +101,19 @@ for (obj, pose) in zip(all_pybullet_objects, poses):
 cam_pose = t3d.transform_from_rot_and_pos(
     jnp.array([
         [1.0, 0.0, 0.0],
-        [0.0, 0.0, -1.0],
+        [0.0, 0.0, 1.0],
         [0.0, -1.0, 0.0],
     ]),
-    jnp.array([0.0, 15.0, 10.0])
+    jnp.array([0.0, -15.0, 10.0])
 ).dot(t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), -jnp.pi/6 ))
 
-rgb, depth, segmentation = jax3dp3.pybullet.capture_image(
-    cam_pose,
-    h, w, fx,fy, cx,cy , near, far
-)
+rgb,depth,seg = jax3dp3.pybullet.capture_image(cam_pose, h,w, fx,fy, cx,cy, near,far)
+rgb = np.array(rgb).reshape((h,w,4))
 jax3dp3.viz.save_rgba_image(rgb,255.0,"rgb.png")
 
-from IPython import embed; embed()
-
-np.savez("data.npz", rgb=[data[0] for data in all_data], 
-         depth=[data[1] for data in all_data],
-         segmentation=[data[2] for data in all_data],
+np.savez("data.npz", rgb=[rgb], depth=[depth], segmentation=[seg],
          params=(h,w,fx,fy,cx,cy,near,far),
-         cam_pose=[data[3] for data in all_data],
-         table_pose=poses[0],
-         table_dims=box_dims[0],
-         all_object_poses=poses
 )
-
 
 
 
