@@ -17,7 +17,6 @@ for scene_num in [1,3,4,6]:
     file.close()
     t = -1
     data = all_data[t]
-    print(data.keys())
 
     rgb = data["rgb"]
     rgb_viz = jax3dp3.viz.get_rgb_image(rgb, 255.0)
@@ -27,10 +26,10 @@ for scene_num in [1,3,4,6]:
     K = data["intrinsics"][0]
     orig_h,orig_w = depth.shape
     orig_fx, orig_fy, orig_cx, orig_cy = K[0,0],K[1,1],K[0,2],K[1,2]
-    near = 0.01
+    near = 0.001
     far = 5.0
 
-    scaling_factor = 0.25
+    scaling_factor = 0.3
     max_depth = far
     h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
     depth = jax3dp3.utils.resize(depth, h, w)
@@ -39,16 +38,18 @@ for scene_num in [1,3,4,6]:
 
     jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
-    model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
-    model_names = np.array(os.listdir(model_dir))
+    num_models = 21
+    model_dir = os.path.join(os.environ["YCB_DIR"], "models")
+    model_names = jax3dp3.ycb_loader.MODEL_NAMES
+
     model_box_dims = []
-    for model in model_names:
-        mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"models/{}/textured_simple.obj".format(model)))
-        mesh = jax3dp3.mesh.center_mesh(mesh)
+    for idx in range(num_models):
+        mesh = trimesh.load(os.path.join(model_dir,"obj_" + f"{str(idx+1).rjust(6, '0')}.ply"))  # 000001 to 000021
+        mesh.vertices = mesh.vertices / 1000.0
         model_box_dims.append(jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0])
         jax3dp3.load_model(mesh)
     model_box_dims = jnp.array(model_box_dims)
-
+    
     cam_pose = jnp.eye(4)
 
 
