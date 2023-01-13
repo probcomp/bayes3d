@@ -77,61 +77,82 @@ def resize_image(img, h, w):
 
 ####
 
-def multi_panel(images, labels=None, middle_width=10, top_border=20, fontsize=20, bottom_text=None, bottom_fontsize=10):
+def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsize=40, label_fontsize=30,  bottom_fontsize=20, middle_width=10):
     num_images = len(images)
     w = images[0].width
     h = images[0].height
 
     dst = Image.new(
-        "RGBA", (num_images * w + (num_images - 1) * middle_width, h + top_border), (255, 255, 255, 255)
+        "RGBA", (num_images * w + (num_images - 1) * middle_width, h), (255, 255, 255, 255)
     )
 
     drawer = ImageDraw.Draw(dst)
     font_bottom = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), bottom_fontsize)
-    font = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), fontsize)
+    font_label = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), label_fontsize)
+    font_title = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), title_fontsize)
+
 
     bottom_border = 0
+    title_border = 0
+    label_border = 0
     if bottom_text is not None:
         msg = bottom_text
         _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_bottom)
         bottom_border = text_h
+    if title is not None:
+        msg = title
+        _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_title)
+        title_border = text_h
+    if labels is not None:
+        for msg in labels:
+            _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_label)
+            label_border = max(text_h, label_border)
+
+    bottom_border += 10 
+    title_border += 10 
+    label_border += 10 
+
 
     dst = Image.new(
-        "RGBA", (num_images * w + (num_images - 1) * middle_width, h + top_border + bottom_border + 10), (255, 255, 255, 255)
+        "RGBA", (num_images * w + (num_images - 1) * middle_width, h + title_border + label_border + bottom_border), (255, 255, 255, 255)
     )
     drawer = ImageDraw.Draw(dst)
 
     for (j, img) in enumerate(images):
         dst.paste(
             img,
-            (j * w + j * middle_width, top_border)
+            (j * w + j * middle_width, title_border + label_border)
         )
 
+    if title is not None:
+        msg = title
+        _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_title)
+        drawer.text(((num_images * w + (num_images - 1) * middle_width)/2.0 - text_w/2 , title_border/2 - text_h/2), msg, font=font_title, fill="black")
 
 
     if labels is not None:
         for (i, msg) in enumerate(labels):
-            _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font)
-            drawer.text((i * w + i * middle_width + w/2 - text_w/2, top_border/2 - text_h/2), msg, font=font, fill="black")
+            _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_label)
+            drawer.text((i * w + i * middle_width + w/2 - text_w/2, title_border + label_border/2 - text_h/2), msg, font=font_label, fill="black")
 
     if bottom_text is not None:
         msg = bottom_text
         _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_bottom)
-        drawer.text(((num_images * w + (num_images - 1) * middle_width)/2.0 - text_w/2,  top_border + h + 5), msg, font=font_bottom, fill="black")
+        drawer.text((5,  title_border + label_border + h + 5), msg, font=font_bottom, fill="black")
     return dst
 
 
-def multi_panel_vertical(images, middle_width=10, top_border=20, fontsize=20):
+def multi_panel_vertical(images, middle_width=10, title_border=20, fontsize=20):
     num_images = len(images)
     w = images[0].width
     h = images[0].height
     dst = Image.new(
-        "RGBA", (w, num_images * h + (num_images - 1) * middle_width + top_border), (255, 255, 255, 255)
+        "RGBA", (w, num_images * h + (num_images - 1) * middle_width + title_border), (255, 255, 255, 255)
     )
     for (j, img) in enumerate(images):
         dst.paste(
             img,
-            (0, top_border + j * h + j * middle_width)
+            (0, title_border + j * h + j * middle_width)
         )
 
     return dst
