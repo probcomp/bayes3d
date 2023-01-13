@@ -105,14 +105,14 @@ contact_param_sweep_2, face_param_sweep_2 = jax3dp3.scene_graph.enumerate_contac
 
 
 
-grid_width = 0.2
+grid_width = 0.5
 contact_param_sweep_3, face_param_sweep_3 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
     -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
     11, 11, 11,
     jnp.array([3])
 )
 
-r = 0.3
+r = 0.4
 outlier_prob, outlier_volume = 0.1, 10**3
 
 best_poses = []
@@ -138,7 +138,7 @@ for idx in [0,1, 2]:
     best_poses.append(pose_proposals[best_pose_idx])
 
 
-# scaling_factor = 0.5
+# scaling_factor = 0.5 
 # max_depth = far
 # h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(h,w,fx,fy,cx,cy,scaling_factor)
 
@@ -154,9 +154,9 @@ overlays = []
 labels = []
 scores = []
 imgs = []
-r = 1.0
+r = 2.0
 resolution = 1.0
-outlier_prob, outlier_volume = 0.1, 10**3
+outlier_prob, outlier_volume = 0.2, 10**3
 for i in range(len(idxs)):
     image_unmasked = jax3dp3.render_single_object(best_poses[i], idxs[i])
     image = jax3dp3.renderer.get_complement_masked_image(image_unmasked, gt_img_complement)
