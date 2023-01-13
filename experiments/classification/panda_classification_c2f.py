@@ -47,6 +47,7 @@ model_box_dims = jnp.array(model_box_dims)
 
 cam_pose = jnp.eye(4)
 
+
 ### segment the image
 gt_image_full = t3d.depth_to_point_cloud_image(depth, fx,fy,cx,cy)
 jax3dp3.viz.save_depth_image(gt_image_full[:,:,2], "gt_image_full.png", max=far)
@@ -140,35 +141,12 @@ def get_pose_estimation_for_segmentation(seg_id):
     best_pose = all_poses[order[0]]
     pred_rendered_img = jax3dp3.render_single_object(best_pose, best_idx)
 
-    
-    r_overlap_check = 0.05
-    overlap = jax3dp3.likelihood.threedp3_likelihood_get_counts(gt_image_masked, pred_rendered_img, r_overlap_check)
-    pred_viz = jax3dp3.viz.get_depth_image(
-        pred_rendered_img[:,:,2], max=max_depth
-    )
-    overlay = jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz, h,w), pred_viz,alpha=0.5)
-    
-    bottom_text_string = "Object Class : Score\n"
-    for i in order:
-        bottom_text_string += (
-            "{} : {}\n".format(model_names[all_idxs[i]], all_scores[i])
-        )
+    panel_viz = jax3dp3.c2f.multi_panel_c2f(results, gt_img_complement, gt_image_masked, 
+                                            rgb_viz, h, w, max_depth, 
+                                            outlier_prob, outlier_volume, 
+                                            model_names)
 
-
-    bottom_text_string += "\n"
-    filename = f"imgs/scene_{scene_num}_seg_id_{seg_id}.png"
-
-    jax3dp3.viz.multi_panel([gt_img_viz, pred_viz, overlay], 
-        labels=[
-            "Ground Truth", 
-            "Prediction\nScore: {:.2f} {:s}".format(best_score, model_names[best_idx]), 
-            "Overlap:\n{}/{}, {}/{}".format(
-                *overlap
-            )
-        ],
-        bottom_text=bottom_text_string,
-        middle_width=50,
-    ).save(filename)
+    panel_viz.save("imgs/best_panels_out.png") 
 
 for seg_id in segmentation_idx_to_do_pose_estimation_for:
     get_pose_estimation_for_segmentation(seg_id)
@@ -176,17 +154,3 @@ for seg_id in segmentation_idx_to_do_pose_estimation_for:
 
 from IPython import embed; embed()
 
-
-
-# for i in range(1,16):
-#     file = open("./panda_dataset/scene_{}.pkl".format(i),'rb')
-#     all_data = pickle.load(file)
-#     file.close()
-
-#     t = -1
-#     data = all_data[t]
-#     print(data.keys())
-
-#     rgb = data["rgb"]
-#     rgb_viz = jax3dp3.viz.get_rgb_image(rgb, 255.0)
-#     rgb_viz.save("rgb_{}.png".format(i))

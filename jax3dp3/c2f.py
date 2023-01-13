@@ -1,5 +1,7 @@
 import collections
 import heapq
+import jax
+import jax.numpy as jnp
 import jax3dp3
 
 def c2f_contact_parameters(
@@ -60,3 +62,42 @@ def c2f_contact_parameters(
 
     items = [item for item in heapq.nlargest(top_k, top_k_heap)]
     return items
+
+
+def multi_panel_c2f(results:list, gt_img_complement, gt_image_masked, rgb_viz, h, w, max_depth, outlier_prob, outlier_volume, model_names):
+    overlays = []
+    labels = []
+    scores = []
+    imgs = []
+    r_for_posterior = 0.5
+    scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
+    rgb_viz_resized = jax3dp3.viz.resize_image(rgb_viz,h,w)
+    for i in range(len(results)):
+        gt_img_viz = jax3dp3.viz.get_depth_image(gt_image_masked[:,:,2],  max=max_depth)
+
+        score_orig, obj_idx, _, _, pose = results[i]
+        image_unmasked = jax3dp3.render_single_object(pose, obj_idx)
+        image = jax3dp3.renderer.get_complement_masked_image(image_unmasked, gt_img_complement)
+        imgs.append(image)
+
+        score = scorer_parallel_jit(gt_image_masked, image[None, ...], r_for_posterior, outlier_prob, outlier_volume)[0]
+
+        overlays.append(
+            jax3dp3.viz.overlay_image(rgb_viz_resized, jax3dp3.viz.get_depth_image(image_unmasked[:,:,2],  max=max_depth))
+        )
+        scores.append(score)
+        labels.append(
+            "Obj {:d}: {:s}\n Score Orig: {:.2f} \n Score: {:.2f}".format(obj_idx, model_names[obj_idx], score_orig, score)
+        )
+
+    normalized_probabilites = jax3dp3.utils.normalize_log_scores(jnp.array(scores))
+
+    dst = jax3dp3.viz.multi_panel(
+        [rgb_viz_resized, gt_img_viz, *overlays],
+        labels=["RGB", "Depth Segment", *labels],
+        bottom_text="{}\n Normalized Probabilites: {}".format(jnp.array(scores), jnp.round(normalized_probabilites, decimals=4)),
+        label_fontsize =15,
+        title=f"Best {len(results)} Results"
+    )
+
+    return dst
