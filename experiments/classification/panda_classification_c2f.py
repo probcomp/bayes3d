@@ -150,8 +150,8 @@ def get_pose_estimation_for_segmentation(seg_id):
 
     grid_width = 0.05
     contact_param_sweep_2, face_param_sweep_2 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
-        -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-        11, 11, 11,
+        -grid_width, -grid_width, 0.0, +grid_width, +grid_width, 2*jnp.pi, 
+        13, 13, 12,
         jnp.array([3])
     )
 
@@ -162,11 +162,12 @@ def get_pose_estimation_for_segmentation(seg_id):
         jnp.array([3])
     )
     
-    contact_param_sched = [contact_param_sweep, contact_param_sweep_2, contact_param_sweep_3]
-    face_param_sched = [face_param_sweep, face_param_sweep_2, face_param_sweep_3]
+    contact_param_sched = [contact_param_sweep_2]
+    face_param_sched = [face_param_sweep_2]
+    likelihood_r_sched = [0.05]
 
     start = time.time()
-    best_score, best_pose_estimate, best_idx, top_k_heap = coarse_to_fine_contact_params(contact_param_sched, face_param_sched, likelihood_r_sched=[0.06,0.04,0.02],
+    best_score, best_pose_estimate, best_idx, top_k_heap = coarse_to_fine_contact_params(contact_param_sched, face_param_sched, likelihood_r_sched,
                                                                                         init_latent_pose_table_frame=t3d.transform_from_pos(jnp.array([center_x, center_y, 0])), 
                                                                                         gt_image_masked=gt_image_masked, gt_img_complement=gt_img_complement,
                                                                                         top_k=top_k)  
@@ -207,7 +208,6 @@ def get_pose_estimation_for_segmentation(seg_id):
             )
         ],
         bottom_text=bottom_text_string,
-        top_border=50,
         middle_width=50,
     ).save(filename)
 
