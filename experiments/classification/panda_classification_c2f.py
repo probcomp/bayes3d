@@ -8,7 +8,7 @@ import pickle
 import jax3dp3.transforms_3d as t3d
 import jax3dp3
 
-scene_num = 1
+scene_num = 4
 panda_dataset_path = os.path.join(jax3dp3.utils.get_assets_dir(), "panda_dataset")
 file = open(os.path.join(panda_dataset_path, f"scene_{scene_num}.pkl"),'rb')
 all_data = pickle.load(file)
@@ -32,6 +32,8 @@ scaling_factor = 0.25
 max_depth = far
 h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
 depth = jax3dp3.utils.resize(depth, h, w)
+rgb_viz_resized = jax3dp3.viz.resize_image(rgb_viz, h,w)
+
 
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
@@ -69,7 +71,7 @@ segmentation_idx_to_do_pose_estimation_for = unique[unique != -1]
 print(segmentation_idx_to_do_pose_estimation_for)
 
 object_indices = list(range(len(model_names)))
-outlier_prob, outlier_volume = 0.01, 20**3
+
 
 grid_width = 0.1
 contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
@@ -95,6 +97,8 @@ contact_param_sweep_3, face_param_sweep_3 = jax3dp3.scene_graph.enumerate_contac
 contact_param_sched = [contact_param_sweep, contact_param_sweep_2, contact_param_sweep_3]
 face_param_sched = [face_param_sweep, face_param_sweep_2, face_param_sweep_3]
 likelihood_r_sched = [0.1, 0.05, 0.02]
+
+outlier_prob, outlier_volume = 0.1, 20**3
 
 def get_pose_estimation_for_segmentation(seg_id):
     gt_image_masked = gt_image_above_table * (segmentation_img == seg_id)[:,:,None]
@@ -130,17 +134,6 @@ def get_pose_estimation_for_segmentation(seg_id):
     print ("Time elapsed:", end - start)
 
 
-    all_scores = jnp.array([item[0] for item in results])
-    all_idxs = jnp.array([item[1] for item in results])
-    all_poses = jnp.array([item[-1] for item in results])
-
-
-    order = np.argsort(-all_scores)
-    best_idx = all_idxs[order[0]]
-    best_score = all_scores[order[0]]
-    best_pose = all_poses[order[0]]
-    pred_rendered_img = jax3dp3.render_single_object(best_pose, best_idx)
-
     panel_viz = jax3dp3.c2f.multi_panel_c2f(results, gt_img_complement, gt_image_masked, 
                                             rgb_viz, h, w, max_depth, 
                                             outlier_prob, outlier_volume, 
@@ -153,4 +146,3 @@ for seg_id in segmentation_idx_to_do_pose_estimation_for:
     # from IPython import embed; embed()
 
 from IPython import embed; embed()
-
