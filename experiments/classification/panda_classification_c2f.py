@@ -12,8 +12,9 @@ import jax3dp3
 import pickle
 
 
-scene_num = 3
-file = open(f"../panda_data/panda_dataset/scene_{scene_num}.pkl",'rb')
+scene_num = 13
+panda_dataset_path = os.path.join(jax3dp3.utils.get_assets_dir(), "panda_dataset")
+file = open(os.path.join(panda_dataset_path, f"scene_{scene_num}.pkl"),'rb')
 all_data = pickle.load(file)
 file.close()
 t = -1
@@ -40,12 +41,12 @@ depth = cv2.resize(depth, (w,h),interpolation=0)
 
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
-dirname = "ycb_downloaded_models"
-model_dir = os.path.join(jax3dp3.utils.get_assets_dir(), dirname)
+
+model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
 model_names = np.array(os.listdir(model_dir))
 model_box_dims = []
 for model in model_names:
-    mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(), f"{dirname}/{model}/textured_simple.obj"))
+    mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"models/{}/textured_simple.obj".format(model)))
     mesh = jax3dp3.mesh.center_mesh(mesh)
     model_box_dims.append(jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0])
     jax3dp3.load_model(mesh)
@@ -68,7 +69,6 @@ segmentation_img = jax3dp3.utils.segment_point_cloud_image(gt_image_above_table,
 jax3dp3.viz.save_depth_image(segmentation_img + 1, "seg.png", max=segmentation_img.max() + 1)
 unique, counts =  np.unique(segmentation_img, return_counts=True)
 
-
 ### setup pose estimation
 segmentation_idx_to_do_pose_estimation_for = unique[unique != -1]
 print(segmentation_idx_to_do_pose_estimation_for)
@@ -77,10 +77,17 @@ poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from
 scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
     
 object_indices = list(range(len(model_names)))
-cf_pose_to_table_pose = lambda pose, table_plane_pose: t3d.inverse(table_plane_pose).dot(cam_pose) @ pose  # table_to_world * cam_to_world * pose_cf
 
 
-def coarse_to_fine_contact_params(contact_param_sched, face_param_sched, likelihood_r_sched, init_latent_pose_table_frame, gt_image_masked, gt_img_complement, top_k=5):
+def coarse_to_fine_contact_params(
+    contact_param_sched, 
+    face_param_sched,
+    likelihood_r_sched,
+    init_latent_pose_table_frame,
+    gt_image_masked,
+    gt_img_complement,
+    top_k=5
+):
     """
     do coarse-to-fine, keeping the top top_k hypotheses at each round
     """
@@ -116,10 +123,8 @@ def coarse_to_fine_contact_params(contact_param_sched, face_param_sched, likelih
             top_k_objs = collections.deque(heapq.nlargest(top_k, top_k_objs))  # after the first iteration prune search down to the top_k top hypothesis objects 
         
         print(f"top {top_k} after {sched_i} iters:\n: {[(s, model_names[i]) for (s,i,p) in top_k_objs]}")
-
-    best_score, best_obj_idx, best_pose_estimate_cam_frame = top_k_objs[0]
     
-    return best_score, best_pose_estimate_cam_frame, best_obj_idx, top_k_objs
+    return top_k_objs
     
 
 
@@ -141,68 +146,75 @@ def get_pose_estimation_for_segmentation(seg_id):
     top_k = 5
     # start = time.time() 
 
-    grid_width = 0.2
+    grid_width = 0.1
     contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
         -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-        11, 11, 11,
-        jnp.array([3])
+        5, 5, 5,
+        jnp.arange(6)
     )
 
     grid_width = 0.05
     contact_param_sweep_2, face_param_sweep_2 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
-        -grid_width, -grid_width, 0.0, +grid_width, +grid_width, 2*jnp.pi, 
-        13, 13, 12,
-        jnp.array([3])
+        -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi*2, 
+        5, 5, 5,
+        jnp.arange(6)
     )
 
     grid_width = 0.02
     contact_param_sweep_3, face_param_sweep_3 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
         -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-        11, 11, 11,
-        jnp.array([3])
+        5, 5, 5,
+        jnp.arange(6)
     )
     
-    contact_param_sched = [contact_param_sweep_2]
-    face_param_sched = [face_param_sweep_2]
-    likelihood_r_sched = [0.05]
-
+    contact_param_sched = [contact_param_sweep, contact_param_sweep_2, contact_param_sweep_3]
+    face_param_sched = [face_param_sweep, face_param_sweep_2, face_param_sweep_3]
+    likelihood_r_sched = [0.1, 0.05, 0.02]
     start = time.time()
-    best_score, best_pose_estimate, best_idx, top_k_heap = coarse_to_fine_contact_params(contact_param_sched, face_param_sched, likelihood_r_sched,
+    top_k_heap = coarse_to_fine_contact_params(
+        contact_param_sched, face_param_sched, likelihood_r_sched=likelihood_r_sched,
                                                                                         init_latent_pose_table_frame=t3d.transform_from_pos(jnp.array([center_x, center_y, 0])), 
                                                                                         gt_image_masked=gt_image_masked, gt_img_complement=gt_img_complement,
                                                                                         top_k=top_k)  
-    print(best_score)
     end= time.time()
     print ("Time elapsed:", end - start)
-    print(f"Best predicted obj = {model_names[best_idx]}")
 
 
-    ## Viz
-    all_scores = jnp.array([item[0] for item in heapq.nsmallest(top_k, top_k_heap)])
-    all_names = jnp.array([item[1] for item in heapq.nsmallest(top_k, top_k_heap)])
-    print(model_names[best_idx])
-    filename = f"imgs/scene_{scene_num}_seg_id_{seg_id}.png"
-    pred_rendered_img = jax3dp3.render_single_object(best_pose_estimate, best_idx)
+    items = [item for item in heapq.nlargest(top_k, top_k_heap)]
+    all_scores = jnp.array([item[0] for item in items])
+    all_idxs = jnp.array([item[1] for item in items])
+    all_poses = jnp.array([item[2] for item in items])
 
+
+
+    order = np.argsort(-all_scores)
+    best_idx = all_idxs[order[0]]
+    best_score = all_scores[order[0]]
+    best_pose = all_poses[order[0]]
+    pred_rendered_img = jax3dp3.render_single_object(best_pose, best_idx)
+
+    
     r_overlap_check = 0.05
     overlap = jax3dp3.likelihood.threedp3_likelihood_get_counts(gt_image_masked, pred_rendered_img, r_overlap_check)
-
-    pred = jax3dp3.viz.get_depth_image(
+    pred_viz = jax3dp3.viz.get_depth_image(
         pred_rendered_img[:,:,2], max=max_depth
     )
-    overlay = jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz, h,w), pred,alpha=0.5)
+    overlay = jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz, h,w), pred_viz,alpha=0.5)
     
     bottom_text_string = "Object Class : Score\n"
-    for i in np.argsort(-all_scores):
+    for i in order:
         bottom_text_string += (
-            "{} : {}\n".format(model_names[all_names[i]], all_scores[i])
+            "{} : {}\n".format(model_names[all_idxs[i]], all_scores[i])
         )
-    bottom_text_string += "\n"
 
-    jax3dp3.viz.multi_panel([gt_img_viz, pred, overlay], 
+
+    bottom_text_string += "\n"
+    filename = f"imgs/scene_{scene_num}_seg_id_{seg_id}.png"
+
+    jax3dp3.viz.multi_panel([gt_img_viz, pred_viz, overlay], 
         labels=[
             "Ground Truth", 
-            "Prediction\nScore: {:.2f} {:s}".format(all_scores[best_idx], model_names[best_idx]), 
+            "Prediction\nScore: {:.2f} {:s}".format(best_score, model_names[best_idx]), 
             "Overlap:\n{}/{}, {}/{}".format(
                 *overlap
             )

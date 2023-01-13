@@ -11,7 +11,7 @@ import pickle
 
 
 panda_dataset_path = os.path.join(jax3dp3.utils.get_assets_dir(), "panda_dataset")
-file = open(os.path.join(panda_dataset_path, "scene_1.pkl"),'rb')
+file = open(os.path.join(panda_dataset_path, "scene_3.pkl"),'rb')
 all_data = pickle.load(file)
 file.close()
 
@@ -39,11 +39,11 @@ depth = cv2.resize(depth, (w,h),interpolation=0)
 
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
-model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"ycb_downloaded_models")
+model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
 model_names = np.array(os.listdir(model_dir))
 model_box_dims = []
 for model in model_names:
-    mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"ycb_downloaded_models/{}/textured_simple.obj".format(model)))
+    mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"models/{}/textured_simple.obj".format(model)))
     mesh = jax3dp3.mesh.center_mesh(mesh)
     model_box_dims.append(jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0])
     jax3dp3.load_model(mesh)
@@ -140,7 +140,6 @@ for seg_id in segmentation_idx_to_do_pose_estimation_for:
             )
         ],
         bottom_text=bottom_text_string,
-        top_border=50,
         middle_width=50,
     ).save(filename)
 
