@@ -45,6 +45,8 @@ def threedp3_likelihood(
     log_probs = jnp.log(probs)
     return jnp.sum(jnp.where(obs_mask, log_probs, 0.0))
 
+threedp3_likelihood_parallel_jit = jax.jit(jax.vmap(threedp3_likelihood, in_axes=(None, 0, None, None, None)))
+
 
 def threedp3_likelihood_get_counts(
     obs_xyz: jnp.ndarray,
@@ -67,3 +69,4 @@ def threedp3_likelihood_get_counts(
     return jnp.array([
         (obs_mask * (counts_obs > 0)).sum(), obs_mask.sum(), (rendered_mask * (counts_rendered > 0)).sum(), rendered_mask.sum()
     ])
+

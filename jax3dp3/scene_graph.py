@@ -43,6 +43,20 @@ def pose_from_contact(
 ):
     return parent_pose.dot(relative_pose_from_contact(contact_params, face_parent, face_child, dims_parent, dims_child))
 
+def pose_from_contact_and_face_params(
+    contact_params,
+    face_child,
+    dims_child,
+    contact_plane
+):
+    child_plane = contact_planes(dims_child)[face_child]
+    contact_transform = get_contact_transform(contact_params)
+    return (contact_plane.dot(contact_transform)).dot(jnp.linalg.inv(child_plane))
+
+
+pose_from_contact_and_face_params_parallel_jit = jax.jit(jax.vmap(pose_from_contact_and_face_params, in_axes=(0, 0, None, None)))
+
+
 def get_contact_plane(
     parent_pose,
     dims_parent,

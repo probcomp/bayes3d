@@ -11,7 +11,7 @@ import pickle
 jax3dp3.meshcat.setup_visualizer()
 
 data = np.load("data_occluded.npz")
-data = np.load("data_visible.npz")
+# data = np.load("data_visible.npz")
 
 rgb = data["rgb"][0]
 rgb_viz = jax3dp3.viz.get_rgba_image(rgb, 255.0)
@@ -89,34 +89,31 @@ center_x, center_y, _ = ( points_filtered.min(0) + points_filtered.max(0))/2
 poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from_contact, in_axes=(0, None, 0, None, None, None)))
 scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
 
-
 grid_width = 3.1
 contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
     -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-    11, 11, 11,
+    5, 5, 5,
     jnp.array([3])
 )
 
 grid_width = 1.0
 contact_param_sweep_2, face_param_sweep_2 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
     -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-    11, 11, 11,
+    5, 5, 5,
     jnp.array([3])
 )
-
-
 
 grid_width = 0.5
 contact_param_sweep_3, face_param_sweep_3 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
     -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-    11, 11, 11,
+    5, 5, 5,
     jnp.array([3])
 )
 
 grid_width = 0.1
 contact_param_sweep_4, face_param_sweep_4 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
     -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-    11, 11, 11,
+    5, 5, 5,
     jnp.array([3])
 )
 

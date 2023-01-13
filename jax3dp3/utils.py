@@ -155,3 +155,6 @@ def normalize_log_scores(log_p):
 
 def voxelize(data, resolution):
     return jnp.round(data /resolution) * resolution
+
+def resize(depth, h, w):
+    return cv2.resize(depth, (w,h),interpolation=0)
