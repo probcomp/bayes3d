@@ -30,7 +30,7 @@ orig_fx, orig_fy, orig_cx, orig_cy = K[0,0],K[1,1],K[0,2],K[1,2]
 near = 0.01
 far = 5.0
 
-scaling_factor = 0.3
+scaling_factor = 0.25
 max_depth = far
 h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
 depth = cv2.resize(depth, (w,h),interpolation=0)
@@ -39,11 +39,11 @@ depth = cv2.resize(depth, (w,h),interpolation=0)
 
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
-model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"models")
+model_dir = os.path.join(jax3dp3.utils.get_assets_dir(),"ycb_downloaded_models")
 model_names = np.array(os.listdir(model_dir))
 model_box_dims = []
 for model in model_names:
-    mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"models/{}/textured_simple.obj".format(model)))
+    mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"ycb_downloaded_models/{}/textured_simple.obj".format(model)))
     mesh = jax3dp3.mesh.center_mesh(mesh)
     model_box_dims.append(jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0])
     jax3dp3.load_model(mesh)
@@ -69,6 +69,7 @@ unique, counts =  np.unique(segmentation_img, return_counts=True)
 segmentation_idx_to_do_pose_estimation_for = unique[unique != -1]
 print(segmentation_idx_to_do_pose_estimation_for)
 for seg_id in segmentation_idx_to_do_pose_estimation_for:
+
     gt_image_masked = gt_image_above_table * (segmentation_img == seg_id)[:,:,None]
     gt_img_viz = jax3dp3.viz.get_depth_image(gt_image_masked[:,:,2],  max=max_depth)
     gt_img_viz.save("gt_image_masked.png")
