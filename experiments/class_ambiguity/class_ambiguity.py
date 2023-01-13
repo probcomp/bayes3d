@@ -8,7 +8,7 @@ import trimesh
 import time
 import jax3dp3
 import pickle
-# jax3dp3.meshcat.setup_visualizer()
+jax3dp3.meshcat.setup_visualizer()
 
 data = np.load("data.npz")
 
@@ -21,7 +21,7 @@ _,_,orig_fx, orig_fy, orig_cx, orig_cy,near,far = data["params"]
 orig_h,orig_w = depth.shape
 
 
-scaling_factor = 0.4
+scaling_factor = 0.5
 max_depth = far
 h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
 depth = cv2.resize(depth, (w,h),interpolation=0)
@@ -89,62 +89,111 @@ poses_from_contact_params_sweep = jax.jit(jax.vmap(jax3dp3.scene_graph.pose_from
 scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
 
 
-grid_width = 2.0
+grid_width = 3.1
 contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
-    center_x-grid_width, center_y-grid_width, 0, center_x+grid_width, center_y+grid_width, jnp.pi*2, 
-    15, 15, 10,
+    -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
+    11, 11, 11,
+    jnp.array([3])
+)
+
+grid_width = 1.0
+contact_param_sweep_2, face_param_sweep_2 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
+    -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
+    11, 11, 11,
     jnp.array([3])
 )
 
 
-r = 0.2
-outlier_prob, outlier_volume = 0.1, 20**3
+
+grid_width = 0.2
+contact_param_sweep_3, face_param_sweep_3 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
+    -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
+    11, 11, 11,
+    jnp.array([3])
+)
+
+r = 0.3
+outlier_prob, outlier_volume = 0.1, 10**3
 
 best_poses = []
-best_imgs = []
+idxs = []
 all_scores = []
+resolution = 0.001
+def voxelize(data, resolution):
+    return jnp.round(data /resolution) * resolution
+
 for idx in [0,1, 2]:
-    pose_proposals = poses_from_contact_params_sweep(contact_param_sweep, table_face_param, face_param_sweep, table_dims, 
-                model_box_dims[idx], table_pose)
-    images_unmasked = jax3dp3.render_parallel(pose_proposals, idx)
-    images = jax3dp3.renderer.get_complement_masked_images(images_unmasked, gt_img_complement)
-    weights = scorer_parallel_jit(gt_image_masked, images, r, outlier_prob, outlier_volume)
-    best_pose_idx = weights.argmax()
-    print(weights[best_pose_idx])
+    c = jnp.array([center_x, center_y, 0.0])
+    for c_delta, f in [(contact_param_sweep, face_param_sweep),(contact_param_sweep_2, face_param_sweep_2), (contact_param_sweep_3, face_param_sweep_3)]:
+        pose_proposals = poses_from_contact_params_sweep(c + c_delta, table_face_param, f, table_dims, 
+                    model_box_dims[idx], table_pose)
+        images_unmasked = jax3dp3.render_parallel(pose_proposals, idx)
+        images = jax3dp3.renderer.get_complement_masked_images(images_unmasked, gt_img_complement)
+        weights = scorer_parallel_jit(voxelize(gt_image_masked, resolution), voxelize(images, resolution), r, outlier_prob, outlier_volume)
+        best_pose_idx = weights.argmax()
+        c = (c+c_delta)[best_pose_idx]
+
+
+    idxs.append(idx)
     best_poses.append(pose_proposals[best_pose_idx])
-    best_imgs.append(images_unmasked[best_pose_idx])
-    all_scores.append(weights[best_pose_idx])
-all_scores = jnp.array(all_scores)
-normalized_probabilites = jax3dp3.utils.normalize_log_scores(all_scores)
+
+
+# scaling_factor = 0.5
+# max_depth = far
+# h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(h,w,fx,fy,cx,cy,scaling_factor)
+
+
+
+
+# jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
+# for mesh in meshes:
+#     jax3dp3.load_model(mesh)
 
 
 overlays = []
 labels = []
-for i in range(len(best_imgs)):
+scores = []
+imgs = []
+r = 1.0
+resolution = 1.0
+outlier_prob, outlier_volume = 0.1, 10**3
+for i in range(len(idxs)):
+    image_unmasked = jax3dp3.render_single_object(best_poses[i], idxs[i])
+    image = jax3dp3.renderer.get_complement_masked_image(image_unmasked, gt_img_complement)
+    imgs.append(image)
+    score = scorer_parallel_jit(voxelize(gt_image_masked, resolution), voxelize(image, resolution)[None, ...], r, outlier_prob, outlier_volume)[0]
+
     overlays.append(
-        jax3dp3.viz.overlay_image(rgb_viz_resized, jax3dp3.viz.get_depth_image(best_imgs[i][:,:,2],  max=max_depth))
+        jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz_resized,h,w), jax3dp3.viz.get_depth_image(image_unmasked[:,:,2],  max=max_depth))
     )
+    scores.append(score)
     labels.append(
-        "Obj {:d}\n Score: {:.2f}".format(i, all_scores[i])
+        "Obj {:d}\n Score: {:.2f}".format(idxs[i], score)
     )
+
+normalized_probabilites = jax3dp3.utils.normalize_log_scores(jnp.array(scores))
 
 
 jax3dp3.viz.multi_panel(
     [rgb_viz_resized, gt_img_viz, *overlays],
     labels=["RGB", "Depth Segment", *labels],
-    bottom_text="Normalized Probabilites: {}".format(jnp.round(normalized_probabilites, decimals=4)),
+    bottom_text="{}\n Normalized Probabilites: {}".format(jnp.array(scores), jnp.round(normalized_probabilites, decimals=4)),
     label_fontsize =15,
     title="Class Ambiguity"
 ).save("out.png")
 
+
+
+jax3dp3.meshcat.clear()
+jax3dp3.meshcat.show_cloud("cloud", gt_image_masked / 10.0)
+jax3dp3.meshcat.show_cloud("cloud2", 
+    imgs[0] / 10.0,
+    color = np.array([1.0, 0.0, 0.0])
+)
+jax3dp3.meshcat.show_cloud("cloud3", 
+    imgs[1] / 10.0,
+    color = np.array([0.0, 1.0, 0.0])
+)
+
+
 from IPython import embed; embed()
-
-
-# jax3dp3.meshcat.clear()
-# jax3dp3.meshcat.show_cloud("cloud", gt_image_masked / 10.0)
-# jax3dp3.meshcat.show_cloud("cloud2", 
-#     best_imgs[0] / 10.0,
-#     color = np.array([1.0, 0.0, 0.0])
-# )
-
-

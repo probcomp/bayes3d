@@ -26,7 +26,7 @@ prism_1 = trimesh.creation.box(np.array([4.0, 1.5, 1.5]))
 prism_1_path = os.path.join(jax3dp3.utils.get_assets_dir(), "rectangular_prism_1.obj")
 jax3dp3.mesh.export_mesh(prism_1, prism_1_path)
 
-prism_2 = trimesh.creation.box(np.array([2.0, 1.5, 1.5]))
+prism_2 = trimesh.creation.box(np.array([3.0, 1.5, 1.5]))
 prism_2_path = os.path.join(jax3dp3.utils.get_assets_dir(), "rectangular_prism_2.obj")
 jax3dp3.mesh.export_mesh(prism_2, prism_2_path)
 
@@ -82,7 +82,7 @@ contact_params = jnp.array(
     [
         [0.0, 0.0, 0.0],
         [0.0, -3.0, -jnp.pi/2],
-        [1.5, 0.0,  -jnp.pi/2],
+        [2.0, 0.0,  -jnp.pi/2],
         [0.0, 0.0,  -jnp.pi/2],
     ]
 )

@@ -152,3 +152,6 @@ def get_largest_cluster_id_from_segmentation(segmentation_array_or_img):
 
 def normalize_log_scores(log_p):
     return jnp.exp(log_p - logsumexp(log_p))
+
+def voxelize(data, resolution):
+    return jnp.round(data /resolution) * resolution
