@@ -3,6 +3,7 @@ import heapq
 import jax
 import jax.numpy as jnp
 import jax3dp3
+import numpy as np
 
 def c2f_contact_parameters(
     init_contact_parameters,
@@ -61,15 +62,17 @@ def c2f_contact_parameters(
         # print(f"top {top_k} after {sched_i} iters:\n: {[(s, model_names[i]) for (s,i,p) in top_k_heap]}")
 
     items = [item for item in heapq.nlargest(top_k, top_k_heap)]
+    scores = np.array([item[0] for item in items])
+    items = [items[i] for i in np.argsort(-scores)]
     return items
 
 
-def multi_panel_c2f(results:list, gt_img_complement, gt_image_masked, rgb_viz, h, w, max_depth, outlier_prob, outlier_volume, model_names):
+def multi_panel_c2f(results:list, r, gt_img_complement, gt_image_masked, rgb_viz, h, w, max_depth, outlier_prob, outlier_volume, model_names,title=None):
     overlays = []
     labels = []
     scores = []
     imgs = []
-    r_for_posterior = 0.5
+
     scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
     rgb_viz_resized = jax3dp3.viz.resize_image(rgb_viz,h,w)
     for i in range(len(results)):
@@ -80,7 +83,7 @@ def multi_panel_c2f(results:list, gt_img_complement, gt_image_masked, rgb_viz, h
         image = jax3dp3.renderer.get_complement_masked_image(image_unmasked, gt_img_complement)
         imgs.append(image)
 
-        score = scorer_parallel_jit(gt_image_masked, image[None, ...], r_for_posterior, outlier_prob, outlier_volume)[0]
+        score = scorer_parallel_jit(gt_image_masked, image[None, ...], r, outlier_prob, outlier_volume)[0]
 
         overlays.append(
             jax3dp3.viz.overlay_image(rgb_viz_resized, jax3dp3.viz.get_depth_image(image_unmasked[:,:,2],  max=max_depth))
@@ -97,7 +100,7 @@ def multi_panel_c2f(results:list, gt_img_complement, gt_image_masked, rgb_viz, h
         labels=["RGB", "Depth Segment", *labels],
         bottom_text="{}\n Normalized Probabilites: {}".format(jnp.array(scores), jnp.round(normalized_probabilites, decimals=4)),
         label_fontsize =15,
-        title=f"Best {len(results)} Results"
+        title=title
     )
 
     return dst

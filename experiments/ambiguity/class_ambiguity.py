@@ -11,7 +11,7 @@ import pickle
 # jax3dp3.meshcat.setup_visualizer()
 
 data = np.load("data_occluded.npz")
-# data = np.load("data_visible.npz")
+data = np.load("data_visible.npz")
 
 rgb = data["rgb"][0]
 rgb_viz = jax3dp3.viz.get_rgba_image(rgb, 255.0)
@@ -77,33 +77,33 @@ gt_img_complement_viz.save("gt_img_complement.png")
 grid_width = 3.1
 contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
     -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-    5, 5, 5,
+    5, 5, 11,
     jnp.array([3])
 )
 
 grid_width = 1.0
 contact_param_sweep_2, face_param_sweep_2 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
     -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-    5, 5, 5,
+    5, 5, 11,
     jnp.array([3])
 )
 
 grid_width = 0.5
 contact_param_sweep_3, face_param_sweep_3 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
     -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-    5, 5, 5,
+    5, 5, 11,
     jnp.array([3])
 )
 
 grid_width = 0.1
 contact_param_sweep_4, face_param_sweep_4 = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
     -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi, 
-    5, 5, 5,
+    5, 5, 11,
     jnp.array([3])
 )
 
 r = 0.5
-outlier_prob, outlier_volume = 0.05, 10*20.*10.0
+outlier_prob, outlier_volume = 0.1, 10*20.*10.0
 
 
 contact_param_sched = [contact_param_sweep, contact_param_sweep_2, contact_param_sweep_3, contact_param_sweep_4]
@@ -130,37 +130,12 @@ results = jax3dp3.c2f.c2f_contact_parameters(
     outlier_volume=outlier_volume,
 )
 
-overlays = []
-labels = []
-scores = []
-imgs = []
-r_for_posterior = 0.5
-for i in range(len(results)):
-    score_orig, obj_idx, _, _, pose = results[i]
-    image_unmasked = jax3dp3.render_single_object(pose, obj_idx)
-    image = jax3dp3.renderer.get_complement_masked_image(image_unmasked, gt_img_complement)
-    imgs.append(image)
-    score = jax3dp3.threedp3_likelihood_parallel_jit(gt_image_masked, image[None, ...], r, outlier_prob, outlier_volume)[0]
-
-    overlays.append(
-        jax3dp3.viz.overlay_image(jax3dp3.viz.resize_image(rgb_viz_resized,h,w), jax3dp3.viz.get_depth_image(image_unmasked[:,:,2],  max=max_depth))
-    )
-    scores.append(score)
-    labels.append(
-        "Obj {:d}\n Score Orig: {:.2f} \n Score: {:.2f}".format(obj_idx, score_orig, score)
-    )
-
-normalized_probabilites = jax3dp3.utils.normalize_log_scores(jnp.array(scores))
-
-jax3dp3.viz.multi_panel(
-    [rgb_viz_resized, gt_img_viz, *overlays],
-    labels=["RGB", "Depth Segment", *labels],
-    bottom_text="{}\n Normalized Probabilites: {}".format(jnp.array(scores), jnp.round(normalized_probabilites, decimals=4)),
-    label_fontsize =15,
-    title="Class Ambiguity"
+panel_viz = jax3dp3.c2f.multi_panel_c2f(
+    results, likelihood_r_sched[-1], gt_img_complement, gt_image_masked, 
+    rgb_viz, h, w, max_depth, 
+    outlier_prob, outlier_volume, 
+    ["1", "2", "3"]
 ).save("out.png")
-
-
 
 # jax3dp3.meshcat.clear()
 # jax3dp3.meshcat.show_cloud("cloud", gt_image_masked / 10.0)
