@@ -34,3 +34,6 @@ and view `out.gif`
 ## Assets
 
 Get additional model and data assets by running
+```
+bash download.sh
+```
