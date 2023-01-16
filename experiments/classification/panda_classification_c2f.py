@@ -39,7 +39,7 @@ for scene_num in [1,3,4,6]:
     jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
     num_models = 21
-    model_dir = os.path.join(os.environ["YCB_DIR"], "models")
+    model_dir = os.path.join(jax3dp3.utils.get_assets_dir(), "bop/ycbv/models")
     model_names = jax3dp3.ycb_loader.MODEL_NAMES
 
     model_box_dims = []

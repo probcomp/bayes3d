@@ -7,3 +7,5 @@ venv/*
 *.npz
 *.egg-info/*
 *.json
+assets/bop/*
+assets/panda_dataset/*
