@@ -93,6 +93,8 @@ def multi_panel_c2f_viz(results:list, r, gt_img_complement, gt_image_masked, rgb
 
     scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
     rgb_viz_resized = jax3dp3.viz.resize_image(rgb_viz,h,w)
+
+    overlap = None
     for i in range(len(results)):
         gt_img_viz = jax3dp3.viz.get_depth_image(gt_image_masked[:,:,2],  max=max_depth)
 
@@ -100,6 +102,10 @@ def multi_panel_c2f_viz(results:list, r, gt_img_complement, gt_image_masked, rgb
         image_unmasked = jax3dp3.render_single_object(pose, obj_idx)
         image = jax3dp3.renderer.get_complement_masked_image(image_unmasked, gt_img_complement)
         imgs.append(image)
+
+        if i == 0:
+            r_overlap_check = 0.02
+            overlap = jax3dp3.likelihood.threedp3_likelihood_get_counts(gt_image_masked, image, r_overlap_check)
 
         score = scorer_parallel_jit(gt_image_masked, image[None, ...], r, outlier_prob, outlier_volume)[0]
 
@@ -116,7 +122,10 @@ def multi_panel_c2f_viz(results:list, r, gt_img_complement, gt_image_masked, rgb
     dst = jax3dp3.viz.multi_panel(
         [rgb_viz_resized, gt_img_viz, *overlays],
         labels=["RGB", "Depth Segment", *labels],
-        bottom_text="{}\n Normalized Probabilites: {}".format(jnp.array(scores), jnp.round(normalized_probabilites, decimals=4)),
+        bottom_text="{}\n Normalized Probabilites: {}\n Overlap: {}".format(
+            jnp.array(scores), jnp.round(normalized_probabilites, decimals=4),
+            "{:.4f} {:.4f}".format(overlap[0] / overlap[1], overlap[2] / overlap[3])
+        ),
         label_fontsize =15,
         title=title
     )

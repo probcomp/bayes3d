@@ -5,15 +5,9 @@ import numpy as np
 import trimesh
 
 def setup(
-    depth_original,
-    orig_fx,orig_fy,orig_cx,orig_cy, near, far, scaling_factor,
+    h, w, fx, fy, cx, cy, near, far, scaling_factor,
     model_paths, model_names, model_scaling_factor,
 ):
-    orig_h,orig_w = depth_original.shape
-    h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
-    depth = jax3dp3.utils.resize(depth_original, h, w)
-    depth[depth > far] = 0.0
-
     jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
     model_box_dims = []
