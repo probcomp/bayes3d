@@ -8,7 +8,8 @@ from . import distributions
 from . import scene_graph
 from . import scene_graph
 from . import ycb_loader
-from . import init
 from .enumerations import *
 from .renderer import *
 from .likelihood import *
+from .meshcat import *
+from .online import *

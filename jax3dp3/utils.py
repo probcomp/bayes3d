@@ -103,12 +103,13 @@ def find_plane(point_cloud, threshold):
     plane_pose = t3d.transform_from_rot_and_pos(R, point_on_plane)
     return plane_pose
 
-def find_table_pose_and_dims(point_cloud, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.004):
-    plane_pose = find_plane(point_cloud, inlier_threshold)
+def find_table_pose_and_dims(point_cloud, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
+    plane_pose = find_plane(np.array(point_cloud), inlier_threshold)
     points_in_plane_frame = t3d.apply_transform(point_cloud, jnp.linalg.inv(plane_pose))
     inliers = (jnp.abs(points_in_plane_frame[:,2]) < inlier_threshold)
     inlier_plane_points = points_in_plane_frame[inliers]
     inlier_table_points_seg = segment_point_cloud(inlier_plane_points, segmentation_threshold)
+
     most_frequent_seg_id = get_largest_cluster_id_from_segmentation(inlier_table_points_seg)
     
     table_points_in_plane_frame = inlier_plane_points[inlier_table_points_seg == most_frequent_seg_id]
@@ -121,7 +122,8 @@ def find_table_pose_and_dims(point_cloud, ransac_threshold=0.001, inlier_thresho
     table_pose = plane_pose.dot(pose_shift)
     if table_pose[2,2] > 0:
         table_pose = table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
-    return table_pose, jnp.array([width, height, 1e-10])
+    table_dims = jnp.array([width, height, 1e-10])
+    return table_pose, table_dims
 
 def segment_point_cloud(point_cloud, threshold=0.01, min_points_in_cluster=0):
     c = sklearn.cluster.DBSCAN(eps=threshold).fit(point_cloud)

@@ -80,7 +80,7 @@ def make_schedules(grid_widths, grid_params):
         face_param_sched.append(f)
     return contact_param_sched, face_param_sched
 
-def multi_panel_c2f_viz(results:list, r, gt_img_complement, gt_image_masked, rgb, h, w, max_depth, outlier_prob, outlier_volume, model_names,title=None):
+def multi_panel_c2f_viz(results:list, r, gt_image_masked, gt_img_complement, rgb, h, w, max_depth, outlier_prob, outlier_volume, model_names,title=None):
     overlays = []
     labels = []
     scores = []
