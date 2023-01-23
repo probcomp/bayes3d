@@ -22,7 +22,7 @@ outlier_prob = 0.01
 
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
-mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"cube.obj"))
+mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"sample_objs/cube.obj"))
 
 jax3dp3.load_model(mesh)
 
@@ -99,9 +99,6 @@ for i in range(gt_images.shape[0]):
         jax3dp3.viz.multi_panel(
             [gt_img, rendered_img],
             ["Ground Truth", "Inferred Reconstruction"],
-            10,
-            50,
-            20
         )
     )
 jax3dp3.viz.make_gif_from_pil_images(viz_images,"test.gif")

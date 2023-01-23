@@ -4,6 +4,7 @@ import meshcat.geometry as g
 VISUALIZER = None
 from matplotlib.colors import rgb2hex
 import jax3dp3.transforms_3d as t3d
+import jax.numpy as jnp
 
 def setup_visualizer():
     global VISUALIZER
@@ -42,3 +43,21 @@ def show_trimesh(channel, mesh, color=None, wireframe=False):
     material = g.MeshLambertMaterial(color=int(rgb2hex(color)[1:],16), wireframe=wireframe)
     obj = g.TriangularMeshGeometry(mesh.vertices, mesh.faces)
     VISUALIZER[channel].set_object(obj, material)
+
+
+def show_pose(channel, pose):
+    pose_part1 = t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.05]))
+    obj = g.Box(np.array([0.01, 0.01, 0.1]))
+    obj2 = g.Box(np.array([0.05, 0.05, 0.05]))
+    pose_part2 = t3d.transform_from_pos(jnp.array([0.0, -0.015, 0.0]))
+    obj3 = g.Box(np.array([0.01, 0.03, 0.01]))
+    mat = g.MeshLambertMaterial(
+                                color=0xff22dd,
+                                reflectivity=0.8)
+
+    VISUALIZER[channel]["1"].set_object(obj, mat)
+    VISUALIZER[channel]["1"].set_transform(np.array(pose @ pose_part1, dtype=np.float64))
+    VISUALIZER[channel]["2"].set_object(obj2, mat)
+    VISUALIZER[channel]["2"].set_transform(np.array(pose, dtype=np.float64))
+    VISUALIZER[channel]["3"].set_object(obj3, mat)
+    VISUALIZER[channel]["3"].set_transform(np.array(pose @ pose_part2, dtype=np.float64))

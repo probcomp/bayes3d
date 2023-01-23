@@ -4,6 +4,7 @@ import jax3dp3.transforms_3d as t3d
 import jax3dp3
 import jax.numpy as jnp
 from itertools import product
+import open3d as o3d
 
 def center_mesh(mesh):
     _, pose = jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)
@@ -28,6 +29,15 @@ def make_cuboid_mesh(dimensions):
     )
     return mesh
 
+def make_alpha_mesh_from_point_cloud(
+    point_cloud,
+    alpha
+):
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(np.array(point_cloud))
+    learned_mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pcd, alpha)
+    learned_mesh_trimesh = trimesh.Trimesh(vertices=np.asarray(learned_mesh.vertices), faces=np.asarray(learned_mesh.triangles))
+    return learned_mesh_trimesh
 
 def make_table_mesh(
     table_width,

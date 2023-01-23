@@ -43,11 +43,16 @@ def save_depth_image(image, filename, min=0.0, max=1.0):
     img.save(filename)
 
 def get_rgb_image(image, max_val):
+    if image.shape[-1] == 3:
+        image_type = "RGB"
+    else:
+        image_type = "RGBA"
+
     img = Image.fromarray(
         np.rint(
             image / max_val * 255.0
         ).astype(np.int8),
-        mode="RGB",
+        mode=image_type,
     ).convert("RGBA")
     return img
 

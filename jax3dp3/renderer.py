@@ -11,7 +11,7 @@ import cv2
 RENDERER_ENV = None
 PROJ_LIST = None
 
-def setup_renderer(h, w, fx, fy, cx, cy, near, far, num_layers=2048):
+def setup_renderer(h, w, fx, fy, cx, cy, near, far, num_layers=1024):
     global RENDERER_ENV
     global PROJ_LIST
     RENDERER_ENV = dr.RasterizeGLContext(h, w, output_db=False)
