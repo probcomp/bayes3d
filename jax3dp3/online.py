@@ -66,15 +66,18 @@ class Jax3DP3Perception(object):
             ransac_threshold=ransac_threshold, inlier_threshold=inlier_threshold, segmentation_threshold=segmentation_threshold
         )
 
-        table_face_param = 2
-        table_surface_plane_pose = jax3dp3.scene_graph.get_contact_plane(table_pose, table_dims, table_face_param)
-        self.table_surface_plane_pose = table_surface_plane_pose
-        self.table_dims = table_dims
-        self.table_pose = table_pose
-
         table_pose_in_cam_frame = t3d.inverse_pose(camera_pose) @ table_pose
         if table_pose_in_cam_frame[2,2] > 0:
-            self.table_pose = self.table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
+            table_pose = table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
+            
+        table_face_param = 2
+        table_surface_plane_pose = jax3dp3.scene_graph.get_contact_plane(table_pose, table_dims, table_face_param)
+        self.table_dims = table_dims
+        self.table_pose = table_pose
+        self.table_surface_plane_pose = table_surface_plane_pose
+
+        # jax3dp3.setup_visualizer()
+        # jax3dp3.show_cloud("1", t3d.apply_transform(point_cloud_flat_not_far, t3d.inverse_pose(self.table_pose) @ (camera_pose)))
 
     def set_coarse_to_fine_schedules(self, grid_widths, grid_params, likelihood_r_sched):
         self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
@@ -218,7 +221,7 @@ class Jax3DP3Perception(object):
 
             jax3dp3.viz.multi_panel(
                 [rgb_viz, enumeration_viz_all, overlay_viz, best_occluder],
-                labels=["RGB", "Enuemration", "Best", "Occluder"],
+                labels=["RGB", "Enumeration", "Best", "Occluder"],
             ).save(viz_filename)
 
         return good_poses, ranked_high_value_seg_ids

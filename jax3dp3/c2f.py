@@ -5,8 +5,6 @@ import jax.numpy as jnp
 import jax3dp3
 import numpy as np
 
-
-
 def make_schedules(grid_widths, grid_params):
     contact_param_sched = []
     face_param_sched = []
