@@ -5,11 +5,28 @@ import jax.numpy as jnp
 import jax3dp3
 import numpy as np
 
+
+
+def make_schedules(grid_widths, grid_params):
+    contact_param_sched = []
+    face_param_sched = []
+    for (grid_width, grid_param) in zip(grid_widths, grid_params):
+        c, f = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
+            -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi*2, 
+            *grid_param,
+            jnp.arange(6)
+        )
+        contact_param_sched.append(c)
+        face_param_sched.append(f)
+    return contact_param_sched, face_param_sched
+
 def c2f_contact_parameters(
     init_contact_parameters,
     contact_param_sched, 
     face_param_sched,
     likelihood_r_sched,
+    r_overlap_check,
+    r_final,
     contact_plane_pose,
     gt_image_masked,
     gt_img_complement,    
@@ -64,66 +81,53 @@ def c2f_contact_parameters(
     items = [item for item in heapq.nlargest(top_k, top_k_heap)]
     scores = np.array([item[0] for item in items])
     items = [items[i] for i in np.argsort(-scores)]
-    return items
+
+    final_results = []
+    for i in range(len(items)):
+        score_orig, obj_idx, _, _, pose = items[i]
+        image_unmasked = jax3dp3.render_single_object(pose, obj_idx)
+        image = jax3dp3.renderer.get_complement_masked_image(image_unmasked, gt_img_complement)
+        
+        overlap = jax3dp3.likelihood.threedp3_likelihood_get_counts(gt_image_masked, image, r_overlap_check)
+        score = jax3dp3.threedp3_likelihood_parallel_jit(gt_image_masked, image[None, ...], r_final, outlier_prob, outlier_volume)[0]
+
+        final_results.append((score, overlap, pose, obj_idx, image, image_unmasked))
+
+    normalized_probabilites = jax3dp3.utils.normalize_log_scores(jnp.array([item[0] for item in final_results]))
+    final_results = [(*data, prob) for (data,prob) in zip(final_results, normalized_probabilites)]
+    return final_results
 
 
-def make_schedules(grid_widths, grid_params):
-    contact_param_sched = []
-    face_param_sched = []
-    for (grid_width, grid_param) in zip(grid_widths, grid_params):
-        c, f = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
-            -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi*2, 
-            *grid_param,
-            jnp.arange(6)
-        )
-        contact_param_sched.append(c)
-        face_param_sched.append(f)
-    return contact_param_sched, face_param_sched
-
-def multi_panel_c2f_viz(results:list, r, gt_image_masked, gt_img_complement, rgb, h, w, max_depth, outlier_prob, outlier_volume, model_names,title=None):
-    overlays = []
-    labels = []
-    scores = []
-    imgs = []
-
+def multi_panel_c2f_viz(results:list, rgb, point_cloud_image, h, w, max_depth, model_names,title=None):
     if rgb.shape[-1] == 3:
         rgb_viz = jax3dp3.viz.get_rgb_image(rgb, 255.0)
     else:
         rgb_viz = jax3dp3.viz.get_rgba_image(rgb, 255.0)
 
-    scorer_parallel_jit = jax.jit(jax.vmap(jax3dp3.likelihood.threedp3_likelihood, in_axes=(None, 0, None, None, None)))
     rgb_viz_resized = jax3dp3.viz.resize_image(rgb_viz,h,w)
+    gt_img_viz = jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=max_depth)
 
-    overlap = None
+    overlays = []
+    scores = []
+    labels = []
+    probabilities = []
     for i in range(len(results)):
-        gt_img_viz = jax3dp3.viz.get_depth_image(gt_image_masked[:,:,2],  max=max_depth)
-
-        score_orig, obj_idx, _, _, pose = results[i]
-        image_unmasked = jax3dp3.render_single_object(pose, obj_idx)
-        image = jax3dp3.renderer.get_complement_masked_image(image_unmasked, gt_img_complement)
-        imgs.append(image)
-
-        if i == 0:
-            r_overlap_check = 0.02
-            overlap = jax3dp3.likelihood.threedp3_likelihood_get_counts(gt_image_masked, image, r_overlap_check)
-
-        score = scorer_parallel_jit(gt_image_masked, image[None, ...], r, outlier_prob, outlier_volume)[0]
-
+        (score, overlap, pose, obj_idx, image, image_unmasked, prob) = results[i]
         overlays.append(
             jax3dp3.viz.overlay_image(rgb_viz_resized, jax3dp3.viz.get_depth_image(image_unmasked[:,:,2],  max=max_depth))
         )
         scores.append(score)
         labels.append(
-            "Obj {:d}: {:s}\n Score Orig: {:.2f} \n Score: {:.2f}".format(obj_idx, model_names[obj_idx], score_orig, score)
+            "Obj {:d}: {:s}\n Score: {:.2f}".format(obj_idx, model_names[obj_idx], score)
         )
+        probabilities.append(prob)
 
-    normalized_probabilites = jax3dp3.utils.normalize_log_scores(jnp.array(scores))
-
+    overlap = results[0][1]
     dst = jax3dp3.viz.multi_panel(
         [rgb_viz_resized, gt_img_viz, *overlays],
         labels=["RGB", "Depth Segment", *labels],
         bottom_text="{}\n Normalized Probabilites: {}\n Overlap: {}".format(
-            jnp.array(scores), jnp.round(normalized_probabilites, decimals=4),
+            jnp.array(scores), jnp.round(jnp.array(probabilities), decimals=4),
             "{:.4f} {:.4f}".format(overlap[0] / overlap[1], overlap[2] / overlap[3])
         ),
         label_fontsize =15,

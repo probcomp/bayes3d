@@ -91,6 +91,11 @@ def axis_aligned_bounding_box(object_points):
     center = (maxs + mins) / 2
     return dims, t3d.transform_from_pos(center)
 
+def bounding_box_lower_upper(dims, pose):
+    lower_upper = jnp.array([-dims / 2.0, dims /2.0])
+    lower_upper_moved = t3d.apply_transform(lower_upper, pose)
+    return lower_upper_moved[0], lower_upper_moved[1]
+
 def find_plane(point_cloud, threshold):
     plane = pyransac3d.Plane()
     plane_eq, _ = plane.fit(point_cloud, threshold)
@@ -120,8 +125,6 @@ def find_table_pose_and_dims(point_cloud, ransac_threshold=0.001, inlier_thresho
         jnp.array([cx,cy, 0.0])
     )
     table_pose = plane_pose.dot(pose_shift)
-    if table_pose[2,2] > 0:
-        table_pose = table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
     table_dims = jnp.array([width, height, 1e-10])
     return table_pose, table_dims
 

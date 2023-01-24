@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 
-def inverse(t):
+def inverse_pose(t):
     return jnp.linalg.inv(t)
 
 def transform_from_pos(t):
@@ -104,6 +104,19 @@ def rotation_matrix_to_xyzw(matrix):
 
 def xyzw_to_rotation_matrix(xyzw):
     return quaternion_to_rotation_matrix(jnp.array([xyzw[-1], *xyzw[:-1]]))
+
+def pybullet_pose_to_transform(pybullet_pose):
+    translation = jnp.array(pybullet_pose[0])
+    R = xyzw_to_rotation_matrix(pybullet_pose[1])
+    cam_pose = (
+        transform_from_rot_and_pos(R, translation)
+    )
+    return cam_pose
+
+def transform_to_pybullet_pose(pose):
+    translation = jnp.array(pose[:3,3])
+    quat = rotation_matrix_to_xyzw(pose[:3,:3])
+    return translation, quat
 
 def rotation_matrix_to_quaternion(matrix):
 

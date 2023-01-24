@@ -72,13 +72,23 @@ class Jax3DP3Perception(object):
         self.table_dims = table_dims
         self.table_pose = table_pose
 
-    def segment_scene(self, rgb_original, point_cloud_image, camera_pose, viz=True):
+        table_pose_in_cam_frame = t3d.inverse_pose(camera_pose) @ table_pose
+        if table_pose_in_cam_frame[2,2] > 0:
+            self.table_pose = self.table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
+
+    def set_coarse_to_fine_schedules(self, grid_widths, grid_params, likelihood_r_sched):
+        self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
+            grid_widths=grid_widths, grid_params=grid_params
+        )
+        self.likelihood_r_sched = [0.2, 0.15, 0.1, 0.04, 0.02]
+
+    def segment_scene(self, rgb_original, point_cloud_image, camera_pose, viz_filename, viz=True):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
         point_cloud_image_above_table = (
             point_cloud_image * 
             (t3d.apply_transform(
                 point_cloud_image,
-                t3d.inverse(self.table_surface_plane_pose).dot(camera_pose))[:,:,2] >
+                t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose))[:,:,2] >
               0.005)[:,:,None]
         )
 
@@ -95,11 +105,12 @@ class Jax3DP3Perception(object):
                 ],
                 labels=["RGB", "Depth", "Above Table", "Segmentation"],
                 bottom_text="Intrinsics {:d} {:d} {:0.2f} {:0.2f} {:0.2f} {:0.2f} {:0.2f} {:0.2f}\n".format(h,w,fx,fy,cx,cy,near,far),
-            ).save("dashboard.png")
+            ).save(viz_filename)
         return point_cloud_image_above_table, segmentation_image
 
     def run_detection(
             self,
+            rgb_original,
             point_cloud_image, 
             point_cloud_image_above_table,
             segmentation_image,
@@ -107,15 +118,20 @@ class Jax3DP3Perception(object):
             camera_pose,
             outlier_prob,
             outlier_volume,
+            r_overlap_check,
+            r_final,
+            viz_filename,
             top_k = 5,
+            viz=True
         ):
 
+        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
         image_masked = point_cloud_image_above_table * (segmentation_image == segmentation_id)[:,:,None]
         image_masked_complement = point_cloud_image * (segmentation_image != segmentation_id)[:,:,None]
 
         points_in_table_ref_frame =  t3d.apply_transform(
             t3d.point_cloud_image_to_points(image_masked), 
-            t3d.inverse(self.table_surface_plane_pose).dot(camera_pose)
+            t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose)
         )
         point_seg = jax3dp3.utils.segment_point_cloud(points_in_table_ref_frame, 0.1)
         points_filtered = points_in_table_ref_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
@@ -124,6 +140,7 @@ class Jax3DP3Perception(object):
         results = jax3dp3.c2f.c2f_contact_parameters(
             jnp.array([center_x, center_y, 0.0]),
             self.contact_param_sched, self.face_param_sched, likelihood_r_sched=self.likelihood_r_sched,
+            r_overlap_check=r_overlap_check, r_final=r_final,
             contact_plane_pose=jnp.linalg.inv(camera_pose) @ self.table_surface_plane_pose,
             gt_image_masked=image_masked, gt_img_complement=image_masked_complement,
             model_box_dims=self.model_box_dims,
@@ -133,15 +150,17 @@ class Jax3DP3Perception(object):
         )
 
 
-        return results, image_masked, image_masked_complement
+        if viz:
+            panel_viz = jax3dp3.c2f.multi_panel_c2f_viz(
+                results, rgb_original, image_masked, h, w, far, 
+                self.mesh_names, title=f"Likelihoods: {self.likelihood_r_sched}, Outlier Params: {outlier_prob},{outlier_volume}"
+            )
+            panel_viz.save(viz_filename)
+        return results
 
-    def set_coarse_to_fine_schedules(self, grid_widths, grid_params, likelihood_r_sched):
-        self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
-            grid_widths=grid_widths, grid_params=grid_params
-        )
-        self.likelihood_r_sched = [0.2, 0.15, 0.1, 0.04, 0.02]
 
-    def occlusion_search(self, obj_idx, point_cloud_image, camera_pose):
+    def occlusion_search(self, obj_idx, rgb_original, point_cloud_image, camera_pose, segmentation_image, viz_filename, viz=True):
+        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
         table_dims = self.table_dims
         c, f = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
             -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
@@ -164,6 +183,44 @@ class Jax3DP3Perception(object):
         )
 
         best_weight = weights.max()
-        good_scoring_indices = weights >= (best_weight - 1.0)
+        good_scoring_indices = weights >= (best_weight - 3.0)
         good_poses = pose_proposals[good_scoring_indices]
-        return good_poses
+
+
+        good_pose_centers = good_poses[:,:3,-1]
+        good_pose_centers_cam_frame = good_pose_centers
+        # t3d.apply_transform(good_pose_centers, t3d.inverse(camera_pose))
+
+        point_cloud_normalized = good_pose_centers_cam_frame / good_pose_centers_cam_frame[:, 2].reshape(-1, 1)
+        temp1 = point_cloud_normalized[:, :2] * jnp.array([fx, fy])
+        temp2 = temp1 + jnp.array([cx,cy])
+        pixels = jnp.rint(temp2)
+
+        seg_ids = []
+        for (x,y) in pixels:
+            if 0<= x < w and 0 <= y < h:
+                seg_ids.append(segmentation_image[int(y),int(x)])
+        ranked_high_value_seg_ids =jnp.unique(jnp.array(seg_ids))
+
+        ranked_high_value_seg_ids = ranked_high_value_seg_ids[ranked_high_value_seg_ids != -1]
+
+        if viz:
+            rgb_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0), h,w)
+            all_images_overlayed = jax3dp3.render_multiobject(pose_proposals, [obj_idx for _ in range(pose_proposals.shape[0])])
+            enumeration_viz_all = jax3dp3.viz.get_depth_image(all_images_overlayed[:,:,2], max=far)
+
+            all_images_overlayed = jax3dp3.render_multiobject(good_poses, [obj_idx for _ in range(good_poses.shape[0])])
+            enumeration_viz = jax3dp3.viz.get_depth_image(all_images_overlayed[:,:,2], max=far)
+            overlay_viz = jax3dp3.viz.overlay_image(rgb_viz, enumeration_viz)
+            
+            image_masked = point_cloud_image * (segmentation_image == ranked_high_value_seg_ids[0])[:,:,None]
+            best_occluder = jax3dp3.viz.get_depth_image(image_masked[:,:,2],  max=far)
+
+            jax3dp3.viz.multi_panel(
+                [rgb_viz, enumeration_viz_all, overlay_viz, best_occluder],
+                labels=["RGB", "Enuemration", "Best", "Occluder"],
+            ).save(viz_filename)
+
+        return good_poses, ranked_high_value_seg_ids
+
+    
