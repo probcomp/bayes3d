@@ -93,6 +93,11 @@ def c2f_contact_parameters(
 
     if len(final_results) > 0:
         normalized_probabilites = jax3dp3.utils.normalize_log_scores(jnp.array([item[0] for item in final_results]))
+        best_overlap = final_results[0][1]
+        print('best_overlap:');print(best_overlap)
+        if best_overlap[0] / best_overlap[1] < 0.9  or  best_overlap[2] / best_overlap[3] < 0.9:
+            print("Overlap below necessary threshold")
+            normalized_probabilites = normalized_probabilites * 0.0
     else:
         normalized_probabilites = []
     final_results = [(*data, prob) for (data,prob) in zip(final_results, normalized_probabilites)]
