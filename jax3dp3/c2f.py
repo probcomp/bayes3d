@@ -91,7 +91,10 @@ def c2f_contact_parameters(
 
         final_results.append((score, overlap, pose, obj_idx, image, image_unmasked))
 
-    normalized_probabilites = jax3dp3.utils.normalize_log_scores(jnp.array([item[0] for item in final_results]))
+    if len(final_results) > 0:
+        normalized_probabilites = jax3dp3.utils.normalize_log_scores(jnp.array([item[0] for item in final_results]))
+    else:
+        normalized_probabilites = []
     final_results = [(*data, prob) for (data,prob) in zip(final_results, normalized_probabilites)]
     return final_results
 
@@ -120,7 +123,11 @@ def multi_panel_c2f_viz(results:list, rgb, point_cloud_image, h, w, max_depth, m
         )
         probabilities.append(prob)
 
-    overlap = results[0][1]
+    if len(results) > 0:
+        overlap = results[0][1]
+    else:
+        overlap = (0,1,0,1)
+        
     dst = jax3dp3.viz.multi_panel(
         [rgb_viz_resized, gt_img_viz, *overlays],
         labels=["RGB", "Depth Segment", *labels],

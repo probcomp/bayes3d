@@ -216,8 +216,11 @@ class Jax3DP3Perception(object):
             enumeration_viz = jax3dp3.viz.get_depth_image(all_images_overlayed[:,:,2], max=far)
             overlay_viz = jax3dp3.viz.overlay_image(rgb_viz, enumeration_viz)
             
-            image_masked = point_cloud_image * (segmentation_image == ranked_high_value_seg_ids[0])[:,:,None]
-            best_occluder = jax3dp3.viz.get_depth_image(image_masked[:,:,2],  max=far)
+            if len(ranked_high_value_seg_ids) > 0:
+                image_masked = point_cloud_image * (segmentation_image == ranked_high_value_seg_ids[0])[:,:,None]
+                best_occluder = jax3dp3.viz.get_depth_image(image_masked[:,:,2],  max=far)
+            else:
+                best_occluder = jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=far)
 
             jax3dp3.viz.multi_panel(
                 [rgb_viz, enumeration_viz_all, overlay_viz, best_occluder],
