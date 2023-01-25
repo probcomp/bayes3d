@@ -18,9 +18,9 @@ outlier_prob = 0.01
 
 max_depth = 15.0
 
-num_layers = 2048
+num_layers = 10
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far,num_layers=num_layers)
-mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"cube.obj"))
+mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"sample_objs/cube.obj"))
 jax3dp3.load_model(mesh)
 jax3dp3.load_model(mesh)
 

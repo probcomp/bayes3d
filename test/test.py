@@ -26,7 +26,7 @@ mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"sample_objs/cub
 
 jax3dp3.load_model(mesh)
 
-num_frames = 50
+num_frames = 40
 
 gt_poses = [
     jnp.array([

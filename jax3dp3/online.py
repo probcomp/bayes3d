@@ -87,13 +87,28 @@ class Jax3DP3Perception(object):
 
     def segment_scene(self, rgb_original, point_cloud_image, camera_pose, viz_filename, viz=True):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
+
+        point_cloud_image_in_world_frame = t3d.apply_transform(
+            point_cloud_image,
+            camera_pose
+        )
+
+        FAR_AWAY_THRESHOLD =0.8
+        TOO_CLOSE_THRESHOLD =0.1
+        SIDE_THRESHOLD =0.3
+        not_too_far_mask = (point_cloud_image_in_world_frame[:,:,0] < FAR_AWAY_THRESHOLD)[:,:,None]
+        not_too_close_mask = (point_cloud_image_in_world_frame[:,:,0] > TOO_CLOSE_THRESHOLD)[:,:,None]
+        not_too_the_side_mask = (jnp.abs(point_cloud_image_in_world_frame[:,:,1]) < SIDE_THRESHOLD)[:,:,None]
+
+        above_table_mask = (t3d.apply_transform(
+        point_cloud_image,
+        t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose))[:,:,2] >
+        0.02)[:,:,None]
         point_cloud_image_above_table = (
             point_cloud_image * 
-            (t3d.apply_transform(
-                point_cloud_image,
-                t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose))[:,:,2] >
-              0.005)[:,:,None]
+            above_table_mask * not_too_far_mask * not_too_close_mask * not_too_the_side_mask
         )
+        
 
         segmentation_image = jax3dp3.utils.segment_point_cloud_image(
             point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=30

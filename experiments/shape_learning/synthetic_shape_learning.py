@@ -9,7 +9,7 @@ import jax3dp3.transforms_3d as t3d
 import jax3dp3
 import open3d as o3d
 
-jax3dp3.meshcat.setup_visualizer()
+jax3dp3.setup_visualizer()
 
 model_dir = os.path.join(jax3dp3.utils.get_assets_dir(), "bop/ycbv/models")
 model_names = jax3dp3.ycb_loader.MODEL_NAMES
@@ -39,9 +39,9 @@ model_box_dims = jnp.array(model_box_dims)
 
 
 dist_away = 0.3
-object_index = 3
+object_index = 19
 
-number_of_views = 3
+number_of_views = 4
 angles = jnp.arange(number_of_views) * 2*jnp.pi / number_of_views
 
 camera_poses = []
@@ -78,16 +78,16 @@ for i in range(len(images)):
         t3d.apply_transform(t3d.point_cloud_image_to_points(images[i]), camera_poses[i])
     )
 
-jax3dp3.meshcat.show_cloud("1", np.vstack(clouds))
+jax3dp3.show_cloud("1", np.vstack(clouds))
 
-learned_mesh = jax3dp3.mesh.make_alpha_mesh_from_point_cloud(np.vstack(clouds), 0.03)
-jax3dp3.meshcat.show_trimesh("mesh", learned_mesh)
+learned_mesh = jax3dp3.mesh.make_alpha_mesh_from_point_cloud(np.vstack(clouds), 0.01)
+jax3dp3.show_trimesh("mesh", learned_mesh)
 
 
 from IPython import embed; embed()
 
 
-jax3dp3.meshcat.clear()
+jax3dp3.clear()
 
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 jax3dp3.load_model(learned_mesh)

@@ -7,8 +7,8 @@ from PIL import Image
 import numpy as np
 import matplotlib
 import jax3dp3.utils
-# import graphviz
-# import distinctipy
+import graphviz
+import distinctipy
 
 def make_gif(images, filename):
     images[0].save(
@@ -175,7 +175,7 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
     
     colors = matplotlib.cm.tab20(range(num_nodes))
     colors = distinctipy.get_colors(num_nodes, pastel_factor=0.7)
-    for i in range(len(edges)):
+    for i in range(num_nodes):
         g_out.node(str(i), node_names[i], fillcolor=matplotlib.colors.to_hex(colors[i]))
 
     for (i,j) in edges:

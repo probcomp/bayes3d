@@ -1,3 +1,4 @@
+
 import numpy as np
 import os
 import jax
@@ -7,21 +8,22 @@ import time
 import pickle
 import jax3dp3.transforms_3d as t3d
 import jax3dp3
+from dataclasses import dataclass
+import sys
+import warnings
 
-jax3dp3.setup_visualizer()
-
+sys.path.extend(["/home/nishadgothoskar/ptamp/pybullet_planning"])
+sys.path.extend(["/home/nishadgothoskar/ptamp"])
+warnings.filterwarnings("ignore")
 
 # filename = "panda_dataset/scene_4.pkl"
-filename = "panda_dataset_2/utensils.pkl"
-print(f"Processing scene {filename}...")
-file = open(os.path.join(jax3dp3.utils.get_assets_dir(), filename),'rb')
-all_data = pickle.load(file)
+# filename = "panda_dataset_2/utensils.pkl"
+# full_filename = "blue.pkl"
+full_filename = "1674620488.514845.pkl"
+# full_filename = os.path.join(jax3dp3.utils.get_assets_dir(), filename)
+file = open(full_filename,'rb')
+camera_image = pickle.load(file)
 file.close()
-
-K = jnp.array([[606.92871094, 0.    , 415.18270874],
-    [ 0.    , 606.51989746, 480 - 258.89492798],
-    [ 0.    , 0.    , 1.    ]])
-orig_fx, orig_fy, orig_cx, orig_cy = K[0,0],K[1,1],K[0,2],K[1,2]
 
 calibration_data = {
   "qw": 0.7074450620054885,
@@ -44,26 +46,34 @@ gripper_pose_to_cam_pose = t3d.transform_from_rot_and_pos(R, translation)
 
 
 online_state = jax3dp3.Jax3DP3Perception()
+
+
+depth = camera_image.depthPixels
+rgb_original = camera_image.rgbPixels
+K = camera_image.camera_matrix
+# camera_pose = camera_image.camera_pose
+camera_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose)
+
+# 1m, +-.6
+
+# gripper_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose)
+# camera_pose = (gripper_pose @ 
+#     # t3d.inverse_pose(gripper_pose_to_cam_pose)
+#     gripper_pose_to_cam_pose
+# )
+
+
+orig_fx, orig_fy, orig_cx, orig_cy = K[0,0],K[1,1],K[0,2],K[1,2]
+orig_h,orig_w = depth.shape
+orig_h,orig_w = depth.shape
 near = 0.001
 far = 4.99
 
 
-def pre_process_data(data):
-    rgb = data["rgb"]
-    depth_original = data["depth"] / 1000.0
-    translation = jnp.array(data["extrinsics"][0])
-    R = t3d.xyzw_to_rotation_matrix(data["extrinsics"][1])
-    cam_pose = (
-        t3d.transform_from_rot_and_pos(R, translation) 
-        @ 
-        # t3d.inverse_pose(gripper_pose_to_cam_pose)
-        gripper_pose_to_cam_pose
-    )
-    return rgb, depth_original, cam_pose
-
-rgb, depth_original, camera_pose = pre_process_data(all_data[0])
-orig_h = depth_original.shape[0]
-orig_w = depth_original.shape[1]
+online_state.set_camera_params(
+    orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, near, far,
+    scaling_factor=0.3
+)
 
 online_state.set_coarse_to_fine_schedules(
     grid_widths=[0.15, 0.1, 0.07, 0.04, 0.02],
@@ -71,112 +81,23 @@ online_state.set_coarse_to_fine_schedules(
     likelihood_r_sched = [0.2, 0.15, 0.1, 0.04, 0.02]
 )
 
-online_state.set_camera_params(
-    orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, near, far,
-    scaling_factor=0.3
-)
-
-
-point_cloud_image = online_state.process_depth_to_point_cloud_image(np.array(depth_original))
+point_cloud_image = online_state.process_depth_to_point_cloud_image(depth)
 online_state.infer_table_plane(point_cloud_image, camera_pose)
 
-(h,w,fx,fy,cx,cy, near, far) = online_state.camera_params
-outlier_prob, outlier_volume = 0.1, 10**3
 
-rgb_original = np.array(rgb)
 point_cloud_image = online_state.process_depth_to_point_cloud_image(
-    np.array(depth_original))
-
-point_cloud_image_above_table, segmentation_image  = online_state.segment_scene(
-    rgb_original, point_cloud_image, camera_pose, f"dashboard.png"
+    depth
 )
 
 
-from IPython import embed; embed()
+point_cloud_image_above_table, segmentation_image  = online_state.segment_scene(
+    rgb_original, point_cloud_image, camera_pose, "dashboard.png"
+)
 
+# jax3dp3.setup_visualizer()
 
-
-online_state = jax3dp3.Jax3DP3Perception()
-
-
-
-
-pcs = []
-poses = []
-
-for t in range(4):
-    rgb = all_data[t]["rgb"]
-    jax3dp3.viz.save_rgb_image(rgb, 255.0, f"imgs/{t}.png")
-    depth_original = all_data[t]["depth"] / 1000.0
-
-
-    gt_image_full = t3d.depth_to_point_cloud_image(depth_original, fx, fy, cx, cy)
-    point_cloud = t3d.point_cloud_image_to_points(gt_image_full)
-
-    translation = jnp.array(all_data[t]["extrinsics"][0])
-    R = t3d.xyzw_to_rotation_matrix(all_data[t]["extrinsics"][1])
-    cam_pose = (
-        t3d.transform_from_rot_and_pos(R, translation) 
-        @ 
-        # t3d.inverse_pose(gripper_pose_to_cam_pose)
-        gripper_pose_to_cam_pose
-    )
-
-
-    pcs.append(point_cloud)
-    poses.append(cam_pose)
-
-
-all_clouds = []
-for (pc, pose) in zip(pcs, poses):
-    all_clouds.append(
-        t3d.apply_transform(pc, pose)
-    )
-
-jax3dp3.clear()
-
-jax3dp3.show_cloud("a", all_clouds[0])
-jax3dp3.show_pose("a2", poses[0])
-jax3dp3.show_pose("a3", poses[1])
-jax3dp3.show_pose("a4", poses[2])
-jax3dp3.show_pose("a5", poses[3])
-
-jax3dp3.show_cloud("a4", all_clouds[1])
-
-jax3dp3.show_cloud("a4", t3d.apply_transform(pcs[1], poses[1]))
-
-
-jax3dp3.show_pose("a5", poses[2])
-jax3dp3.show_pose("a6", poses[3])
-
-from IPython import embed; embed()
-
-jax3dp3.show_cloud("a", pcs[0])
-jax3dp3.show_cloud("a", pcs[0])
-
-
-
-
-
-Ks = [all_data[t]["intrinsics"][0] for t in range(4)]
-
-
-
-rgb_original = data["rgb"]
-jax3dp3.viz.save_rgb_image(rgb_original, 255.0, "imgs/0.png")
-
+# jax3dp3.show_cloud("c1",t3d.apply_transform(t3d.point_cloud_image_to_points(point_cloud_image_above_table), camera_pose))
 
 from IPython import embed; embed()
 
 
-
-rgb_original = data["rgb"]
-depth_original = data["depth"] / 1000.0
-K = data["intrinsics"][0]
-orig_h,orig_w = depth_original.shape
-K = jnp.array([[606.92871094, 0.    , 415.18270874],
-    [ 0.    , 606.51989746, 258.89492798],
-    [ 0.    , 0.    , 1.    ]])
-orig_fx, orig_fy, orig_cx, orig_cy = K[0,0],K[1,1],K[0,2],K[1,2]
-near = 0.001
-far = 5.0
