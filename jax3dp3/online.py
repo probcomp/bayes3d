@@ -100,10 +100,11 @@ class Jax3DP3Perception(object):
         not_too_close_mask = (point_cloud_image_in_world_frame[:,:,0] > TOO_CLOSE_THRESHOLD)[:,:,None]
         not_too_the_side_mask = (jnp.abs(point_cloud_image_in_world_frame[:,:,1]) < SIDE_THRESHOLD)[:,:,None]
 
+        FLOOR_THRESHOLD = 0.02
         above_table_mask = (t3d.apply_transform(
         point_cloud_image,
         t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose))[:,:,2] >
-        0.02)[:,:,None]
+           FLOOR_THRESHOLD)[:,:,None]
         point_cloud_image_above_table = (
             point_cloud_image * 
             above_table_mask * not_too_far_mask * not_too_close_mask * not_too_the_side_mask
