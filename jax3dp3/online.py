@@ -4,13 +4,15 @@ import jax.numpy as jnp
 import jax
 import numpy as np
 
-class Jax3DP3Perception(object):
-    def __init__(self):
+class OnlineJax3DP3(object):
+    def __init__(self,
+        orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far,
+        scaling_factor=1.0,
+    ):
         self.model_box_dims = jnp.zeros((0,3))
         self.mesh_names = []
         self.meshes = []
         self.original_camera_params = None
-        self.camera_params = None
 
         self.table_surface_plane_pose = None
         self.table_dims = None
@@ -20,8 +22,6 @@ class Jax3DP3Perception(object):
         self.face_param_sched = None
         self.likelihood_r_sched = None
 
-
-    def set_camera_params(self, orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far, scaling_factor=1.0):
         self.original_camera_params = (orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far)
         h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
         self.camera_params = (h,w,fx,fy,cx,cy, near, far)
@@ -56,7 +56,6 @@ class Jax3DP3Perception(object):
 
         jax3dp3.load_model(mesh)
 
-
     def infer_table_plane(self, point_cloud_image, camera_pose, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
         point_cloud_flat = t3d.point_cloud_image_to_points(point_cloud_image)
@@ -76,16 +75,19 @@ class Jax3DP3Perception(object):
         self.table_pose = table_pose
         self.table_surface_plane_pose = table_surface_plane_pose
 
-        # jax3dp3.setup_visualizer()
-        # jax3dp3.show_cloud("1", t3d.apply_transform(point_cloud_flat_not_far, t3d.inverse_pose(self.table_pose) @ (camera_pose)))
-
     def set_coarse_to_fine_schedules(self, grid_widths, grid_params, likelihood_r_sched):
         self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
             grid_widths=grid_widths, grid_params=grid_params
         )
         self.likelihood_r_sched = [0.2, 0.15, 0.1, 0.04, 0.02]
 
-    def segment_scene(self, rgb_original, point_cloud_image, camera_pose, viz_filename, viz=True):
+    def segment_scene(self, rgb_original, point_cloud_image, camera_pose, viz_filename, viz=True,
+        FAR_AWAY_THRESHOLD = jnp.inf,
+        TOO_CLOSE_THRESHOLD = -jnp.inf,
+        SIDE_THRESHOLD = jnp.inf,
+        FLOOR_THRESHOLD = -jnp.inf
+
+    ):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
 
         point_cloud_image_in_world_frame = t3d.apply_transform(
@@ -93,23 +95,25 @@ class Jax3DP3Perception(object):
             camera_pose
         )
 
-        FAR_AWAY_THRESHOLD =0.8
-        TOO_CLOSE_THRESHOLD =0.1
-        SIDE_THRESHOLD =0.3
+
         not_too_far_mask = (point_cloud_image_in_world_frame[:,:,0] < FAR_AWAY_THRESHOLD)[:,:,None]
         not_too_close_mask = (point_cloud_image_in_world_frame[:,:,0] > TOO_CLOSE_THRESHOLD)[:,:,None]
         not_too_the_side_mask = (jnp.abs(point_cloud_image_in_world_frame[:,:,1]) < SIDE_THRESHOLD)[:,:,None]
 
-        FLOOR_THRESHOLD = 0.02
-        above_table_mask = (t3d.apply_transform(
-        point_cloud_image,
-        t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose))[:,:,2] >
-           FLOOR_THRESHOLD)[:,:,None]
+        above_table_mask = (
+            t3d.apply_transform(
+                point_cloud_image,
+                t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose)
+            )[:,:,2] > FLOOR_THRESHOLD
+        )[:,:,None]
+
         point_cloud_image_above_table = (
             point_cloud_image * 
-            above_table_mask * not_too_far_mask * not_too_close_mask * not_too_the_side_mask
+            above_table_mask * 
+            not_too_far_mask * 
+            not_too_close_mask * 
+            not_too_the_side_mask
         )
-        
 
         segmentation_image = jax3dp3.utils.segment_point_cloud_image(
             point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=30
@@ -122,8 +126,8 @@ class Jax3DP3Perception(object):
                     jax3dp3.viz.get_depth_image(point_cloud_image_above_table[:,:,2],  max=far),
                     jax3dp3.viz.get_depth_image(segmentation_image + 1, max=segmentation_image.max() + 1),
                 ],
-                labels=["RGB", "Depth", "Above Table", "Segmentation"],
-                bottom_text="Intrinsics {:d} {:d} {:0.2f} {:0.2f} {:0.2f} {:0.2f} {:0.2f} {:0.2f}\n".format(h,w,fx,fy,cx,cy,near,far),
+                labels=["RGB", "Depth", "Above Table", "Segmentation. {:d}".format(int(segmentation_image.max() + 1))],
+                bottom_text="Intrinsics h:{:d} w:{:d} fx:{:0.2f} fy:{:0.2f} cx:{:0.2f} cy:{:0.2f} near:{:0.2f} far:{:0.2f}\n".format(h,w,fx,fy,cx,cy,near,far),
             ).save(viz_filename)
         return point_cloud_image_above_table, segmentation_image
 
