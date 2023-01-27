@@ -9,3 +9,5 @@ venv/*
 *.json
 assets/bop/*
 assets/panda_dataset/*
+*.pkl
+*.jpeg
