@@ -24,19 +24,50 @@ warnings.filterwarnings("ignore")
 full_filename = "1674620488.514845.pkl"
 full_filename = "knife_spoon.pkl"
 full_filename = "demo2_nolight.pkl"
+full_filename = "utensils.pkl"
 full_filename = "strawberry_error.pkl"
 full_filename = "new_utencils.pkl"
 # full_filename = os.path.join(jax3dp3.utils.get_assets_dir(), filename)
 full_filename = "knife_spoon.pkl"
-full_filename = "utensils.pkl"
 full_filename = "new_utencils.pkl"
-full_filename = "utensils.pkl"
+full_filename = "blue_more.pkl"
 file = open(full_filename,'rb')
-camera_image = pickle.load(file)["camera_images"][0]
+camera_image = pickle.load(file)
 file.close()
 
+calibration_data = {
+  "qw": 0.7074450620054885,
+  "qx": -0.06123049355593103,
+  "qy": -0.05318248430843586,
+  "qz": 0.7020996612061071,
+  "x": 0.04268000721548824,
+  "y": -0.01696075177674074,
+  "z": 0.06000526018408979,
+}
+
+translation = jnp.array([
+    calibration_data["x"], calibration_data["y"], calibration_data["z"]
+])
+
+R = t3d.xyzw_to_rotation_matrix(jnp.array([
+    calibration_data["qx"], calibration_data["qy"], calibration_data["qz"],calibration_data["qw"],
+]))
+gripper_pose_to_cam_pose = t3d.transform_from_rot_and_pos(R, translation)
+
+
+from collections import namedtuple
+CameraImage = namedtuple("CameraImage", ["depthPixels", "rgbPixels","camera_pose","camera_matrix"])
+camera_image = CameraImage(
+    camera_image[0]["depth"] / 1000.0,
+    camera_image[0]["rgb"],
+    camera_image[0]["extrinsics"],
+    camera_image[0]["intrinsics"][0]
+)
+
+
+
 depth = np.array(camera_image.depthPixels) 
-camera_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose)
+camera_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose) * gripper_pose_to_cam_pose
 rgb_original = np.array(camera_image.rgbPixels)
 K = camera_image.camera_matrix
 orig_fx, orig_fy, orig_cx, orig_cy = K[0,0],K[1,1],K[0,2],K[1,2]
@@ -50,27 +81,27 @@ online_state = jax3dp3.OnlineJax3DP3(
 )
 
 
-
 (h,w,fx,fy,cx,cy, near, far) = online_state.camera_params
 rgb_scaled = jax3dp3.utils.resize(rgb_original,h,w)
 hsv_scaled = cv2.cvtColor(rgb_scaled, cv2.COLOR_RGB2HSV)
 
-# gray_colors = [jnp.array([120, 120, 120])]
+gray_colors = [jnp.array([120, 120, 120])]
+error_cumulative = jnp.ones((h,w))
+for gray in gray_colors:
+    errors = jnp.abs(rgb_scaled[:,:,:] - gray_colors).sum(-1)
+    # value_thresh = hsv_scaled[:,:,-1] < 75.0
+    # value_thresh2 = hsv_scaled[:,:,-1] > 175.0
+    # error_cumulative *=  np.logical_or((errors > 200), value_thresh, value_thresh2)
+    error_cumulative *=  (errors > 150)
+
+# gray_colors = [jnp.array([158, 9])]
 # error_cumulative = jnp.ones((h,w))
 # for gray in gray_colors:
-#     errors = jnp.abs(rgb_scaled[:,:,:] - gray_colors).sum(-1)
+#     errors = jnp.abs(hsv_scaled[:,:,:2] - gray).sum(-1)
 #     # value_thresh = hsv_scaled[:,:,-1] < 75.0
 #     # value_thresh2 = hsv_scaled[:,:,-1] > 175.0
 #     # error_cumulative *=  np.logical_or((errors > 200), value_thresh, value_thresh2)
-#     error_cumulative *=  (errors > 150)
-
-gray_colors = [jnp.array([158, 9])]
-error_cumulative = jnp.ones((h,w))
-for gray in gray_colors:
-    errors = jnp.abs(hsv_scaled[:,:,:2] - gray).sum(-1)
-    value_thresh = hsv_scaled[:,:,-1] < 75.0
-    value_thresh2 = hsv_scaled[:,:,-1] > 175.0
-    error_cumulative *=  np.logical_or((errors > 200), value_thresh, value_thresh2)
+#     error_cumulative *=  (errors > 140)
 
 gray_mask = error_cumulative
 
@@ -88,6 +119,15 @@ point_cloud_image_above_table, segmentation_image  = online_state.segment_scene(
     TOO_CLOSE_THRESHOLD=0.4,
     FAR_AWAY_THRESHOLD=0.8,
 )
+
+jax3dp3.setup_visualizer()
+
+jax3dp3.show_cloud("c1", t3d.apply_transform(
+    t3d.point_cloud_image_to_points(point_cloud_image_above_table),
+    camera_pose
+    )
+)
+
 
 from IPython import embed; embed()
 

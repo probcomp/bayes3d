@@ -98,7 +98,7 @@ def bounding_box_lower_upper(dims, pose):
 
 def find_plane(point_cloud, threshold):
     plane = pyransac3d.Plane()
-    plane_eq, _ = plane.fit(point_cloud, threshold)
+    plane_eq, _ = plane.fit(point_cloud, threshold, maxIteration=20000)
     plane_eq = np.array(plane_eq)
     plane_normal = np.array(plane_eq[:3])
     point_on_plane = plane_normal * -plane_eq[3]
@@ -122,7 +122,7 @@ def get_bounding_box_z_axis_aligned(point_cloud):
     return dims, new_pose
 
 def find_table_pose_and_dims(point_cloud, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
-    plane_pose = find_plane(np.array(point_cloud), inlier_threshold)
+    plane_pose = find_plane(np.array(point_cloud), ransac_threshold)
     points_in_plane_frame = t3d.apply_transform(point_cloud, jnp.linalg.inv(plane_pose))
     inliers = (jnp.abs(points_in_plane_frame[:,2]) < inlier_threshold)
     inlier_plane_points = points_in_plane_frame[inliers]

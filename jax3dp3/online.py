@@ -70,7 +70,11 @@ class OnlineJax3DP3(object):
             table_pose = table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
             
         table_face_param = 2
-        table_surface_plane_pose = jax3dp3.scene_graph.get_contact_plane(table_pose, table_dims, table_face_param)
+        table_surface_plane_pose = jax3dp3.scene_graph.get_contact_plane(
+            table_pose,
+            table_dims,
+            table_face_param
+        )
         self.table_dims = table_dims
         self.table_pose = table_pose
         self.table_surface_plane_pose = table_surface_plane_pose
@@ -79,7 +83,7 @@ class OnlineJax3DP3(object):
         self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
             grid_widths=grid_widths, grid_params=grid_params
         )
-        self.likelihood_r_sched = [0.2, 0.15, 0.1, 0.04, 0.02]
+        self.likelihood_r_sched = likelihood_r_sched
 
     def segment_scene(self, rgb_original, point_cloud_image, camera_pose, viz_filename, viz=True,
         FAR_AWAY_THRESHOLD = jnp.inf,
