@@ -3,6 +3,7 @@ import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
 import jax
 import numpy as np
+import cv2
 
 class OnlineJax3DP3(object):
     def __init__(self,
@@ -94,11 +95,23 @@ class OnlineJax3DP3(object):
     ):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
 
+        rgb_scaled = jax3dp3.utils.resize(rgb_original,h,w)
+        hsv_scaled = cv2.cvtColor(rgb_scaled, cv2.COLOR_RGB2HSV)
+
+        gray_colors = [jnp.array([158, 9])]
+        error_cumulative = jnp.ones((h,w))
+        for gray in gray_colors:
+            errors = jnp.abs(hsv_scaled[:,:,:2] - gray).sum(-1)
+            value_thresh = hsv_scaled[:,:,-1] < 75.0
+            value_thresh2 = hsv_scaled[:,:,-1] > 175.0
+            error_cumulative *=  np.logical_or((errors > 200), value_thresh, value_thresh2)
+        not_gray_mask = error_cumulative[:,:,None]
+
+
         point_cloud_image_in_world_frame = t3d.apply_transform(
             point_cloud_image,
             camera_pose
         )
-
 
         not_too_far_mask = (point_cloud_image_in_world_frame[:,:,0] < FAR_AWAY_THRESHOLD)[:,:,None]
         not_too_close_mask = (point_cloud_image_in_world_frame[:,:,0] > TOO_CLOSE_THRESHOLD)[:,:,None]
@@ -116,7 +129,8 @@ class OnlineJax3DP3(object):
             above_table_mask * 
             not_too_far_mask * 
             not_too_close_mask * 
-            not_too_the_side_mask
+            not_too_the_side_mask *
+            not_gray_mask
         )
 
         segmentation_image = jax3dp3.utils.segment_point_cloud_image(

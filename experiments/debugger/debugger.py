@@ -49,36 +49,8 @@ online_state = jax3dp3.OnlineJax3DP3(
     scaling_factor=0.3
 )
 
-
-
-(h,w,fx,fy,cx,cy, near, far) = online_state.camera_params
-rgb_scaled = jax3dp3.utils.resize(rgb_original,h,w)
-hsv_scaled = cv2.cvtColor(rgb_scaled, cv2.COLOR_RGB2HSV)
-
-# gray_colors = [jnp.array([120, 120, 120])]
-# error_cumulative = jnp.ones((h,w))
-# for gray in gray_colors:
-#     errors = jnp.abs(rgb_scaled[:,:,:] - gray_colors).sum(-1)
-#     # value_thresh = hsv_scaled[:,:,-1] < 75.0
-#     # value_thresh2 = hsv_scaled[:,:,-1] > 175.0
-#     # error_cumulative *=  np.logical_or((errors > 200), value_thresh, value_thresh2)
-#     error_cumulative *=  (errors > 150)
-
-gray_colors = [jnp.array([158, 9])]
-error_cumulative = jnp.ones((h,w))
-for gray in gray_colors:
-    errors = jnp.abs(hsv_scaled[:,:,:2] - gray).sum(-1)
-    value_thresh = hsv_scaled[:,:,-1] < 75.0
-    value_thresh2 = hsv_scaled[:,:,-1] > 175.0
-    error_cumulative *=  np.logical_or((errors > 200), value_thresh, value_thresh2)
-
-gray_mask = error_cumulative
-
-point_cloud_image_pre_remove_table = online_state.process_depth_to_point_cloud_image(depth)
-jax3dp3.viz.save_depth_image(point_cloud_image_pre_remove_table[:,:,2]  * gray_mask,"depth.png",max=far)
-
-online_state.infer_table_plane(point_cloud_image_pre_remove_table, camera_pose)
-point_cloud_image = point_cloud_image_pre_remove_table * gray_mask[:,:,None]
+point_cloud_image = online_state.process_depth_to_point_cloud_image(depth)
+online_state.infer_table_plane(point_cloud_image, camera_pose)
 jax3dp3.viz.save_depth_image(point_cloud_image[:,:,2],"depth.png",max=far)
 
 
