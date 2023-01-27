@@ -26,7 +26,10 @@ class OnlineJax3DP3(object):
         self.original_camera_params = (orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far)
         h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
         self.camera_params = (h,w,fx,fy,cx,cy, near, far)
-        jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
+
+    def start_renderer(self):
+        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
+        jax3dp3.setup_renderer(self.h, w, fx, fy, cx, cy, near, far)
 
     def process_depth_to_point_cloud_image(self, sensor_depth):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
@@ -107,10 +110,19 @@ class OnlineJax3DP3(object):
             error_cumulative *=  np.logical_or((errors > 200), value_thresh, value_thresh2)
         not_gray_mask = error_cumulative[:,:,None]
 
-
         point_cloud_image_in_world_frame = t3d.apply_transform(
             point_cloud_image,
             camera_pose
+        )
+        not_gray_or_is_tall = jnp.logical_or(
+            not_gray_mask,
+            (point_cloud_image_in_world_frame[:,:,2] > 0.05)[:,:,None]
+        )
+
+
+        point_cloud_image_in_table_frame = t3d.apply_transform(
+            point_cloud_image_in_world_frame,
+            t3d.inverse_pose(self.table_surface_plane_pose)
         )
 
         not_too_far_mask = (point_cloud_image_in_world_frame[:,:,0] < FAR_AWAY_THRESHOLD)[:,:,None]
@@ -118,10 +130,7 @@ class OnlineJax3DP3(object):
         not_too_the_side_mask = (jnp.abs(point_cloud_image_in_world_frame[:,:,1]) < SIDE_THRESHOLD)[:,:,None]
 
         above_table_mask = (
-            t3d.apply_transform(
-                point_cloud_image,
-                t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose)
-            )[:,:,2] > FLOOR_THRESHOLD
+            point_cloud_image_in_table_frame[:,:,2] > FLOOR_THRESHOLD
         )[:,:,None]
 
         point_cloud_image_above_table = (
@@ -130,7 +139,7 @@ class OnlineJax3DP3(object):
             not_too_far_mask * 
             not_too_close_mask * 
             not_too_the_side_mask *
-            not_gray_mask
+            not_gray_or_is_tall
         )
 
         segmentation_image = jax3dp3.utils.segment_point_cloud_image(

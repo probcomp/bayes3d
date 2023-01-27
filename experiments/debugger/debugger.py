@@ -31,6 +31,7 @@ full_filename = "knife_spoon.pkl"
 full_filename = "utensils.pkl"
 full_filename = "new_utencils.pkl"
 full_filename = "utensils.pkl"
+full_filename = "nishad_0.pkl"
 file = open(full_filename,'rb')
 camera_image = pickle.load(file)["camera_images"][0]
 file.close()
@@ -50,23 +51,26 @@ online_state = jax3dp3.OnlineJax3DP3(
 )
 
 point_cloud_image = online_state.process_depth_to_point_cloud_image(depth)
-online_state.infer_table_plane(point_cloud_image, camera_pose)
 jax3dp3.viz.save_depth_image(point_cloud_image[:,:,2],"depth.png",max=far)
+
+online_state.infer_table_plane(point_cloud_image, camera_pose)
 
 
 point_cloud_image_above_table, segmentation_image  = online_state.segment_scene(
     rgb_original, point_cloud_image, camera_pose, "dashboard.png",
     FLOOR_THRESHOLD=-0.01,
-    TOO_CLOSE_THRESHOLD=0.4,
+    TOO_CLOSE_THRESHOLD=0.2,
     FAR_AWAY_THRESHOLD=0.8,
 )
 
+
 from IPython import embed; embed()
 
-# jax3dp3.setup_visualizer()
-
-# jax3dp3.show_cloud("c1",t3d.apply_transform(
-#     t3d.point_cloud_image_to_points(point_cloud_image), jnp.linalg.inv(online_state.table_pose) @ camera_pose) )
+jax3dp3.setup_visualizer()
+jax3dp3.show_cloud("c1",t3d.apply_transform(
+    t3d.point_cloud_image_to_points(point, 
+    camera_pose
+)))
 
 
 
@@ -74,7 +78,6 @@ from IPython import embed; embed()
 
 # jax3dp3.show_cloud("c1",t3d.apply_transform(t3d.point_cloud_image_to_points(point_cloud_image_above_table), camera_pose))
 
-from IPython import embed; embed()
 
 
 top_level_dir = os.path.dirname(os.path.dirname(pybullet_planning.__file__))
