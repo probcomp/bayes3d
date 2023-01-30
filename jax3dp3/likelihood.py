@@ -28,7 +28,7 @@ def threedp3_likelihood(
     outlier_prob,
     outlier_volume,
 ):
-    filter_size = 0
+    filter_size = 5
     
     obs_mask = obs_xyz[:,:,2] > 0.0
     rendered_mask = rendered_xyz[:,:,2] > 0.0
