@@ -5,11 +5,25 @@ import jax
 import numpy as np
 import cv2
 
+class Jax3DP3Observation(object):
+    def __init__(self, rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far):
+        self.camera_params = (h,w,fx,fy,cx,cy, near, far)
+        self.rgb = rgb
+        self.depth = depth
+        self.camera_pose = camera_pose
+
+    def construct_from_camera_image(camera_image, near=0.001, far=5.0):
+        depth = np.array(camera_image.depthPixels)
+        rgb = np.array(camera_image.rgbPixels)
+        camera_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose)
+        K = camera_image.camera_matrix
+        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
+        h,w = depth.shape
+        near = 0.001
+        return Jax3DP3Observation( rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far)
+
 class OnlineJax3DP3(object):
-    def __init__(self,
-        orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far,
-        scaling_factor=1.0,
-    ):
+    def __init__(self):
         self.model_box_dims = jnp.zeros((0,3))
         self.mesh_names = []
         self.meshes = []
@@ -23,13 +37,18 @@ class OnlineJax3DP3(object):
         self.face_param_sched = None
         self.likelihood_r_sched = None
 
+    def set_camera_parameters(self, camera_params, scaling_factor=1.0):
+        orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far = camera_params
         self.original_camera_params = (orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far)
         h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
         self.camera_params = (h,w,fx,fy,cx,cy, near, far)
 
     def start_renderer(self):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-        jax3dp3.setup_renderer(self.h, w, fx, fy, cx, cy, near, far)
+        jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
+        self.model_box_dims = jnp.zeros((0,3))
+        self.mesh_names = []
+        self.meshes = []
 
     def process_depth_to_point_cloud_image(self, sensor_depth):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
@@ -53,11 +72,9 @@ class OnlineJax3DP3(object):
         if mesh_name is None:
             num_objects = len(self.mesh_names)
             mesh_name = f"type_{num_objects}"
-
         self.mesh_names.append(
             mesh_name
         )
-
         jax3dp3.load_model(mesh)
 
     def infer_table_plane(self, point_cloud_image, camera_pose, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
@@ -97,6 +114,14 @@ class OnlineJax3DP3(object):
 
     ):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
+        point_cloud_image_in_world_frame = t3d.apply_transform(
+            point_cloud_image,
+            camera_pose
+        )
+        point_cloud_image_in_table_frame = t3d.apply_transform(
+            point_cloud_image_in_world_frame,
+            t3d.inverse_pose(self.table_surface_plane_pose)
+        )
 
         rgb_scaled = jax3dp3.utils.resize(rgb_original,h,w)
         hsv_scaled = cv2.cvtColor(rgb_scaled, cv2.COLOR_RGB2HSV)
@@ -110,20 +135,12 @@ class OnlineJax3DP3(object):
             error_cumulative *=  np.logical_or((errors > 200), value_thresh, value_thresh2)
         not_gray_mask = error_cumulative[:,:,None]
 
-        point_cloud_image_in_world_frame = t3d.apply_transform(
-            point_cloud_image,
-            camera_pose
-        )
+  
         not_gray_or_is_tall = jnp.logical_or(
             not_gray_mask,
-            (point_cloud_image_in_world_frame[:,:,2] > 0.05)[:,:,None]
+            (point_cloud_image_in_world_frame[:,:,2] > 0.02)[:,:,None]
         )
 
-
-        point_cloud_image_in_table_frame = t3d.apply_transform(
-            point_cloud_image_in_world_frame,
-            t3d.inverse_pose(self.table_surface_plane_pose)
-        )
 
         not_too_far_mask = (point_cloud_image_in_world_frame[:,:,0] < FAR_AWAY_THRESHOLD)[:,:,None]
         not_too_close_mask = (point_cloud_image_in_world_frame[:,:,0] > TOO_CLOSE_THRESHOLD)[:,:,None]
@@ -138,8 +155,8 @@ class OnlineJax3DP3(object):
             above_table_mask * 
             not_too_far_mask * 
             not_too_close_mask * 
-            not_too_the_side_mask *
-            not_gray_or_is_tall
+            not_too_the_side_mask 
+            # * not_gray_or_is_tall
         )
 
         segmentation_image = jax3dp3.utils.segment_point_cloud_image(
@@ -156,15 +173,29 @@ class OnlineJax3DP3(object):
                 labels=["RGB", "Depth", "Above Table", "Segmentation. {:d}".format(int(segmentation_image.max() + 1))],
                 bottom_text="Intrinsics h:{:d} w:{:d} fx:{:0.2f} fy:{:0.2f} cx:{:0.2f} cy:{:0.2f} near:{:0.2f} far:{:0.2f}\n".format(h,w,fx,fy,cx,cy,near,far),
             ).save(viz_filename)
-        return point_cloud_image_above_table, segmentation_image
+        return segmentation_image
 
+    def get_image_masked_and_complement(self, point_cloud_image, segmentation_image, segmentation_id):
+        image_masked = point_cloud_image * (segmentation_image == segmentation_id)[:,:,None]
+        image_masked_complement = point_cloud_image * (segmentation_image != segmentation_id)[:,:,None]
+        return image_masked, image_masked_complement
+
+    def infer_initial_contact_parameters(self, image_masked, camera_pose):
+        points_in_table_ref_frame =  t3d.apply_transform(
+            t3d.point_cloud_image_to_points(image_masked), 
+            t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose)
+        )
+        point_seg = jax3dp3.utils.segment_point_cloud(points_in_table_ref_frame, 0.1)
+        points_filtered = points_in_table_ref_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
+        center_x, center_y, _ = ( points_filtered.min(0) + points_filtered.max(0))/2
+        return jnp.array([center_x, center_y, 0.0])
+            
     def run_detection(
             self,
             rgb_original,
-            point_cloud_image, 
-            point_cloud_image_above_table,
-            segmentation_image,
-            segmentation_id,
+            image_masked,
+            image_masked_complement,
+            init_contact_parameters,
             camera_pose,
             outlier_prob,
             outlier_volume,
@@ -174,21 +205,9 @@ class OnlineJax3DP3(object):
             top_k = 5,
             viz=True
         ):
-
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-        image_masked = point_cloud_image_above_table * (segmentation_image == segmentation_id)[:,:,None]
-        image_masked_complement = point_cloud_image * (segmentation_image != segmentation_id)[:,:,None]
-
-        points_in_table_ref_frame =  t3d.apply_transform(
-            t3d.point_cloud_image_to_points(image_masked), 
-            t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose)
-        )
-        point_seg = jax3dp3.utils.segment_point_cloud(points_in_table_ref_frame, 0.1)
-        points_filtered = points_in_table_ref_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
-        center_x, center_y, _ = ( points_filtered.min(0) + points_filtered.max(0))/2
-            
         results = jax3dp3.c2f.c2f_contact_parameters(
-            jnp.array([center_x, center_y, 0.0]),
+            init_contact_parameters,
             self.contact_param_sched, self.face_param_sched, likelihood_r_sched=self.likelihood_r_sched,
             r_overlap_check=r_overlap_check, r_final=r_final,
             contact_plane_pose=jnp.linalg.inv(camera_pose) @ self.table_surface_plane_pose,
@@ -199,15 +218,13 @@ class OnlineJax3DP3(object):
             top_k=top_k
         )
 
-
         if viz:
             panel_viz = jax3dp3.c2f.multi_panel_c2f_viz(
                 results, rgb_original, image_masked, h, w, far, 
                 self.mesh_names, title=f"Likelihoods: {self.likelihood_r_sched}, Outlier Params: {outlier_prob},{outlier_volume}"
             )
             panel_viz.save(viz_filename)
-        return results
-
+        return results  
 
     def occlusion_search(self, obj_idx, rgb_original, point_cloud_image, camera_pose, segmentation_image, viz_filename, viz=True):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params

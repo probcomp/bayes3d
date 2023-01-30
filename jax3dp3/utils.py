@@ -98,7 +98,7 @@ def bounding_box_lower_upper(dims, pose):
 
 def find_plane(point_cloud, threshold):
     plane = pyransac3d.Plane()
-    plane_eq, _ = plane.fit(point_cloud, threshold, maxIteration=20000)
+    plane_eq, _ = plane.fit(point_cloud, threshold)#, maxIteration=20000)
     plane_eq = np.array(plane_eq)
     plane_normal = np.array(plane_eq[:3])
     point_on_plane = plane_normal * -plane_eq[3]
