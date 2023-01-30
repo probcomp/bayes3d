@@ -39,12 +39,12 @@ def threedp3_likelihood(
     indices = jnp.stack([ii,jj],axis=-1)
     counts = count_ii_jj(indices, obs_xyz, rendered_xyz_padded, r, filter_size)
 
-    positive_matches = ((counts > 0) * obs_mask).sum()
-    negative_matches = ((1.0 - obs_mask) * (1.0 - rendered_mask)).sum()
-    mismatch = obs_xyz.shape[0] * obs_xyz.shape[1] - positive_matches - negative_matches
-    print(positive_matches, negative_matches, mismatch)
+    # positive_matches = ((counts > 0) * obs_mask).sum()
+    # negative_matches = ((1.0 - obs_mask) * (1.0 - rendered_mask)).sum()
+    # mismatch = obs_xyz.shape[0] * obs_xyz.shape[1] - positive_matches - negative_matches
+    # print(positive_matches, negative_matches, mismatch)
 
-    return jnp.log(1 - outlier_prob) * (positive_matches + negative_matches) +  jnp.log( outlier_prob) * mismatch
+    # return jnp.log(1 - outlier_prob) * (positive_matches + negative_matches) +  jnp.log( outlier_prob) * mismatch
 
     
     num_latent_points = rendered_mask.sum()
