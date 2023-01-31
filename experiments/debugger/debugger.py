@@ -99,6 +99,115 @@ perception_state.set_coarse_to_fine_schedules(
 )
 
 
+unique =  np.unique(segmentation_image)
+segmetation_ids = unique[unique != -1]
+
+
+
+seg_id = segmetation_ids[1]
+
+contact_param_sched = perception_state.contact_param_sched
+likelihood_r_sched = perception_state.likelihood_r_sched
+face_param_sched = perception_state.face_param_sched
+model_box_dims = perception_state.model_box_dims
+
+obs_image_masked, obs_image_complement = perception_state.get_image_masked_and_complement(
+    obs_point_cloud_image, segmentation_image, seg_id
+)
+contact_init = perception_state.infer_initial_contact_parameters(
+    obs_image_masked, observation.camera_pose
+)
+results = perception_state.run_detection(
+    observation.rgb,
+    obs_image_masked,
+    obs_image_complement,
+    contact_init,
+    observation.camera_pose,
+    outlier_prob,
+    outlier_volume,
+    0.06,
+    0.02,
+    f"best.png",
+    5
+)
+
+
+timestep = 1
+outlier_prob, outlier_volume = 0.01, 10**3
+
+latent_hypotheses = []
+for obj_idx in range(model_box_dims.shape[0]):
+    latent_hypotheses += [(-jnp.inf, obj_idx, contact_init, None)]
+
+latent_hypotheses_over_time = []
+for c2f_iter in range(len(likelihood_r_sched)):
+    new_latent_hypotheses = []
+
+    r = likelihood_r_sched[c2f_iter]
+    contact_param_sweep_delta, face_param_sweep = contact_param_sched[c2f_iter], face_param_sched[c2f_iter]
+    print(r)
+    for hypothesis in latent_hypotheses:
+        obj_idx = hypothesis[1]
+        contact_params = hypothesis[2]
+        new_contact_param_sweep = contact_params + contact_param_sweep_delta  # shift center 
+
+        pose_proposals = jax3dp3.scene_graph.pose_from_contact_and_face_params_parallel_jit(
+            new_contact_param_sweep,
+            face_param_sweep,
+            model_box_dims[obj_idx],
+            jnp.linalg.inv(observation.camera_pose) @ perception_state.table_surface_plane_pose
+        )
+
+        # get best pose proposal
+        rendered_images_unmasked = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
+        keep_mask = jnp.logical_or(
+            (rendered_images_unmasked[:,:,:,2] <= obs_image_complement[None, :,:, 2]),
+            (obs_image_complement[:,:,2] == 0)[None, ...]
+        )[...,None]
+        rendered_images = keep_mask * rendered_images_unmasked # + (1.0 - keep_mask) * obs_image_complement
+        # rendered_images = jax3dp3.renderer.get_complement_masked_images(rendered_images_unmasked, obs_image_complement)
+        # weights = jax3dp3.threedp3_likelihood_parallel_jit(obs_point_cloud_image, rendered_images, r, outlier_prob, outlier_volume)
+        weights = jax3dp3.threedp3_likelihood_parallel_jit(obs_image_masked, rendered_images, r, outlier_prob, outlier_volume)
+        best_idx = weights.argmax()
+        print(weights[best_idx])
+
+        new_latent_hypotheses.append(
+            (weights[best_idx], obj_idx, new_contact_param_sweep[best_idx],  rendered_images[best_idx], rendered_images_unmasked[best_idx], keep_mask[best_idx])
+        )
+
+    scores = []
+    for hypothesis in new_latent_hypotheses:
+        scores.append(hypothesis[0])
+
+    new_latent_hypotheses_sorted = []
+    for idx in np.argsort(-np.array(scores)):
+        new_latent_hypotheses_sorted.append(new_latent_hypotheses[idx])
+    
+    latent_hypotheses_over_time.append(new_latent_hypotheses_sorted)
+    latent_hypotheses = new_latent_hypotheses_sorted
+
+
+(h,w,fx,fy,cx,cy, near, far) = perception_state.camera_params
+
+(score, obj_idx, cp, rendered_image, rendered_image_unmasked, keep_mask) = latent_hypotheses[1]
+jax3dp3.viz.multi_panel(
+    [
+        jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(obs_point_cloud_image[:,:,2], max=far),h,w),
+        jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(obs_image_masked[:,:,2], max=far),h,w),
+        jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(obs_image_complement[:,:,2], max=far),h,w),
+        jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(rendered_image_unmasked[:,:,2], max=far),h,w),
+        jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(rendered_image[:,:,2], max=far),h,w),
+    ],
+    labels=[ "Obs","Masked Obs", "Complement","Unmasked", "Final"],
+).save("best.png")
+
+
+from IPython import embed; embed()
+
+
+
+
+
 all_results = []
 for seg_id in segmetation_ids:
     image_masked, image_complement = perception_state.get_image_masked_and_complement(

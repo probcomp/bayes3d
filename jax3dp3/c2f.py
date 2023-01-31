@@ -20,34 +20,6 @@ def make_schedules(grid_widths, angle_widths, grid_params):
         face_param_sched.append(f)
     return contact_param_sched, face_param_sched
 
-
-def make_schedules_reduce_angle(grid_widths, grid_params):
-    ## version of make_schedules with angle range reduction based on previous iter
-    contact_param_sched = []
-    face_param_sched = []
-
-    min_angle = 0.0
-    max_angle = jnp.pi*2
-    for (grid_width, grid_param) in zip(grid_widths, grid_params):
-        c, f = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
-            -grid_width, -grid_width, min_angle, +grid_width, +grid_width, max_angle, 
-            *grid_param,
-            jnp.arange(6)
-        )
-
-        angle_range = max_angle - min_angle 
-        num_angle = grid_param[-1]
-        angle_delta = angle_range / num_angle 
-
-        # next range of angles to grid over 
-        min_angle = -angle_delta 
-        max_angle = angle_delta
-
-
-        contact_param_sched.append(c)
-        face_param_sched.append(f)
-    return contact_param_sched, face_param_sched
-
 def c2f_contact_parameters(
     init_contact_parameters,
     contact_param_sched, 
