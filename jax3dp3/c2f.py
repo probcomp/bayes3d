@@ -5,12 +5,14 @@ import jax.numpy as jnp
 import jax3dp3
 import numpy as np
 
-def make_schedules(grid_widths, grid_params):
+def make_schedules(grid_widths, angle_widths, grid_params):
+    ## version of make_schedules with angle range reduction based on previous iter
     contact_param_sched = []
     face_param_sched = []
-    for (grid_width, grid_param) in zip(grid_widths, grid_params):
+
+    for (grid_width, angle_width, grid_param) in zip(grid_widths, angle_widths, grid_params):
         c, f = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
-            -grid_width, -grid_width, 0.0, +grid_width, +grid_width, jnp.pi*2, 
+            -grid_width, -grid_width, -angle_width, +grid_width, +grid_width, angle_width, 
             *grid_param,
             jnp.arange(6)
         )

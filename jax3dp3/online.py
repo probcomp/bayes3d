@@ -100,9 +100,9 @@ class OnlineJax3DP3(object):
         self.table_pose = table_pose
         self.table_surface_plane_pose = table_surface_plane_pose
 
-    def set_coarse_to_fine_schedules(self, grid_widths, grid_params, likelihood_r_sched):
+    def set_coarse_to_fine_schedules(self, grid_widths, angle_widths, grid_params, likelihood_r_sched):
         self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
-            grid_widths=grid_widths, grid_params=grid_params
+            grid_widths=grid_widths, angle_widths=angle_widths, grid_params=grid_params
         )
         self.likelihood_r_sched = likelihood_r_sched
 
@@ -160,7 +160,7 @@ class OnlineJax3DP3(object):
         )
 
         segmentation_image = jax3dp3.utils.segment_point_cloud_image(
-            point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=30
+            point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=15
         )
         if viz:
             jax3dp3.viz.multi_panel(

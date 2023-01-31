@@ -85,7 +85,11 @@ def absolute_poses_from_scene_graph(start_poses, box_dims, edges, contact_params
 
 
 def enumerate_contact_and_face_parameters(min_x,min_y,min_angle, max_x, max_y, max_angle, num_x, num_y, num_angle, faces):
-    contact_params_sweep = jax3dp3.enumerations.make_translation_grid_enumeration_3d(min_x,min_y,min_angle, max_x, max_y, max_angle, num_x, num_y, num_angle)
+    contact_params_sweep = jax3dp3.enumerations.make_translation_grid_enumeration_3d(
+        min_x,min_y, min_angle,
+        max_x, max_y, max_angle,
+        num_x, num_y, num_angle
+    )
     contact_params_sweep_extended = jnp.tile(contact_params_sweep, (faces.shape[0],1))
     face_params_sweep = jnp.repeat(faces, contact_params_sweep.shape[0])
     return contact_params_sweep_extended, face_params_sweep
