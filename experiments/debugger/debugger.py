@@ -100,10 +100,10 @@ segmetation_ids = unique[unique != -1]
 
 
 perception_state.set_coarse_to_fine_schedules(
-    grid_widths=[0.05, 0.01, 0.005],
-    angle_widths=[jnp.pi, jnp.pi, jnp.pi],
-    grid_params=[(10,10, 31),(10,10, 31),(10,10, 31)],
-    likelihood_r_sched = [0.08, 0.05, 0.02]
+    grid_widths=[0.08, 0.05, 0.04, 0.02],
+    angle_widths=[jnp.pi, jnp.pi, jnp.pi, jnp.pi],
+    grid_params=[(10,10, 31),(10,10, 31),(10,10, 31),(10,10, 31)],
+    likelihood_r_sched = [0.08, 0.05, 0.02, 0.01]
 )
 
 contact_param_sched = perception_state.contact_param_sched
@@ -116,13 +116,11 @@ unique =  np.unique(segmentation_image)
 segmetation_ids = unique[unique != -1]
 
 timestep = 1
-outlier_prob, outlier_volume = 0.01, 10**3
+outlier_prob, outlier_volume = 0.1, 10**3
 
 
 
 seg_id = 1
-obj_idx = 1
-
 obs_image_masked, obs_image_complement = perception_state.get_image_masked_and_complement(
     obs_point_cloud_image, segmentation_image, seg_id
 )
@@ -130,10 +128,9 @@ contact_init = perception_state.infer_initial_contact_parameters(
     obs_image_masked, observation.camera_pose
 )
 
-
-
+object_ids_to_estimate = [0,1]
 latent_hypotheses = []
-for obj_idx in range(model_box_dims.shape[0]):
+for obj_idx in object_ids_to_estimate:
     latent_hypotheses += [(-jnp.inf, obj_idx, contact_init, None)]
 
 latent_hypotheses_over_time = [latent_hypotheses]
@@ -180,38 +177,35 @@ for c2f_iter in range(len(likelihood_r_sched)):
             (weights[best_idx], obj_idx, new_contact_param_sweep[best_idx],  rendered_images[best_idx], rendered_images_unmasked[best_idx], keep_mask[best_idx])
         )
 
-    # scores = []
-    # for hypothesis in new_latent_hypotheses:
-    #     scores.append(hypothesis[0])
-
     latent_hypotheses_over_time.append(new_latent_hypotheses)
     latent_hypotheses = new_latent_hypotheses
 
-scores = []
-for hypothesis in new_latent_hypotheses:
-    scores.append(hypothesis[0])
 
+(h,w,fx,fy,cx,cy, near, far) = perception_state.camera_params
 
 viz_panels = []
-(h,w,fx,fy,cx,cy, near, far) = perception_state.camera_params
-for obj_idx in np.argsort(-np.array(scores)):
+for (i,obj_idx) in enumerate(object_ids_to_estimate):
     viz_images = [
             jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(obs_point_cloud_image[:,:,2], max=far), orig_h, orig_w),
             jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(obs_image_masked[:,:,2], max=far), orig_h, orig_w),
     ]
+
+    labels = ["Obs", "Masked"]
+
     for hypotheses in latent_hypotheses_over_time[1:]:
-        (score, obj_idx, cp, rendered_image, rendered_image_unmasked, keep_mask) = hypotheses[obj_idx]
+        (score, obj_idx, cp, rendered_image, rendered_image_unmasked, keep_mask) = hypotheses[i]
         viz_images.append(
             jax3dp3.viz.overlay_image(
                     jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(observation.rgb, 255.0), orig_h, orig_w),
                     jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(rendered_image_unmasked[:,:,2], max=far), orig_h, orig_w)
             )
         )
+        labels += [f"{score}"]
 
     viz_panels.append(jax3dp3.viz.multi_panel(
-        viz_images,
-        labels=["Point cloud", "Mask", *[f"{x[obj_idx][0]}" for x in latent_hypotheses_over_time[1:]]],
-        title="{:s} Score: {:0.2f}".format(perception_state.mesh_names[obj_idx], latent_hypotheses_over_time[-1][obj_idx][0])))
+        viz_images, labels, title="{:s}".format(perception_state.mesh_names[obj_idx])
+    )
+    )
 full_viz = jax3dp3.viz.vstack_images(viz_panels)
 full_viz.save(f"seg_id_{seg_id}.png")
 
