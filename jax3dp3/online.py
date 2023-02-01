@@ -54,7 +54,7 @@ class OnlineJax3DP3(object):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
         depth = np.array(sensor_depth)
         depth = jax3dp3.utils.resize(depth, h, w)
-        depth[depth > far] = 0.0
+        depth[depth > far] = far
         point_cloud_image = jnp.array(t3d.depth_to_point_cloud_image(depth, fx, fy, cx, cy))
         return point_cloud_image
 
@@ -176,8 +176,10 @@ class OnlineJax3DP3(object):
         return segmentation_image
 
     def get_image_masked_and_complement(self, point_cloud_image, segmentation_image, segmentation_id):
-        image_masked = point_cloud_image * (segmentation_image == segmentation_id)[:,:,None]
-        image_masked_complement = point_cloud_image * (segmentation_image != segmentation_id)[:,:,None]
+        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
+        mask =  (segmentation_image == segmentation_id)[:,:,None]
+        image_masked = point_cloud_image * mask
+        image_masked_complement = point_cloud_image * (1.0 - mask) + mask * far
         return image_masked, image_masked_complement
 
     def infer_initial_contact_parameters(self, image_masked, camera_pose):
