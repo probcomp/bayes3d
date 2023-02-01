@@ -101,6 +101,7 @@ class OnlineJax3DP3(object):
         self.table_surface_plane_pose = table_surface_plane_pose
 
     def set_coarse_to_fine_schedules(self, grid_widths, angle_widths, grid_params, likelihood_r_sched):
+        assert len(grid_widths) == len(angle_widths) == len(grid_params) == len(likelihood_r_sched)
         self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
             grid_widths=grid_widths, angle_widths=angle_widths, grid_params=grid_params
         )
