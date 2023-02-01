@@ -44,9 +44,10 @@ full_filename = "nishad_1.pkl"
 full_filename = "knife_spoon.pkl"
 
 
-full_filename = "demo2_nolight.pkl"
 
+full_filename = "demo2_nolight.pkl"
 full_filename = "strawberry_error.pkl"
+
 full_filename = "knife_sim.pkl"
 file = open(full_filename,'rb')
 camera_images = pickle.load(file)["camera_images"]
@@ -100,19 +101,12 @@ unique =  np.unique(segmentation_image)
 segmetation_ids = unique[unique != -1]
 
 
-# perception_state.set_coarse_to_fine_schedules(
-#     grid_widths=[0.08, 0.05, 0.04, 0.02, 0.02],
-#     angle_widths=[jnp.pi, jnp.pi, jnp.pi, jnp.pi, jnp.pi],
-#     grid_params=[(10,10, 31),(10,10, 31),(10,10, 31),(10,10, 31),(10,10, 31)],
-#     likelihood_r_sched = [0.08, 0.05, 0.02, 0.01, 0.005]
-# )
-
 
 perception_state.set_coarse_to_fine_schedules(
-    grid_widths=[0.08, 0.05, 0.04, 0.03, 0.02, 0.00001],
-    angle_widths=[jnp.pi, jnp.pi, jnp.pi, jnp.pi/2, 0.001, jnp.pi],
-    grid_params=[(3,3,27),(3,3,27),(5,5,27),(5,5,17), (10, 10, 1), (1,1,360)],
-    likelihood_r_sched = [0.08, 0.05, 0.02, 0.01, 0.01, 0.01]
+    grid_widths=[0.10, 0.05, 0.04, 0.005,0.04],
+    angle_widths=[jnp.pi, jnp.pi, 0.00001, jnp.pi, 0.00001],
+    grid_params=[(7,7,31),(7,7,31),(15, 15, 1), (3,3,101), (10, 10, 1)],
+    likelihood_r_sched = [0.05, 0.02, 0.01, 0.005, 0.005]
 )
 
 contact_param_sched = perception_state.contact_param_sched
