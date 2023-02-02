@@ -157,11 +157,11 @@ class OnlineJax3DP3(object):
             not_too_far_mask * 
             not_too_close_mask * 
             not_too_the_side_mask 
-            # * not_gray_or_is_tall
+            * not_gray_or_is_tall
         )
 
         segmentation_image = jax3dp3.utils.segment_point_cloud_image(
-            point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=15
+            point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=30
         )
         if viz:
             jax3dp3.viz.multi_panel(

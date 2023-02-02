@@ -75,6 +75,15 @@ def pixelwise_likelihood(
     return jnp.log(probs).sum()
 
 pixelwise_likelihood_parallel_jit = jax.jit(jax.vmap(pixelwise_likelihood, in_axes=(None, 0, 0, None, None, None, None)))
+pixelwise_likelihood_with_r_parallel_jit = jax.jit(
+    jax.vmap(
+        jax.vmap(
+            jax.vmap(pixelwise_likelihood, in_axes=(None, 0, 0, None, None, None, None)),
+            in_axes=(None, None, None, 0, None, None, None)
+        ),
+        in_axes=(None, None, None, None, None, 0, None)
+    )
+)
 pixelwise_likelihood_jit = jax.jit(pixelwise_likelihood)
 
 
