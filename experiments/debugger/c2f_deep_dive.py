@@ -36,23 +36,8 @@ full_filename = "shape_acquisition.pkl"
 
 
 full_filename = "nishad_1.pkl"
-
-
-
-
-
 full_filename = "knife_spoon.pkl"
-
-
-
-
-
-
-
 full_filename = "demo2_nolight.pkl"
-
-
-
 full_filename = "strawberry_error.pkl"
 full_filename = "knife_sim.pkl"
 
@@ -109,10 +94,10 @@ unique =  np.unique(segmentation_image)
 segmetation_ids = unique[unique != -1]
 
 perception_state.set_coarse_to_fine_schedules(
-    grid_widths=[0.15, 0.05, 0.04],
-    angle_widths=[jnp.pi, jnp.pi, 0.00001],
-    grid_params=[(5,5,21),(5,5,21),(15, 15, 1)],
-    likelihood_r_sched=[0.0,0.0,0.0]
+    grid_widths=[0.15, 0.05, 0.04, 0.01],
+    angle_widths=[jnp.pi, jnp.pi, 0.00001, jnp.pi/10],
+    grid_params=[(5,5,21),(5,5,21),(15, 15, 1), (5,5,21)],
+    likelihood_r_sched=[0.0,0.0,0.0, 0.0]
 )
 
 contact_param_sched = perception_state.contact_param_sched
@@ -120,14 +105,13 @@ likelihood_r_sched = perception_state.likelihood_r_sched
 face_param_sched = perception_state.face_param_sched
 model_box_dims = perception_state.model_box_dims
 
-
 unique =  np.unique(segmentation_image)
 segmetation_ids = unique[unique != -1]
 
 timestep = 1
-outlier_prob, outlier_volume = 0.05, 1**3
+outlier_volume = 1**3
 
-possible_rs = jnp.array([0.06, 0.04, 0.02, 0.01, 0.005, 0.001])
+possible_rs = jnp.array([0.01, 0.008, 0.006, 0.004, 0.002, 0.001])
 possible_outlier_prob = jnp.array([0.1, 0.05, 0.01, 0.005])
 
 for seg_id in segmetation_ids:
@@ -179,8 +163,7 @@ for seg_id in segmetation_ids:
                 (obs_image_complement[:,:,2] == 0)[None, ...]
             )[...,None]
             rendered_images = keep_masks * rendered_images_unmasked + (1.0 - keep_masks) * obs_image_complement
-
-
+            
             weights = jax3dp3.pixelwise_likelihood_with_r_parallel_jit(
                 obs_point_cloud_image, rendered_images, keep_masks, possible_rs,
                 0.0001, possible_outlier_prob, outlier_volume
@@ -230,6 +213,40 @@ for seg_id in segmetation_ids:
         )
 
 
+    c,f = jax3dp3.c2f.make_schedules(
+        grid_widths=[0.02], angle_widths=[jnp.pi/10], grid_params=[(10, 10, 20)]
+    )
+    c = c[0]
+    f = f[0]
+
+    for hypothesis in latent_hypotheses_over_time[-1]:
+        (score, obj_idx, cp, rendered_image, rendered_image_unmasked, keep_mask, r, outlier_prob) = hypothesis
+        print('obj_idx:');print(obj_idx)
+        print('score:');print(score)
+        
+        pose_proposals = jax3dp3.scene_graph.pose_from_contact_and_face_params_parallel_jit(
+            cp + c,
+            f,
+            model_box_dims[obj_idx],
+            jnp.linalg.inv(observation.camera_pose) @ perception_state.table_surface_plane_pose
+        )
+        rendered_images_unmasked = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
+
+        keep_masks = jnp.logical_or(
+            (rendered_images_unmasked[:,:,:,2] <= obs_image_complement[None, :,:, 2]) * 
+            rendered_images_unmasked[:,:,:,2] > 0.0
+            ,
+            (obs_image_complement[:,:,2] == 0)[None, ...]
+        )[...,None]
+        rendered_images = keep_masks * rendered_images_unmasked + (1.0 - keep_masks) * obs_image_complement
+        
+        weights = jax3dp3.pixelwise_likelihood_with_r_parallel_jit(
+            obs_point_cloud_image, rendered_images, keep_masks, jnp.array([r]),
+            0.0001, jnp.array([outlier_prob]), outlier_volume
+        )
+
+
+
     scores = []
     for hypothesis in latent_hypotheses_over_time[-1]:
         weight = hypothesis[0]
@@ -259,6 +276,8 @@ for seg_id in segmetation_ids:
             ", ".join(scores_string)
         )
     ).save(f"seg_id_{seg_id}.png")
+
+    from IPython import embed; embed()
 
 
 

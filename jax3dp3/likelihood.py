@@ -7,57 +7,62 @@ from functools import partial
 @functools.partial(
     jnp.vectorize,
     signature='(m)->()',
-    excluded=(1,2,3,4,),
+    excluded=(1,2,3,4,5,6,7),
 )
-def count_ii_jj(
+def probability_in_kernel(
     ij,
     data_xyz: jnp.ndarray,
     model_xyz: jnp.ndarray,
     r: float,
-    filter_size: int
+    num_latent_points: int,
+    filter_size: int,
+    outlier_prob,
+    outlier_volume
 ):
     t = data_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
-    distance = jnp.linalg.norm(t, axis=-1).ravel() # (4,4)
-    return jnp.sum(distance <= r)
-
+    rs = jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1]), (2*filter_size + 1, 2*filter_size + 1,))
+    distance = jnp.linalg.norm(t, axis=-1).ravel() # (2*filter_size + 1, 2*filter_size + 1)
+    is_inlier = (distance <= rs)
+    inlier_probability = is_inlier * 1.0 / (4/3 * jnp.pi * rs**3) * (1.0 - outlier_prob) / num_latent_points
+    total_inlier_probability = inlier_probability.sum()
+    probability = total_inlier_probability + outlier_prob * (1.0 / outlier_volume)
+    return jnp.sum()
 
 def threedp3_likelihood(
     obs_xyz: jnp.ndarray,
     rendered_xyz: jnp.ndarray,
-    r,
+    latent_mask,
+    r_latent,
+    r_outside,
     outlier_prob,
     outlier_volume,
 ):
-    filter_size = 4
+    filter_size = 5
 
-    obs_mask = obs_xyz[:,:,2] > 0.0
-    rendered_mask = rendered_xyz[:,:,2] > 0.0
-    
     rendered_xyz_padded = jax.lax.pad(rendered_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
+
+    r_array = latent_mask * r_latent + (1.0 - latent_mask) * r_outside
+    r_array_padded = jax.lax.pad(r_array,  r_outside, ((filter_size,filter_size,0,),))
 
     jj, ii = jnp.meshgrid(jnp.arange(obs_xyz.shape[1]), jnp.arange(obs_xyz.shape[0]))
     indices = jnp.stack([ii,jj],axis=-1)
-    counts = count_ii_jj(indices, obs_xyz, rendered_xyz_padded, r, filter_size)
+    num_latent_points = obs_xyz.shape[0] * obs_xyz.shape[1]
 
-    # positive_matches = ((counts > 0) * obs_mask).sum()
-    # negative_matches = ((1.0 - obs_mask) * (1.0 - rendered_mask)).sum()
-    # mismatch = obs_xyz.shape[0] * obs_xyz.shape[1] - positive_matches - negative_matches
-    # print(positive_matches, negative_matches, mismatch)
+    probs = probability_in_kernel(indices, obs_xyz, rendered_xyz_padded, r_array_padded, num_latent_points, filter_size, outlier_prob, outlier_volume)    
+    return jnp.log(probs).sum()
 
-    # return jnp.log(1 - outlier_prob) * (positive_matches + negative_matches) +  jnp.log( outlier_prob) * mismatch
-
-    num_latent_points = rendered_mask.sum()
-    any_points = num_latent_points > 0
-    probs = (
-        any_points * jnp.nan_to_num(outlier_prob * (1.0 / outlier_volume) +  ((1.0 - outlier_prob) / num_latent_points  * 1.0 / (4/3 * jnp.pi * r**3) * counts ) )
-        +
-        (1- any_points) * (1.0 / outlier_volume + 0.0 * counts)
+threedp3_likelihood_with_r_parallel_jit = jax.jit(
+    jax.vmap(
+        jax.vmap(
+            jax.vmap(threedp3_likelihood, in_axes=(None, 0, 0, None, None, None, None)),
+            in_axes=(None, None, None, 0, None, None, None)
+        ),
+        in_axes=(None, None, None, None, None, 0, None)
     )
-    log_probs = jnp.log(probs)
-    return jnp.sum(jnp.where(obs_mask, log_probs, 0.0))
+)
 
-threedp3_likelihood_parallel_jit = jax.jit(jax.vmap(threedp3_likelihood, in_axes=(None, 0, None, None, None)))
-threedp3_likelihood_jit = jax.jit(threedp3_likelihood)
+# threedp3_likelihood_parallel_jit = jax.jit(jax.vmap(threedp3_likelihood, in_axes=(None, 0, None, None, None)))
+# threedp3_likelihood_jit = jax.jit(threedp3_likelihood)
 
 def pixelwise_likelihood(
     obs_xyz: jnp.ndarray,
