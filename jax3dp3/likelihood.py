@@ -28,10 +28,10 @@ def threedp3_likelihood(
     outlier_prob,
     outlier_volume,
 ):
-    filter_size = 9
-    
-    # obs_mask = obs_xyz[:,:,2] > 0.0
-    # rendered_mask = rendered_xyz[:,:,2] > 0.0
+    filter_size = 4
+
+    obs_mask = obs_xyz[:,:,2] > 0.0
+    rendered_mask = rendered_xyz[:,:,2] > 0.0
     
     rendered_xyz_padded = jax.lax.pad(rendered_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
 
@@ -46,20 +46,38 @@ def threedp3_likelihood(
 
     # return jnp.log(1 - outlier_prob) * (positive_matches + negative_matches) +  jnp.log( outlier_prob) * mismatch
 
-    
-    # num_latent_points = rendered_mask.sum()
-    
-    any_points = 1.0
+    num_latent_points = rendered_mask.sum()
+    any_points = num_latent_points > 0
     probs = (
-        any_points * jnp.nan_to_num(outlier_prob * (1.0 / outlier_volume) +  ((1.0 - outlier_prob) / 100*100.0  * 1.0 / (4/3 * jnp.pi * r**3) * counts ) )
+        any_points * jnp.nan_to_num(outlier_prob * (1.0 / outlier_volume) +  ((1.0 - outlier_prob) / num_latent_points  * 1.0 / (4/3 * jnp.pi * r**3) * counts ) )
         +
         (1- any_points) * (1.0 / outlier_volume + 0.0 * counts)
     )
     log_probs = jnp.log(probs)
-    return jnp.sum(log_probs)
+    return jnp.sum(jnp.where(obs_mask, log_probs, 0.0))
 
 threedp3_likelihood_parallel_jit = jax.jit(jax.vmap(threedp3_likelihood, in_axes=(None, 0, None, None, None)))
 threedp3_likelihood_jit = jax.jit(threedp3_likelihood)
+
+def pixelwise_likelihood(
+    obs_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    latent_mask,
+    r_latent,
+    r_outside,
+    outlier_prob,
+    outlier_volume,
+):
+    r_array = latent_mask * r_latent + (1.0 - latent_mask) * r_outside
+
+    distances = jnp.linalg.norm(rendered_xyz - obs_xyz, axis=-1)[...,None]
+    probs = (distances < r_array) *  1.0 / (4/3 * jnp.pi * r_array**3) * (1.0 - outlier_prob) +  r_array * 0.0 + outlier_prob * (1 / outlier_volume)
+    return jnp.log(probs).sum()
+
+pixelwise_likelihood_parallel_jit = jax.jit(jax.vmap(pixelwise_likelihood, in_axes=(None, 0, 0, None, None, None, None)))
+pixelwise_likelihood_jit = jax.jit(pixelwise_likelihood)
+
+
 
 
 def threedp3_likelihood_get_counts(
