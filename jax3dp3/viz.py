@@ -80,6 +80,15 @@ def overlay_image(img_1, img_2, alpha=0.5):
 def resize_image(img, h, w):
     return img.resize((w, h))
 
+
+def vstack_images(images):
+    w,h = images[0].size
+    full_image = Image.new('RGB', (w, h * len(images)))
+
+    for i in range(len(images)):
+        full_image.paste(images[i], (0,i * h))
+    return full_image
+
 ####
 
 def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsize=40, label_fontsize=30,  bottom_fontsize=20, middle_width=10):
