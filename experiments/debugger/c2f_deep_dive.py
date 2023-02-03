@@ -37,10 +37,12 @@ full_filename = "shape_acquisition.pkl"
 
 full_filename = "nishad_1.pkl"
 full_filename = "knife_spoon.pkl"
-full_filename = "demo2_nolight.pkl"
-full_filename = "strawberry_error.pkl"
 full_filename = "knife_sim.pkl"
 
+
+full_filename = "strawberry_error.pkl"
+
+full_filename = "demo2_nolight.pkl"
 
 file = open(full_filename,'rb')
 camera_images = pickle.load(file)["camera_images"]
