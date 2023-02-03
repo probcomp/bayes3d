@@ -94,8 +94,8 @@ unique =  np.unique(segmentation_image)
 segmetation_ids = unique[unique != -1]
 
 perception_state.set_coarse_to_fine_schedules(
-    grid_widths=[0.15, 0.05, 0.04, 0.01],
-    angle_widths=[jnp.pi, jnp.pi, 0.00001, jnp.pi/10],
+    grid_widths=[0.15, 0.05, 0.04, 0.02],
+    angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
     grid_params=[(5,5,21),(5,5,21),(15, 15, 1), (5,5,21)],
     likelihood_r_sched=[0.0,0.0,0.0, 0.0]
 )
@@ -111,8 +111,8 @@ segmetation_ids = unique[unique != -1]
 timestep = 1
 outlier_volume = 1**3
 
-possible_rs = jnp.array([0.01, 0.008, 0.006, 0.004, 0.002, 0.001])
-possible_outlier_prob = jnp.array([0.1, 0.05, 0.01, 0.005])
+# possible_rs = jnp.array([0.01, 0.008, 0.006, 0.004])
+# possible_outlier_prob = jnp.array([0.1, 0.05])
 
 for seg_id in segmetation_ids:
     obs_image_masked, obs_image_complement = perception_state.get_image_masked_and_complement(
@@ -129,6 +129,7 @@ for seg_id in segmetation_ids:
 
     latent_hypotheses_over_time = [latent_hypotheses]
     for c2f_iter in range(len(likelihood_r_sched)):
+        print('c2f_iter:');print(c2f_iter)
         new_latent_hypotheses = []
         contact_param_sweep_delta, face_param_sweep = contact_param_sched[c2f_iter], face_param_sched[c2f_iter]
 
@@ -164,22 +165,29 @@ for seg_id in segmetation_ids:
             )[...,None]
             rendered_images = keep_masks * rendered_images_unmasked + (1.0 - keep_masks) * obs_image_complement
             
-            weights = jax3dp3.pixelwise_likelihood_with_r_parallel_jit(
-                obs_point_cloud_image, rendered_images, keep_masks, possible_rs,
-                0.0001, possible_outlier_prob, outlier_volume
+            r = 0.01
+            outlier_prob = 0.01
+
+            weights = jax3dp3.threedp3_likelihood_parallel_jit(
+                obs_point_cloud_image, rendered_images, r, outlier_prob, outlier_volume
             )
-            best_outlier_idx, best_r_idx, best_idx = jnp.unravel_index(jnp.argmax(weights), weights.shape)
+
+
+            # best_outlier_idx, best_r_idx, best_idx = jnp.unravel_index(jnp.argmax(weights), weights.shape)
+            # best_outlier_idx, best_r_idx, best_idx = jnp.unravel_index(jnp.argmax(weights), weights.shape)
+
+            best_idx = jnp.argmax(weights)
 
             new_latent_hypotheses.append(
                 (
-                    weights[best_outlier_idx, best_r_idx, best_idx],
+                    weights[best_idx],
                     obj_idx,
                     new_contact_param_sweep[best_idx],
                     rendered_images[best_idx],
                     rendered_images_unmasked[best_idx],
                     keep_masks[best_idx],
-                    possible_rs[best_r_idx],
-                    possible_outlier_prob[best_outlier_idx],
+                    r,
+                    outlier_prob,
                 )
             )
 
@@ -213,37 +221,37 @@ for seg_id in segmetation_ids:
         )
 
 
-    c,f = jax3dp3.c2f.make_schedules(
-        grid_widths=[0.02], angle_widths=[jnp.pi/10], grid_params=[(10, 10, 20)]
-    )
-    c = c[0]
-    f = f[0]
+    # c,f = jax3dp3.c2f.make_schedules(
+    #     grid_widths=[0.02], angle_widths=[jnp.pi/10], grid_params=[(10, 10, 20)]
+    # )
+    # c = c[0]
+    # f = f[0]
 
-    for hypothesis in latent_hypotheses_over_time[-1]:
-        (score, obj_idx, cp, rendered_image, rendered_image_unmasked, keep_mask, r, outlier_prob) = hypothesis
-        print('obj_idx:');print(obj_idx)
-        print('score:');print(score)
+    # for hypothesis in latent_hypotheses_over_time[-1]:
+    #     (score, obj_idx, cp, rendered_image, rendered_image_unmasked, keep_mask, r, outlier_prob) = hypothesis
+    #     print('obj_idx:');print(obj_idx)
+    #     print('score:');print(score)
         
-        pose_proposals = jax3dp3.scene_graph.pose_from_contact_and_face_params_parallel_jit(
-            cp + c,
-            f,
-            model_box_dims[obj_idx],
-            jnp.linalg.inv(observation.camera_pose) @ perception_state.table_surface_plane_pose
-        )
-        rendered_images_unmasked = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
+    #     pose_proposals = jax3dp3.scene_graph.pose_from_contact_and_face_params_parallel_jit(
+    #         cp + c,
+    #         f,
+    #         model_box_dims[obj_idx],
+    #         jnp.linalg.inv(observation.camera_pose) @ perception_state.table_surface_plane_pose
+    #     )
+    #     rendered_images_unmasked = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
 
-        keep_masks = jnp.logical_or(
-            (rendered_images_unmasked[:,:,:,2] <= obs_image_complement[None, :,:, 2]) * 
-            rendered_images_unmasked[:,:,:,2] > 0.0
-            ,
-            (obs_image_complement[:,:,2] == 0)[None, ...]
-        )[...,None]
-        rendered_images = keep_masks * rendered_images_unmasked + (1.0 - keep_masks) * obs_image_complement
+    #     keep_masks = jnp.logical_or(
+    #         (rendered_images_unmasked[:,:,:,2] <= obs_image_complement[None, :,:, 2]) * 
+    #         rendered_images_unmasked[:,:,:,2] > 0.0
+    #         ,
+    #         (obs_image_complement[:,:,2] == 0)[None, ...]
+    #     )[...,None]
+    #     rendered_images = keep_masks * rendered_images_unmasked + (1.0 - keep_masks) * obs_image_complement
         
-        weights = jax3dp3.pixelwise_likelihood_with_r_parallel_jit(
-            obs_point_cloud_image, rendered_images, keep_masks, jnp.array([r]),
-            0.0001, jnp.array([outlier_prob]), outlier_volume
-        )
+    #     weights = jax3dp3.pixelwise_likelihood_with_r_parallel_jit(
+    #         obs_point_cloud_image, rendered_images, keep_masks, jnp.array([r]),
+    #         0.0001, jnp.array([outlier_prob]), outlier_volume
+    #     )
 
 
 
@@ -258,7 +266,7 @@ for seg_id in segmetation_ids:
         scores.append(weight)
     scores = jnp.array(scores)
     order = jnp.argsort(-scores)
-    normalized_scores = jax3dp3.utils.normalize_log_scores(scores[order])
+    normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
     print(normalized_scores)
 
     viz_panels = [
@@ -277,7 +285,7 @@ for seg_id in segmetation_ids:
         )
     ).save(f"seg_id_{seg_id}.png")
 
-    from IPython import embed; embed()
+    # from IPython import embed; embed()
 
 
 

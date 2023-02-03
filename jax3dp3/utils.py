@@ -7,7 +7,7 @@ import jax3dp3.transforms_3d as t3d
 import os
 import pyransac3d
 import sklearn.cluster
-import jax.scipy.special
+from jax.scipy.special import logsumexp
 import time
 
 def time_code_block(func, args):
@@ -169,8 +169,7 @@ def get_largest_cluster_id_from_segmentation(segmentation_array_or_img):
     return unique[counts.argmax()]
 
 def normalize_log_scores(log_p):
-    M = jnp.max(log_p)
-    return jnp.exp(log_p - M - jax.scipy.special.logsumexp(log_p - M))
+    return jnp.exp(log_p - logsumexp(log_p))
 
 def voxelize(data, resolution):
     return jnp.round(data /resolution) * resolution
