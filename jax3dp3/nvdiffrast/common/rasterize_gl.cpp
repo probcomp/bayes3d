@@ -443,8 +443,8 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
         setGLContext(s.glctx);
 
 
-    uint num_total_poses = pose.size(0);
-    uint num_objects = pose.size(1);
+    uint num_objects = pose.size(0);
+    uint num_images = pose.size(1);
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
@@ -467,11 +467,12 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
 
     // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    torch::Tensor output_torch_tensor = torch::empty({num_total_poses,s.img_height, s.img_width,4}, opts);
+    torch::Tensor output_torch_tensor = torch::empty({num_images, s.img_height, s.img_width,4}, opts);
 
-    for(int start_pose_idx=0; start_pose_idx < num_total_poses; start_pose_idx+=s.num_layers)
+    const float* posePtr = pose.data_ptr<float>(); 
+    for(int start_pose_idx=0; start_pose_idx < num_images; start_pose_idx+=s.num_layers)
     {
-        int poses_on_this_iter = std::min(num_total_poses-start_pose_idx, s.num_layers);
+        int poses_on_this_iter = std::min(num_images-start_pose_idx, s.num_layers);
         // Set viewport, clear color buffer(s) and depth/stencil buffer.
         NVDR_CHECK_GL_ERROR(glViewport(0, 0, s.img_width, s.img_height));
         NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
@@ -489,10 +490,9 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
                 cmd.instanceCount = 1;
             }
 
-            const float* posePtr = (pose.index({torch::indexing::Slice() ,object_idx, torch::indexing::Ellipsis})).data_ptr<float>(); 
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
-            NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(pose_array, 0, 0, posePtr + start_pose_idx*16, poses_on_this_iter*16*sizeof(float), cudaMemcpyDeviceToDevice));
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(pose_array, 0, 0, posePtr + num_images*16*object_idx + start_pose_idx*16, poses_on_this_iter*16*sizeof(float), cudaMemcpyDeviceToDevice));
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
             
             NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], poses_on_this_iter, sizeof(GLDrawCmd)));
