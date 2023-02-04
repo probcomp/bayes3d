@@ -67,7 +67,6 @@ gt_poses_2 = jnp.tile(jnp.array([
 gt_poses_2 = gt_poses_2.at[:,0,3].set(jnp.linspace(4.0, -3.0, gt_poses_2.shape[0]))
 gt_poses_2 = gt_poses_2.at[:,2,3].set(jnp.linspace(12.0, 5.0, gt_poses_2.shape[0]))
 
-from IPython import embed; embed()
 
 gt_poses_full = jnp.stack([gt_poses, gt_poses_2])
 
@@ -94,6 +93,32 @@ jax3dp3.viz.save_depth_image(multiobject_scene_img[4,:,:,2], "gt_image2.png", ma
 parallel_single_object_img = jax3dp3.render_multiobject_parallel(gt_poses_full,  [0,1])
 jax3dp3.viz.save_depth_image(parallel_single_object_img[0,:,:,2], "parallel_single_img_1.png", max=max_depth)
 jax3dp3.viz.save_depth_image(parallel_single_object_img[1,:,:,2], "parallel_single_img_2.png", max=max_depth)
+
+jax3dp3.viz.save_depth_image(parallel_single_object_img[1,:,:,3], "segmentation.png", max=4.0)
+
+
+# from IPython import embed; embed()
+# jax3dp3.setup_visualizer()
+
+# img = jax3dp3.render_multiobject_parallel(gt_poses_full,  [0,1])
+# jax3dp3.viz.save_depth_image(img[0,:,:,2], "parallel_single_img_1.png", max=max_depth)
+# jax3dp3.viz.save_depth_image(img[0,:,:,3], "segmentation.png", max=3.0)
+# jax3dp3.show_cloud("1", (img[0,:,:,:3] * (img[0,:,:,3]>0)[...,None] ).reshape(-1,3) / 10.0)
+
+
+# img = jax3dp3.render_multiobject_parallel(gt_poses_full,  [0,1], on_object=1)
+# jax3dp3.viz.save_depth_image(img[0,:,:,3], "segmentation.png", max=3.0)
+# jax3dp3.show_cloud("1", (img[0,:,:,:3] * (img[0,:,:,3]==2)[...,None] ).reshape(-1,3) / 10.0)
+
+
+# jax3dp3.show_cloud("1", (img[0,:,:,:3] * img[0,:,:,3]==1).reshape(-1,3) / 10.0)
+
+
+# point_cloud = point_cloud_image[:,:,:3].reshape(-1,3)
+
+
+
+
 
 from IPython import embed; embed()
 

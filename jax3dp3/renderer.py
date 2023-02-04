@@ -30,9 +30,9 @@ def load_model(mesh):
         torch.tensor(triangles.astype(np.int32), device='cuda'),
     )
 
-def render_to_torch(poses, idx):
+def render_to_torch(poses, idx, on_object=0):
     poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(poses))
-    images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(RENDERER_ENV.cpp_wrapper, poses_torch, PROJ_LIST, idx)
+    images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(RENDERER_ENV.cpp_wrapper, poses_torch, PROJ_LIST, idx, on_object)
     return images_torch
 
 def render_single_object(pose, idx):
@@ -47,11 +47,9 @@ def render_multiobject(poses, indices):
     images_torch = render_to_torch(poses[:, None, :, :], indices)
     return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
 
-def render_multiobject_parallel(poses, indices):
-    images_torch = render_to_torch(poses, indices)
+def render_multiobject_parallel(poses, indices, on_object=0):
+    images_torch = render_to_torch(poses, indices, on_object=on_object)
     return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
-
-
 
 def render_point_cloud(point_cloud, h, w, fx,fy,cx,cy, near, far, pixel_smudge):
     transformed_cloud = point_cloud

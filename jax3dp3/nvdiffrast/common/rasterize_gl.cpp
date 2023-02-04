@@ -137,8 +137,11 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         "#extension GL_AMD_vertex_shader_layer : enable\n"
         STRINGIFY_SHADER_SOURCE(
             layout(location = 0) uniform mat4 mvp;
+            layout(location = 1) uniform float seg_id;
+            layout(location = 2) uniform int on_object;
             in vec4 in_vert;
             out vec4 vertex_on_object;
+            out float seg_id_out;
             uniform sampler2D texture;
             void main()
             {
@@ -148,8 +151,9 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 vec4 v3 = texelFetch(texture, ivec2(2, gl_Layer), 0);
                 vec4 v4 = texelFetch(texture, ivec2(3, gl_Layer), 0);
                 mat4 pose_mat = transpose(mat4(v1,v2,v3,v4));
-                vertex_on_object = pose_mat * in_vert;
-                gl_Position = mvp * vertex_on_object;
+                vertex_on_object = on_object * in_vert + (1-on_object) * pose_mat * in_vert;
+                gl_Position = mvp * pose_mat * in_vert;
+                seg_id_out = seg_id;
             }
         )
     );
@@ -159,10 +163,11 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         "#version 430\n"
         STRINGIFY_SHADER_SOURCE(
             in vec4 vertex_on_object;
+            in float seg_id_out;
             out vec4 fragColor;
             void main()
             {
-                fragColor = vec4(vertex_on_object);
+                fragColor = vec4(vertex_on_object[0],vertex_on_object[1],vertex_on_object[2], seg_id_out);
             }
         )
     );
@@ -426,7 +431,7 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
     s.model_counter = s.model_counter + 1;
 }
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices)
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices, int on_object)
 {
     NVDR_CHECK_DEVICE(pose);
     NVDR_CHECK_CONTIGUOUS(pose);
@@ -452,6 +457,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
 
     NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
     glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
+    glUniform1i(2, on_object);
 
     // Copy color buffers to output tensors.
     cudaArray_t array = 0;
@@ -494,6 +500,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
             NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(pose_array, 0, 0, posePtr + num_images*16*object_idx + start_pose_idx*16, poses_on_this_iter*16*sizeof(float), cudaMemcpyDeviceToDevice));
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+            glUniform1f(1, object_idx+1.0);
             
             NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], poses_on_this_iter, sizeof(GLDrawCmd)));
         } 

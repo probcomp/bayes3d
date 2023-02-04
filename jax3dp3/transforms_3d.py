@@ -44,7 +44,7 @@ def add_homogenous_ones(cloud):
 
 def point_cloud_image_to_points(point_cloud_image):
     point_cloud = point_cloud_image[:,:,:3].reshape(-1,3)
-    return point_cloud[point_cloud[:,2]>0.0, :]
+    return point_cloud[point_cloud[:,2]!=0.0, :]
 
 # move point cloud to a specified pose
 # coords: (N,3) point cloud

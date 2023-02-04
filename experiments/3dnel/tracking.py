@@ -91,7 +91,7 @@ for t in range(point_cloud_images.shape[0]):
     
     
     reconstruction = jax3dp3.viz.get_depth_image(point_cloud_images[t][:,:,2],  max=far)
-    rgb =  jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_images[t],255.0),h,w)
+    rgb =  jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_images[t], 255.0),h,w)
     viz_images.append(
         jax3dp3.viz.multi_panel([
             rgb,
