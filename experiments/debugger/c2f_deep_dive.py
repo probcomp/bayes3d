@@ -37,12 +37,13 @@ full_filename = "shape_acquisition.pkl"
 
 full_filename = "nishad_1.pkl"
 full_filename = "knife_spoon.pkl"
-full_filename = "knife_sim.pkl"
 
 
-full_filename = "strawberry_error.pkl"
 
 full_filename = "demo2_nolight.pkl"
+
+full_filename = "knife_sim.pkl"
+full_filename = "strawberry_error.pkl"
 
 file = open(full_filename,'rb')
 camera_images = pickle.load(file)["camera_images"]
@@ -113,6 +114,9 @@ segmetation_ids = unique[unique != -1]
 timestep = 1
 outlier_volume = 1**3
 
+r = 0.01
+outlier_prob = 0.05
+
 # possible_rs = jnp.array([0.01, 0.008, 0.006, 0.004])
 # possible_outlier_prob = jnp.array([0.1, 0.05])
 
@@ -167,8 +171,7 @@ for seg_id in segmetation_ids:
             )[...,None]
             rendered_images = keep_masks * rendered_images_unmasked + (1.0 - keep_masks) * obs_image_complement
             
-            r = 0.01
-            outlier_prob = 0.01
+
 
             weights = jax3dp3.threedp3_likelihood_parallel_jit(
                 obs_point_cloud_image, rendered_images, r, outlier_prob, outlier_volume

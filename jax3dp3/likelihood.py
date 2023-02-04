@@ -23,8 +23,7 @@ def get_probs(
     outlier_volume
 ):
     t = data_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
-    logprobs = -0.5 * (jnp.linalg.norm(t, axis=-1) / r)**2
-    return logsumexp(logprobs)
+    return logsumexp(-0.5 *jnp.linalg.norm(t / r, axis=-1)**2)
 
 def threedp3_likelihood(
     obs_xyz: jnp.ndarray,
