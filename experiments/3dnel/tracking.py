@@ -21,6 +21,18 @@ import warnings
 import trimesh
 import jax
 import torch
+import os
+
+import joblib
+import numpy as np
+import taichi as ti
+from threednel.bop.bop_surfemb import BOPSurfEmb
+from threednel.bop.bop_vote import BOPVoting
+from threednel.bop.data import RGBDImage
+from threednel.likelihood import ndl
+from threednel.likelihood.trace import Trace
+from threednel.utils.transform import depth_to_coords_in_camera
+from threednel.siren_jax import siren_jax_from_surfemb
 
 
 top_level_dir = jax3dp3.utils.get_assets_dir()
@@ -76,18 +88,6 @@ r, outlier_prob, outlier_volume = 0.05, 0.01, 1**3
 # jax3dp3.show_cloud("c2",state.meshes[1].vertices / 1000.0, color=np.array([0.0, 1.0, 0.0]))
 
 
-import os
-
-import joblib
-import numpy as np
-import taichi as ti
-from threednel.bop.bop_surfemb import BOPSurfEmb
-from threednel.bop.bop_vote import BOPVoting
-from threednel.bop.data import RGBDImage
-from threednel.likelihood import ndl
-from threednel.likelihood.trace import Trace
-from threednel.utils.transform import depth_to_coords_in_camera
-from threednel.siren_jax import siren_jax_from_surfemb
 
 # %%
 data_directory = os.environ["BOP_DATA_DIR"]
