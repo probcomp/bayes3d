@@ -15,15 +15,9 @@ import jax.numpy as jnp
 import trimesh
 
 import sys
-import pybullet_planning
 import cv2
 import collections
 import heapq
-import sys
-import warnings
-sys.path.extend(["/home/nishadgothoskar/ptamp/pybullet_planning"])
-sys.path.extend(["/home/nishadgothoskar/ptamp"])
-warnings.filterwarnings("ignore")
 
 
 

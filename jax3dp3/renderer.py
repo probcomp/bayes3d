@@ -53,6 +53,23 @@ def render_multiobject_parallel(poses, indices):
 
 
 
+def render_point_cloud(point_cloud, h, w, fx,fy,cx,cy, near, far, pixel_smudge):
+    transformed_cloud = point_cloud
+    point_cloud = jnp.vstack([-1.0 * jnp.ones((1, 3)), transformed_cloud])
+
+    point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
+    temp1 = point_cloud_normalized[:, :2] * jnp.array([fx,fy])
+    temp2 = temp1 + jnp.array([cx, cy])
+    pixels = jnp.round(temp2)
+
+    x, y = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
+    matches = (jnp.abs(x[:, :, None] - pixels[:, 0]) <= pixel_smudge) & (jnp.abs(y[:, :, None] - pixels[:, 1]) <= pixel_smudge)
+    matches = matches * (far - point_cloud[:,-1][None, None, :])
+
+    a = jnp.argmax(matches, axis=-1)    
+
+    return point_cloud[a]
+
 # Complement rendering function
 def combine_rendered_with_groud_truth(rendered_image, gt_point_cloud_image):
     keep_gt = jnp.logical_or(
