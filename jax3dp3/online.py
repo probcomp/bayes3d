@@ -55,6 +55,7 @@ class OnlineJax3DP3(object):
         depth = np.array(sensor_depth)
         depth = jax3dp3.utils.resize(depth, h, w)
         depth[depth > far] = far
+        depth[depth < near] = far
         point_cloud_image = jnp.array(t3d.depth_to_point_cloud_image(depth, fx, fy, cx, cy))
         return point_cloud_image
 
@@ -68,7 +69,6 @@ class OnlineJax3DP3(object):
                 jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0]
             ]
         )
-
         if mesh_name is None:
             num_objects = len(self.mesh_names)
             mesh_name = f"type_{num_objects}"
@@ -100,12 +100,11 @@ class OnlineJax3DP3(object):
         self.table_pose = table_pose
         self.table_surface_plane_pose = table_surface_plane_pose
 
-    def set_coarse_to_fine_schedules(self, grid_widths, angle_widths, grid_params, likelihood_r_sched):
-        assert len(grid_widths) == len(angle_widths) == len(grid_params) == len(likelihood_r_sched)
+    def set_coarse_to_fine_schedules(self, grid_widths, angle_widths, grid_params):
+        assert len(grid_widths) == len(angle_widths) == len(grid_params)
         self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
             grid_widths=grid_widths, angle_widths=angle_widths, grid_params=grid_params
         )
-        self.likelihood_r_sched = likelihood_r_sched
 
     def segment_scene(self, rgb_original, point_cloud_image, camera_pose, viz_filename, viz=True,
         FAR_AWAY_THRESHOLD = jnp.inf,
@@ -192,42 +191,6 @@ class OnlineJax3DP3(object):
         points_filtered = points_in_table_ref_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
         center_x, center_y, _ = ( points_filtered.min(0) + points_filtered.max(0))/2
         return jnp.array([center_x, center_y, 0.0])
-            
-    def run_detection(
-            self,
-            rgb_original,
-            image_masked,
-            image_masked_complement,
-            init_contact_parameters,
-            camera_pose,
-            outlier_prob,
-            outlier_volume,
-            r_overlap_check,
-            r_final,
-            viz_filename,
-            top_k = 5,
-            viz=True
-        ):
-        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-        results = jax3dp3.c2f.c2f_contact_parameters(
-            init_contact_parameters,
-            self.contact_param_sched, self.face_param_sched, likelihood_r_sched=self.likelihood_r_sched,
-            r_overlap_check=r_overlap_check, r_final=r_final,
-            contact_plane_pose=jnp.linalg.inv(camera_pose) @ self.table_surface_plane_pose,
-            gt_image_masked=image_masked, gt_img_complement=image_masked_complement,
-            model_box_dims=self.model_box_dims,
-            outlier_prob=outlier_prob,
-            outlier_volume=outlier_volume,
-            top_k=top_k
-        )
-
-        if viz:
-            panel_viz = jax3dp3.c2f.multi_panel_c2f_viz(
-                results, rgb_original, image_masked, h, w, far, 
-                self.mesh_names, title=f"Likelihoods: {self.likelihood_r_sched}, Outlier Params: {outlier_prob},{outlier_volume}"
-            )
-            panel_viz.save(viz_filename)
-        return results  
 
     def occlusion_search(self, obj_idx, rgb_original, point_cloud_image, camera_pose, segmentation_image, viz_filename, viz=True):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
