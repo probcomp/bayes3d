@@ -12,6 +12,7 @@ import jax3dp3.viz
 import jax3dp3.pybullet
 import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
+import trimesh
 
 import sys
 import pybullet_planning
@@ -40,7 +41,17 @@ model_paths = [
 
 objects = []
 box_dims = []
-for path in model_paths:
+for (name, path) in zip(model_names,model_paths):
+    mesh = trimesh.load(path)
+    mesh = jax3dp3.mesh.center_mesh(mesh)
+    mesh.vertices = mesh.vertices * 1000.0
+    os.makedirs(name,exist_ok=True)
+    mesh.export(os.path.join(name, "textured.obj"))
+
+objects = []
+box_dims = []
+for name in model_names:
+    path = os.path.join(name, "textured.obj")
     obj, dims = jax3dp3.pybullet.add_mesh(path)
     objects.append(obj)
     box_dims.append(dims)
@@ -52,21 +63,21 @@ h, w, fx,fy, cx,cy = (
     500.0,500.0,
     320.0,240.0
 )
-near,far = 0.01, 50.0
+near,far = 1.0, 2000.0
 
 
 
 cracker_box_pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.0])) @ t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), -jnp.pi/2)
-sugar_box_pose = t3d.transform_from_pos(jnp.array([-0.3, 0.5, 0.0])) @ t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), -jnp.pi/2)
+sugar_box_pose = t3d.transform_from_pos(jnp.array([-300.0, 500.0, 0.0])) @ t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), -jnp.pi/2)
 
 cam_pose = t3d.transform_from_rot_and_pos(
     t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), -jnp.pi/2),
-    jnp.array([0.0, -0.5, 0.0])
+    jnp.array([0.0, -500.0, 0.0])
 )
 
 rgb_images = []
 depth_images = []
-for x in jnp.linspace(0.0, 0.6, 40):
+for x in jnp.linspace(0.0, 600.0, 40):
     jax3dp3.pybullet.set_pose_wrapped(objects[0], cracker_box_pose)
     jax3dp3.pybullet.set_pose_wrapped(objects[1], t3d.transform_from_pos(jnp.array([x, 0.0, 0.0])) @ sugar_box_pose)
 
@@ -77,7 +88,7 @@ for x in jnp.linspace(0.0, 0.6, 40):
     rgb_images.append(rgb)
     depth_images.append(depth)
 
-np.savez("data.npz", rgb_images=rgb_images, depth_images=depth_images, camera_params=(h,w,fx,fy,cx,cy,near,far), poses=[cracker_box_pose, sugar_box_pose])
+np.savez("data.npz", rgb_images=rgb_images, depth_images=depth_images, camera_params=(h,w,fx,fy,cx,cy,near,far), poses=[cracker_box_pose, sugar_box_pose], camera_pose=cam_pose)
 viz_images = [
     jax3dp3.viz.get_rgb_image(rgb, 255.0) for rgb in rgb_images
 ]
