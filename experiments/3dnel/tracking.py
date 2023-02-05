@@ -272,7 +272,6 @@ for t in range(obs_point_cloud_images.shape[0]):
 
     particles = particles.at[1,:].set(jnp.einsum("...ij,...jk->...ik", drift_poses, particles[1,:]))
 
-    from IPython import embed; embed()
     images = jax3dp3.render_multiobject_parallel(particles, [0,1])
     point_cloud_image = images[:,:,:,:3]
     model_point_cloud_image = jax3dp3.render_multiobject_parallel(particles, [0,1], on_object=1)[:,:,:,:3]

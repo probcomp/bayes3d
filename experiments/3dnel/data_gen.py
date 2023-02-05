@@ -23,6 +23,7 @@ import heapq
 
 p.connect(p.GUI)
 # p.setGravity(0, 0, -5)
+p.setAdditionalSearchPath(pybullet_data.getDataPath()) #used by loadURDF
 
 p.resetSimulation()
 
@@ -49,7 +50,7 @@ for name in model_names:
     obj, dims = jax3dp3.pybullet.add_mesh(path)
     objects.append(obj)
     box_dims.append(dims)
-
+# planeId = p.loadURDF("plane.urdf")
 
 h, w, fx,fy, cx,cy = (
     480,
@@ -61,12 +62,12 @@ near,far = 1.0, 2000.0
 
 
 
-cracker_box_pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.0])) @ t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), -jnp.pi/2)
-sugar_box_pose = t3d.transform_from_pos(jnp.array([-300.0, 500.0, 0.0])) @ t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), -jnp.pi/2)
+cracker_box_pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 100.0])) @ t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), -jnp.pi/2)
+sugar_box_pose = t3d.transform_from_pos(jnp.array([-300.0, 500.0, 100.0])) @ t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), -jnp.pi/2)
 
 cam_pose = t3d.transform_from_rot_and_pos(
     t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), -jnp.pi/2),
-    jnp.array([0.0, -500.0, 0.0])
+    jnp.array([0.0, -500.0, 100.0])
 )
 
 rgb_images = []
