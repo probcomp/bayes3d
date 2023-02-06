@@ -53,14 +53,8 @@ def c2f_contact_parameters(
             )
 
             # get best pose proposal
-            rendered_images_unmasked = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
-            keep_masks = jnp.logical_or(
-                (rendered_images_unmasked[:,:,:,2] <= obs_image_complement[None, :,:, 2]) * 
-                rendered_images_unmasked[:,:,:,2] > 0.0
-                ,
-                (obs_image_complement[:,:,2] == 0)[None, ...]
-            )[...,None]
-            rendered_images = keep_masks * rendered_images_unmasked + (1.0 - keep_masks) * obs_image_complement
+            rendered_object_images = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
+            rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_image_complement)
 
             weights = jax3dp3.threedp3_likelihood_parallel_jit(
                 obs_point_cloud_image, rendered_images, r, outlier_prob, outlier_volume
@@ -79,6 +73,36 @@ def c2f_contact_parameters(
         hypotheses_over_time.append(new_hypotheses)
         hypotheses = new_hypotheses
     return hypotheses_over_time
+
+def get_probabilites(hypotheses):
+    scores = jnp.array( [i[0] for i in hypotheses])
+    normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
+    return normalized_scores
+
+def c2f_viz(rgb, hypotheses_over_time, names):
+    orig_h, orig_w = rgb.shape[:2]
+    num_objects = len(hypotheses_over_time[0])
+    rgb_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb, 255.0), )
+    
+    viz_panels = []
+    for idx in range(num_objects):
+        viz_images = []
+        for hypotheses in hypotheses_over_time:
+            (score, obj_idx, _, pose) = hypotheses[idx]
+            depth = jax3dp3.render_single_object(pose, obj_idx)
+            depth_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(depth[:,:,2], max=far), orig_h, orig_w)
+            viz_images.append(
+                jax3dp3.viz.overlay_image(
+                    rgb_viz,
+                    depth_viz
+                )
+            )
+        viz_panels.append(
+            jax3dp3.viz.multi_panel(
+                viz_images, title="{:s}".format(names[idx])
+            )
+        )
+    return viz_panels
 
 
 

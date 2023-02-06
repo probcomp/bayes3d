@@ -97,3 +97,14 @@ def get_complement_masked_image(image_unmasked, gt_img_complement):
 
     image = image_unmasked * (1-(blocked * nonzero))[:,:,None] # rendered model image
     return image
+
+
+def splice_in_object_parallel(rendered_object_image, obs_image_complement):
+    keep_masks = jnp.logical_or(
+        (rendered_object_image[:,:,:,2] <= obs_image_complement[None, :,:, 2]) * 
+        rendered_object_image[:,:,:,2] > 0.0
+        ,
+        (obs_image_complement[:,:,2] == 0)[None, ...]
+    )[...,None]
+    rendered_images = keep_masks * rendered_object_image + (1.0 - keep_masks) * obs_image_complement
+    return rendered_images

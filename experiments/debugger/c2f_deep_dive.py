@@ -40,12 +40,13 @@ full_filename = "knife_spoon.pkl"
 
 
 
-full_filename = "demo2_nolight.pkl"
 
-full_filename = "strawberry_error.pkl"
 
 full_filename = "knife_sim.pkl"
 
+full_filename = "demo2_nolight.pkl"
+
+full_filename = "strawberry_error.pkl"
 file = open(full_filename,'rb')
 camera_images = pickle.load(file)["camera_images"]
 file.close()
@@ -98,19 +99,20 @@ unique =  np.unique(segmentation_image)
 segmetation_ids = unique[unique != -1]
 
 state.set_coarse_to_fine_schedules(
-    grid_widths=[0.15, 0.05, 0.04, 0.02],
-    angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
-    grid_params=[(5,5,21),(5,5,21),(15, 15, 1), (5,5,21)],
+    grid_widths=[0.15, 0.04, 0.02],
+    angle_widths=[jnp.pi, jnp.pi, jnp.pi],
+    grid_params=[(5, 5, 20),(5, 5, 20),(5, 5, 20)],
 )
 
 unique =  np.unique(segmentation_image)
 segmetation_ids = unique[unique != -1]
 
 timestep = 1
-outlier_volume = 1**3
 
 r = 0.005
-outlier_prob = 0.05
+outlier_prob = 0.1
+outlier_volume = 1**3
+
 
 # possible_rs = jnp.array([0.01, 0.008, 0.006, 0.004])
 # possible_outlier_prob = jnp.array([0.1, 0.05])
@@ -128,6 +130,7 @@ for seg_id in segmetation_ids:
     for obj_idx in object_ids_to_estimate:
         latent_hypotheses += [(-jnp.inf, obj_idx, contact_init, None)]
 
+    start = time.time()
     hypotheses_over_time = jax3dp3.c2f.c2f_contact_parameters(
         latent_hypotheses,
         state.contact_param_sched,
@@ -140,6 +143,9 @@ for seg_id in segmetation_ids:
         outlier_volume,
         state.model_box_dims
     )
+    end= time.time()
+    print ("Time elapsed:", end - start)
+
 
     (h,w,fx,fy,cx,cy, near, far) = state.camera_params
 
@@ -158,6 +164,7 @@ for seg_id in segmetation_ids:
         for hypotheses in hypotheses_over_time[1:]:
             (score, obj_idx, _, pose) = hypotheses[idx]
             depth = jax3dp3.render_single_object(pose, obj_idx)
+            
             depth_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(depth[:,:,2], max=far), orig_h, orig_w)
             viz_images.append(
                 jax3dp3.viz.overlay_image(
