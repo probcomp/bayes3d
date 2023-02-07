@@ -175,13 +175,6 @@ class OnlineJax3DP3(object):
             ).save(viz_filename)
         return segmentation_image
 
-    def get_image_masked_and_complement(self, point_cloud_image, segmentation_image, segmentation_id):
-        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-        mask =  (segmentation_image == segmentation_id)[:,:,None]
-        image_masked = point_cloud_image * mask
-        image_masked_complement = point_cloud_image * (1.0 - mask) + mask * far
-        return image_masked, image_masked_complement
-
     def infer_initial_contact_parameters(self, image_masked, camera_pose):
         points_in_table_ref_frame =  t3d.apply_transform(
             t3d.point_cloud_image_to_points(image_masked), 
@@ -204,19 +197,18 @@ class OnlineJax3DP3(object):
             c,
             f,
             self.model_box_dims[obj_idx],
-            jnp.linalg.inv(camera_pose) @ self.table_surface_plane_pose
+            jnp.linalg.inv(observation.camera_pose) @ self.table_surface_plane_pose
         )
-        images_unmasked = jax3dp3.render_parallel(pose_proposals, obj_idx)
-        image_combined_with_gt = jax.vmap(
-            jax3dp3.combine_rendered_with_groud_truth, in_axes=(0, None))(
-                images_unmasked, point_cloud_image
-        )
+
+        rendered_object_images = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
+        rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_point_cloud_image)
+
         weights = jax3dp3.threedp3_likelihood_parallel_jit(
-            point_cloud_image, image_combined_with_gt, 0.02, 0.0001, 20**3
+            obs_point_cloud_image, rendered_images, r, outlier_prob, outlier_volume
         )
 
         best_weight = weights.max()
-        good_scoring_indices = weights >= (best_weight - 3.0)
+        good_scoring_indices = weights >= (best_weight - 0.1)
         good_poses = pose_proposals[good_scoring_indices]
 
 

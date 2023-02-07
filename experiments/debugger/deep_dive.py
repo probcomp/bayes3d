@@ -110,13 +110,47 @@ outlier_volume = 1**3
 r = 0.005
 outlier_prob = 0.01
 
+# obj_idx = 3
+
+# table_dims = state.table_dims
+# contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
+#     -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
+#     20, 20, 4,
+#     jnp.arange(6)
+# )
+# good_poses, pose_proposals, ranked_high_value_seg_ids = jax3dp3.c2f.c2f_occluded_object_pose_distribution(
+#     obj_idx,
+#     segmentation_image,
+#     contact_param_sweep,
+#     face_param_sweep,
+#     r,
+#     jnp.linalg.inv(observation.camera_pose) @ state.table_surface_plane_pose,
+#     obs_point_cloud_image,
+#     outlier_prob,
+#     outlier_volume,
+#     state.model_box_dims,
+#     state.camera_params,
+#     0.1
+# )
+
+# occlusion_viz = jax3dp3.c2f.c2f_occlusion_viz(
+#     good_poses,
+#     pose_proposals,
+#     ranked_high_value_seg_ids,
+#     observation.rgb,
+#     obj_idx,
+#     obs_point_cloud_image,
+#     segmentation_image,
+#     state.camera_params
+# )
+from IPython import embed; embed()
 
 # possible_rs = jnp.array([0.01, 0.008, 0.006, 0.004])
 # possible_outlier_prob = jnp.array([0.1, 0.05])
 
 for seg_id in segmetation_ids:
-    obs_image_masked, obs_image_complement = state.get_image_masked_and_complement(
-        obs_point_cloud_image, segmentation_image, seg_id
+    obs_image_masked, obs_image_complement = jax3dp3.get_image_masked_and_complement(
+        obs_point_cloud_image, segmentation_image, seg_id, far
     )
     contact_init = state.infer_initial_contact_parameters(
         obs_image_masked, observation.camera_pose

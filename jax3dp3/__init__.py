@@ -8,6 +8,7 @@ from . import distributions
 from . import scene_graph
 from . import scene_graph
 from . import ycb_loader
+from . import occlusion
 from .enumerations import *
 from .renderer import *
 from .likelihood import *

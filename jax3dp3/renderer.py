@@ -53,36 +53,26 @@ def render_multiobject_parallel(poses, indices, on_object=0):
 
 def render_point_cloud(point_cloud, h, w, fx,fy,cx,cy, near, far, pixel_smudge):
     transformed_cloud = point_cloud
-    point_cloud = jnp.vstack([-1.0 * jnp.ones((1, 3)), transformed_cloud])
-
-    point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
-    temp1 = point_cloud_normalized[:, :2] * jnp.array([fx,fy])
-    temp2 = temp1 + jnp.array([cx, cy])
-    pixels = jnp.round(temp2)
-
+    point_cloud = jnp.vstack([jnp.zeros((1, 3)), transformed_cloud])
+    pixels = project_cloud_to_pixels(point_cloud, fx,fy,cx,cy)
     x, y = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
     matches = (jnp.abs(x[:, :, None] - pixels[:, 0]) <= pixel_smudge) & (jnp.abs(y[:, :, None] - pixels[:, 1]) <= pixel_smudge)
     matches = matches * (far - point_cloud[:,-1][None, None, :])
-
     a = jnp.argmax(matches, axis=-1)    
-
     return point_cloud[a]
+    
+def project_cloud_to_pixels(point_cloud, fx,fy,cx,cy):
+    point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
+    temp1 = point_cloud_normalized[:, :2] * jnp.array([fx,fy])
+    temp2 = temp1 + jnp.array([cx, cy])
+    pixels = jnp.round(temp2) 
+    return pixels
 
-# Complement rendering function
-def combine_rendered_with_groud_truth(rendered_image, gt_point_cloud_image):
-    keep_gt = jnp.logical_or(
-        rendered_image[:,:,2] == 0.0,
-        (
-            (gt_point_cloud_image[:,:,2] != 0.0) *
-            (rendered_image[:,:,2] >= gt_point_cloud_image[:,:,2])
-        )
-    )[...,None]
-
-    images_apply_occlusions = (
-        rendered_image[:,:,:3] * (1- keep_gt) + 
-        gt_point_cloud_image * keep_gt
-    )
-    return images_apply_occlusions
+def get_image_masked_and_complement(point_cloud_image, segmentation_image, segmentation_id, far):
+    mask =  (segmentation_image == segmentation_id)[:,:,None]
+    image_masked = point_cloud_image * mask
+    image_masked_complement = point_cloud_image * (1.0 - mask) + mask * far
+    return image_masked, image_masked_complement
 
 def get_complement_masked_images(images_unmasked, gt_img_complement):
     blocked = images_unmasked[:,:,:,2] >= gt_img_complement[None,:,:,2] 
