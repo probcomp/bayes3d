@@ -27,7 +27,6 @@ full_filename = "1674620488.514845.pkl"
 full_filename = "new_utencils.pkl"
 # full_filename = os.path.join(jax3dp3.utils.get_assets_dir(), filename)
 full_filename = "knife_spoon.pkl"
-full_filename = "utensils.pkl"
 full_filename = "new_utencils.pkl"
 full_filename = "utensils.pkl"
 full_filename = "nishad_0.pkl"
@@ -39,14 +38,12 @@ full_filename = "nishad_1.pkl"
 full_filename = "knife_spoon.pkl"
 
 
-
-
-
-full_filename = "knife_sim.pkl"
-
-full_filename = "demo2_nolight.pkl"
+full_filename = "utensils.pkl"
 
 full_filename = "strawberry_error.pkl"
+
+full_filename = "demo2_nolight.pkl"
+full_filename = "knife_sim.pkl"
 file = open(full_filename,'rb')
 camera_images = pickle.load(file)["camera_images"]
 file.close()
@@ -99,19 +96,19 @@ unique =  np.unique(segmentation_image)
 segmetation_ids = unique[unique != -1]
 
 state.set_coarse_to_fine_schedules(
-    grid_widths=[0.15, 0.04, 0.02],
-    angle_widths=[jnp.pi, jnp.pi, jnp.pi],
-    grid_params=[(5, 5, 20),(5, 5, 20),(5, 5, 20)],
+    grid_widths=[0.15, 0.05, 0.04, 0.02],
+    angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
+    grid_params=[(5,5,21),(5,5,21),(15, 15, 1), (5,5,21)],
 )
 
 unique =  np.unique(segmentation_image)
 segmetation_ids = unique[unique != -1]
 
 timestep = 1
+outlier_volume = 1**3
 
 r = 0.005
-outlier_prob = 0.1
-outlier_volume = 1**3
+outlier_prob = 0.01
 
 
 # possible_rs = jnp.array([0.01, 0.008, 0.006, 0.004])
@@ -146,59 +143,42 @@ for seg_id in segmetation_ids:
     end= time.time()
     print ("Time elapsed:", end - start)
 
+    probabilities = jax3dp3.c2f.get_probabilites(hypotheses_over_time[-1])
+    viz_panels = jax3dp3.c2f.c2f_viz(observation.rgb, hypotheses_over_time[1:], state.mesh_names, state.camera_params)
 
-    (h,w,fx,fy,cx,cy, near, far) = state.camera_params
+    scores = [i[0] for i in hypotheses_over_time[-1]]
+    
 
+    r_final = 0.0055
 
-    obs_data_images = [
-            jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(obs_point_cloud_image[:,:,2], max=far), orig_h, orig_w),
-            jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(obs_image_masked[:,:,2], max=far), orig_h, orig_w),
-    ]
-    rgb_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(observation.rgb, 255.0), orig_h, orig_w)
+    final_scores = []
+    for hyp in hypotheses_over_time[-1]:
+        (_, obj_idx, _, pose) = hyp
+        rendered_object_images = jnp.array([jax3dp3.render_single_object(pose, obj_idx)])
+        rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images[...,:3], obs_image_complement)
+        score = jax3dp3.threedp3_likelihood_parallel_jit(
+            obs_point_cloud_image, rendered_images, r_final, outlier_prob, outlier_volume
+        )[0]
+        final_scores.append(score)
 
-    viz_panels = []
-    for idx in range(len(hypotheses_over_time[0])):
-        labels = ["Obs", "Masked"]
+    exact_match_score = jax3dp3.threedp3_likelihood_parallel_jit(
+        obs_point_cloud_image, jnp.array([obs_point_cloud_image]), r_final, outlier_prob, outlier_volume
+    )[0]
+    print('exact_match_score:');print(exact_match_score)
+    print((jnp.array(final_scores) - exact_match_score) / ((obs_image_masked[:,:,2] > 0).sum()) * 1000.0) 
 
-        viz_images = []
-        for hypotheses in hypotheses_over_time[1:]:
-            (score, obj_idx, _, pose) = hypotheses[idx]
-            depth = jax3dp3.render_single_object(pose, obj_idx)
-            
-            depth_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(depth[:,:,2], max=far), orig_h, orig_w)
-            viz_images.append(
-                jax3dp3.viz.overlay_image(
-                    rgb_viz,
-                    depth_viz
-                )
-            )
-
-        viz_panels.append(
-            jax3dp3.viz.multi_panel(
-                obs_data_images + viz_images, labels, title="{:s}".format(state.mesh_names[obj_idx])
-            )
-        )
-
-    scores = jnp.array( [i[0] for i in hypotheses_over_time[-1]])
-    order = jnp.argsort(-scores)
-    normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
-    print(normalized_scores)
-
+    order = np.argsort(-probabilities)
     viz_panels_sorted = []
     scores_string = []
     for i in order:
         viz_panels_sorted.append(
             viz_panels[i]
         )
-        scores_string.append(
-            "{:0.2f}".format(normalized_scores[i])
-        )
-    jax3dp3.viz.multi_panel(
-        [jax3dp3.viz.vstack_images(viz_panels_sorted)],
-        title="Distribution = {:s}".format(
-            ", ".join(scores_string)
-        )
-    ).save(f"seg_id_{seg_id}.png")
+    jax3dp3.viz.vstack_images(viz_panels_sorted).save(f"seg_id_{seg_id}.png")
+
+    from IPython import embed; embed()
+
+
 
     # from IPython import embed; embed()
 
