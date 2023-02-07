@@ -80,8 +80,9 @@ def get_probabilites(hypotheses):
     normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
     return normalized_scores
 
-def c2f_viz(rgb, hypotheses_over_time, names, camera_params):
-    probabilities = get_probabilites(hypotheses_over_time[-1])
+def c2f_viz(rgb, hypotheses_over_time, names, camera_params, probabilities=None):
+    if probabilities is None:
+        probabilities = get_probabilites(hypotheses_over_time[-1])
 
     (h,w,fx,fy,cx,cy, near, far) = camera_params
     orig_h, orig_w = rgb.shape[:2]
@@ -183,7 +184,7 @@ def c2f_occlusion_viz(
         )[0]
         best_occluder = jax3dp3.viz.get_depth_image(image_masked[:,:,2],  max=far)
     else:
-        best_occluder = jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=far)
+        best_occluder = jax3dp3.viz.get_depth_image(obs_point_cloud_image[:,:,2],  max=far)
 
     return jax3dp3.viz.multi_panel(
         [rgb_viz, enumeration_viz_all, overlay_viz, best_occluder],

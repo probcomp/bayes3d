@@ -68,6 +68,11 @@ def project_cloud_to_pixels(point_cloud, fx,fy,cx,cy):
     pixels = jnp.round(temp2) 
     return pixels
 
+def get_image_masked(point_cloud_image, segmentation_image, segmentation_id):
+    mask =  (segmentation_image == segmentation_id)[:,:,None]
+    image_masked = point_cloud_image * mask
+    return image_masked
+
 def get_image_masked_and_complement(point_cloud_image, segmentation_image, segmentation_id, far):
     mask =  (segmentation_image == segmentation_id)[:,:,None]
     image_masked = point_cloud_image * mask
