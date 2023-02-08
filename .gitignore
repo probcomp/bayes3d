@@ -9,6 +9,5 @@ venv/*
 *.json
 assets/bop/*
 assets/panda_dataset/*
-*.pkl
 *.jpeg
 experiments/3dnel/threednel

@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import trimesh
 import time
+
 class Jax3DP3Observation(object):
     def __init__(self, rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far):
         self.camera_params = (h,w,fx,fy,cx,cy, near, far)

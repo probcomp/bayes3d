@@ -28,7 +28,9 @@ import networks
 from utils.blob import pad_im
 from utils import mask as util_
 
-
+BACKGROUND_SUBTRACTION_INTERFACE = None
+SEGMENTATION_NETWORK = None
+SEGMENTATION_CROP_NETWORK = None
 
 
 def compute_xyz(depth_img, fx, fy, px, py, height, width):
@@ -40,12 +42,103 @@ def compute_xyz(depth_img, fx, fy, px, py, height, width):
     return xyz_img
 
 
-def prepare_segmentation_data(rgb_array, depth_array, mask_array, K, factor_depth=1):
+
+def get_foreground_mask(rgba_array):
+    """
+    Run a Tracer B7 model to process away the image background.
+    Return a mask array that isolates the objects.
+    """
+    global BACKGROUND_SUBTRACTION_INTERFACE
+    # Check doc strings for more information
+    if BACKGROUND_SUBTRACTION_INTERFACE is None:
+        BACKGROUND_SUBTRACTION_INTERFACE = HiInterface(object_type="object",  # Can be "object" or "hairs-like".
+                                batch_size_seg=5,
+                                batch_size_matting=1,
+                                device='cuda' if torch.cuda.is_available() else 'cpu',
+                                seg_mask_size=640,  # Use 640 for Tracer B7 and 320 for U2Net
+                                matting_mask_size=2048,
+                                trimap_prob_threshold=220,#231,
+                                trimap_dilation=15,
+                                trimap_erosion_iters=20,
+                                fp16=False)
+
+    images_without_background = BACKGROUND_SUBTRACTION_INTERFACE([Image.fromarray(rgba_array)])  # TODO just take in input from sscript
+    img_wo_bg = images_without_background[0]
+
+    # create the object mask
+    img_arr_wo_bg = np.array(img_wo_bg)
+    assert img_arr_wo_bg.shape[-1] == 4
+
+    mask = img_arr_wo_bg[:,:,3]  # enforce alpha threshold to create B/W mask
+    mask[mask > 0] = 255
+    return mask > 0
+
+
+def get_segmentation_from_img(
+                    rgb_array, depth_array, mask_array, fx, fy, cx, cy, 
+                    test_name = 'TEST_NAME',
+                    gpu_id = 0,
+                    network_name = 'seg_resnet34_8s_embedding',
+                    pretrained = f'{segmentation_dir}/data/checkpoints/seg_resnet34_8s_embedding_cosine_rgbd_add_sampling_epoch_16.checkpoint.pth',
+                    pretrained_crop = f'{segmentation_dir}/data/checkpoints/seg_resnet34_8s_embedding_cosine_rgbd_add_crop_sampling_epoch_16.checkpoint.pth',
+                    cfg_file = f'{segmentation_dir}/experiments/cfgs/seg_resnet34_8s_embedding_cosine_rgbd_add_tabletop_pandas.yml',
+                    randomize = False,
+                    ):
+    """
+    Run the UOIS model to segment the scene, 
+    placing the background removal mask on the rgb image  
+    """
+    global SEGMENTATION_NETWORK
+    global SEGMENTATION_CROP_NETWORK
+
+    if SEGMENTATION_NETWORK is None:
+        if cfg_file is not None:
+            cfg_from_file(cfg_file)
+
+        if len(cfg.TEST.CLASSES) == 0:
+            cfg.TEST.CLASSES = cfg.TRAIN.CLASSES
+
+        if not randomize:
+            # fix the random seeds (numpy and caffe) for reproducibility
+            np.random.seed(cfg.RNG_SEED)
+
+        # device
+        cfg.gpu_id = 0
+        cfg.device = torch.device('cuda:{:d}'.format(cfg.gpu_id))
+        cfg.instance_id = 0
+        num_classes = 2
+        cfg.MODE = 'TEST'
+        print('GPU device {:d}'.format(gpu_id))
+
+
+        # prepare network
+        if pretrained:
+            network_data = torch.load(pretrained)
+            print("=> using pre-trained network '{}'".format(pretrained))
+        else:
+            network_data = None
+            print("no pretrained network specified")
+            sys.exit()
+
+        SEGMENTATION_NETWORK = networks.__dict__[network_name](num_classes, cfg.TRAIN.NUM_UNITS, network_data).cuda(device=cfg.device)
+        SEGMENTATION_NETWORK = torch.nn.DataParallel(SEGMENTATION_NETWORK, device_ids=[cfg.gpu_id]).cuda(device=cfg.device)
+        cudnn.benchmark = True
+        SEGMENTATION_NETWORK.eval()
+
+        if pretrained_crop:
+            network_data_crop = torch.load(pretrained_crop)
+            SEGMENTATION_CROP_NETWORK = networks.__dict__[network_name](num_classes, cfg.TRAIN.NUM_UNITS, network_data_crop).cuda(device=cfg.device)
+            SEGMENTATION_CROP_NETWORK = torch.nn.DataParallel(SEGMENTATION_CROP_NETWORK, device_ids=[cfg.gpu_id]).cuda(device=cfg.device)
+            SEGMENTATION_CROP_NETWORK.eval()
+        else:
+            SEGMENTATION_CROP_NETWORK = None
+
+
+
     # bgr image
     rgb = rgb_array
     im = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-
-    fx, fy, cx, cy = K[0][0],K[1][1],K[0][2],K[1][2]
+ 
     camera_params = {'fx':fx,
                     'fy':fy,
                     'x_offset':cx,
@@ -54,7 +147,7 @@ def prepare_segmentation_data(rgb_array, depth_array, mask_array, K, factor_dept
 
     # depth image
     depth_img = depth_array
-    depth = depth_img.astype(np.float32) / factor_depth
+    depth = depth_img.astype(np.float32)
 
     height = depth.shape[0]
     width = depth.shape[1]
@@ -78,116 +171,17 @@ def prepare_segmentation_data(rgb_array, depth_array, mask_array, K, factor_dept
     depth_blob = torch.from_numpy(xyz_img).permute(2, 0, 1)
     sample['depth'] = depth_blob.unsqueeze(0)
 
-    return sample
-
-
-def get_scene_wo_bg(rgba_array, viz=False, save_filename=None):
-    """
-    Run a Tracer B7 model to process away the image background.
-    Return a mask array that isolates the objects.
-    """
-
-    # Check doc strings for more information
-    interface = HiInterface(object_type="object",  # Can be "object" or "hairs-like".
-                            batch_size_seg=5,
-                            batch_size_matting=1,
-                            device='cuda' if torch.cuda.is_available() else 'cpu',
-                            seg_mask_size=640,  # Use 640 for Tracer B7 and 320 for U2Net
-                            matting_mask_size=2048,
-                            trimap_prob_threshold=220,#231,
-                            trimap_dilation=15,
-                            trimap_erosion_iters=20,
-                            fp16=False)
-
-
-    images_without_background = interface([Image.fromarray(rgba_array)])  # TODO just take in input from sscript
-    img_wo_bg = images_without_background[0]
-
-    # create the object mask
-    img_arr_wo_bg = np.array(img_wo_bg)
-    assert img_arr_wo_bg.shape[-1] == 4
-
-    mask = img_arr_wo_bg[:,:,3]  # enforce alpha threshold to create B/W mask
-    mask[mask > 0] = 255
-
-    if viz:
-        img_wo_bg.save(f'{save_filename}_no_background.png')
-        mask_img = Image.fromarray(mask)
-        mask_img.save(f'{save_filename}_mask.png')
-
-    return mask
-
-
-def get_segmentation_from_img_wo_bg(segmentation_data, 
-                    test_name = 'TEST_NAME',
-                    gpu_id = 0,
-                    network_name = 'seg_resnet34_8s_embedding',
-                    pretrained = f'{segmentation_dir}/data/checkpoints/seg_resnet34_8s_embedding_cosine_rgbd_add_sampling_epoch_16.checkpoint.pth',
-                    pretrained_crop = f'{segmentation_dir}/data/checkpoints/seg_resnet34_8s_embedding_cosine_rgbd_add_crop_sampling_epoch_16.checkpoint.pth',
-                    cfg_file = f'{segmentation_dir}/experiments/cfgs/seg_resnet34_8s_embedding_cosine_rgbd_add_tabletop_pandas.yml',
-                    randomize = False,
-                    ):
-    """
-    Run the UOIS model to segment the scene, 
-    placing the background removal mask on the rgb image  
-    """
     
-    if cfg_file is not None:
-        cfg_from_file(cfg_file)
-
-    if len(cfg.TEST.CLASSES) == 0:
-        cfg.TEST.CLASSES = cfg.TRAIN.CLASSES
-
-    if not randomize:
-        # fix the random seeds (numpy and caffe) for reproducibility
-        np.random.seed(cfg.RNG_SEED)
-
-    # device
-    cfg.gpu_id = 0
-    cfg.device = torch.device('cuda:{:d}'.format(cfg.gpu_id))
-    cfg.instance_id = 0
-    num_classes = 2
-    cfg.MODE = 'TEST'
-    print('GPU device {:d}'.format(gpu_id))
-
-
-    # prepare network
-    if pretrained:
-        network_data = torch.load(pretrained)
-        print("=> using pre-trained network '{}'".format(pretrained))
-    else:
-        network_data = None
-        print("no pretrained network specified")
-        sys.exit()
-
-    network = networks.__dict__[network_name](num_classes, cfg.TRAIN.NUM_UNITS, network_data).cuda(device=cfg.device)
-    network = torch.nn.DataParallel(network, device_ids=[cfg.gpu_id]).cuda(device=cfg.device)
-    cudnn.benchmark = True
-    network.eval()
-
-    if pretrained_crop:
-        network_data_crop = torch.load(pretrained_crop)
-        network_crop = networks.__dict__[network_name](num_classes, cfg.TRAIN.NUM_UNITS, network_data_crop).cuda(device=cfg.device)
-        network_crop = torch.nn.DataParallel(network_crop, device_ids=[cfg.gpu_id]).cuda(device=cfg.device)
-        network_crop.eval()
-    else:
-        network_crop = None
-
-    
-    out_label, out_label_refined = test_sample(segmentation_data, network, network_crop, img_name=test_name)
-    
-
+    out_label, out_label_refined = test_sample(sample, SEGMENTATION_NETWORK, SEGMENTATION_CROP_NETWORK, img_name="tmp")
     return out_label_refined
 
 
-def get_segmentation(rgb_array, depth_array, intrinsics, test_name, factor_depth=1):
-    if not rgb_array.shape[-1] == 3:
-        rgb_array = rgb_array[:,:,:3]
-    mask_array = get_scene_wo_bg(rgb_array, save_filename=test_name)
-    test_data = prepare_segmentation_data(rgb_array, depth_array, mask_array, intrinsics, factor_depth=factor_depth)
-    segmentation_array = get_segmentation_from_img_wo_bg(test_data, test_name)
+def get_segmentation(rgb_array, depth_array, fx, fy, cx, cy):
+    rgb_array = rgb_array[:,:,:3].copy()
+    mask_array = get_foreground_mask(rgb_array[:,:,:3])
+    segmentation_array = get_segmentation_from_img(rgb_array[:,:,:3], depth_array, mask_array, fx, fy, cx, cy)
 
     final_segmentation_array = segmentation_array - 1   # -1 for table, 0,1,2... for objects
     print("retrieved segmentation array")
-    return final_segmentation_array
+    return mask_array, final_segmentation_array
 

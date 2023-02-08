@@ -22,17 +22,21 @@ warnings.filterwarnings("ignore")
 
 
 full_filename = "strawberry_error.pkl"
-full_filename = "demo2_nolight.pkl"
 full_filename = "knife_sim.pkl"
 
+full_filename = "demo2_nolight.pkl"
 file = open(full_filename,'rb')
 camera_images = pickle.load(file)["camera_images"]
 file.close()
 if type(camera_images) != list:
     camera_images = [camera_images]
 
+from IPython import embed; embed()
+
 observations = [jax3dp3.Jax3DP3Observation.construct_from_camera_image(img, near=0.01, far=2.0) for img in camera_images]
 print('len(observations):');print(len(observations))
+
+from IPython import embed; embed()
 orig_h, orig_w = observations[0].camera_params[:2]
 
 state = jax3dp3.OnlineJax3DP3()

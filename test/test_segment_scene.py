@@ -2,41 +2,39 @@ import os
 import glob
 import pickle
 import numpy as np
-from jax3dp3.segment_scene import get_segmentation
+import jax3dp3.segment_scene
+import jax3dp3
+import time
 
 
 
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/cracker_sugar_banana_real.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego_multi.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego_multi.pkl")
+with open(test_pkl_file, 'rb') as f:
+    camera_images = pickle.load(f)["camera_images"]
 
-# TODO add tests for two parts of segmentation module (bg removal & segmentation)
+camera_image = camera_images[0]
+rgba_array = camera_image.rgbPixels 
+depth_array = camera_image.depthPixels
+intrinsics = camera_image.camera_matrix
 
-example_images_dir = '/home/ubuntu/jax3dp3/assets/panda_dataset_ycb_format/panda_data_pik3/' # wherever the PROCESSED pickle files are stored 
-pkl_image_files = []
+observation = jax3dp3.Jax3DP3Observation.construct_from_camera_image(camera_image, near=0.01, far=2.0)
+(h,w,fx,fy,cx,cy,near,far) = observation.camera_params
 
-test_names = ['strawberry_error', 'demo2_nolight', 'knife_sim']   # the full name should look like strawberry_error-0.pik
-for test_name in test_names:
-    pkl_image_files.extend(sorted(glob.glob(example_images_dir + f'{test_name}*.pkl')))
+foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgba_array)
 
+rgb_viz = jax3dp3.viz.get_rgb_image(rgba_array, 255.0)
+rgb_viz_masked = jax3dp3.viz.get_rgb_image(rgba_array* foreground_mask[..., None] , 255.0)
+jax3dp3.viz.multi_panel([rgb_viz, rgb_viz_masked], labels=["RGB", "RGB Masked"]).save("out.png")
 
+foreground_mask, segmentation_out = jax3dp3.segment_scene.get_segmentation(rgba_array, depth_array, fx,fy,cx,cy)
 
-index_images = range(len(pkl_image_files))
+rgb_viz = jax3dp3.viz.get_rgb_image(rgba_array, 255.0)
+rgb_viz_masked = jax3dp3.viz.get_rgb_image(rgba_array* foreground_mask[..., None] , 255.0)
+depth_viz = jax3dp3.viz.get_depth_image(depth_array, max=far)
+seg_viz = jax3dp3.viz.get_depth_image(segmentation_out[0] + 1, max=4.0)
+jax3dp3.viz.multi_panel([rgb_viz, rgb_viz_masked, depth_viz, seg_viz], labels=["RGB", "RGB Masked", "Depth", "Segmentation"]).save("out.png")
 
-for i in index_images:
-    if os.path.exists(pkl_image_files[i]):
-        print('\n----------------------')
-        scene_name = pkl_image_files[i].split("/")[-1].split(".")[0]
-
-        # read sample
-        with open(pkl_image_files[i], 'rb') as f:
-            data = pickle.load(f)
-
-        rgba_array = data['rgb'] 
-        depth_array = data['depth']
-        intrinsics = data['intrinsics']
-
-        segmentation_out = get_segmentation(rgba_array, depth_array, intrinsics, scene_name, factor_depth=1)
-
-        print(f"{np.unique(segmentation_out)} objects in {scene_name}")
-        from IPython import embed; embed()
-
-    else:
-        print('files not exist %s' % (pkl_image_files[i]))
+from IPython import embed; embed()
