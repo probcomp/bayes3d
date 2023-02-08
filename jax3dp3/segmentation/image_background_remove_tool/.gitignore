@@ -1,0 +1,7 @@
+/.idea/
+__pycache__
+/tests/.pytest_cache/
+/tests/tests_temp/
+/.pytest_cache/
+/carvekit.egg-info/
+venv
