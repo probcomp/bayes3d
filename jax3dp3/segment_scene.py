@@ -71,7 +71,7 @@ def get_foreground_mask(rgba_array):
 
     mask = img_arr_wo_bg[:,:,3]  # enforce alpha threshold to create B/W mask
     mask[mask > 0] = 255
-    return mask > 0
+    return 1.0 * (mask > 0)
 
 
 def get_segmentation_from_img(

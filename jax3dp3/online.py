@@ -48,7 +48,7 @@ class OnlineJax3DP3(object):
         self.set_coarse_to_fine_schedules(
             grid_widths=[0.15, 0.05, 0.04, 0.02],
             angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
-            grid_params=[(5,5,21),(5,5,21),(15, 15, 1), (5,5,21)],
+            grid_params=[(7,7,21),(7,7,21),(15, 15, 1), (7,7,21)],
         )
 
         self.start_renderer()
@@ -75,9 +75,9 @@ class OnlineJax3DP3(object):
         unique =  np.unique(segmentation_image)
         segmetation_ids = unique[unique != -1]
 
-        r = 0.005
+        r = 0.02
         outlier_prob = 0.01
-        outlier_volume = 1**3
+        outlier_volume = 1.0**3
 
         if len(self.model_box_dims) >=4:
             print("Occluded object search...")
@@ -121,6 +121,7 @@ class OnlineJax3DP3(object):
 
         results = []
         for seg_id in segmetation_ids:
+            print('seg_id:');print(seg_id)
             obs_image_masked, obs_image_complement = jax3dp3.get_image_masked_and_complement(
                 obs_point_cloud_image, segmentation_image, seg_id, far
             )
@@ -172,9 +173,10 @@ class OnlineJax3DP3(object):
             UNKNOWN_OBJECT_THRESHOLD = -50.0
             known_object_score = (jnp.array(final_scores) - exact_match_score) / ((obs_image_masked[:,:,2] > 0).sum()) * 1000.0
             print(known_object_score)
+            unknown_object = False
             if known_object_score.max() < UNKNOWN_OBJECT_THRESHOLD:
                 print("I DONT KNOW THIS OBJECT!")
-                probabilities = probabilities * 0.0
+                unknown_object = True
 
 
             viz_panels = jax3dp3.c2f.c2f_viz(observation.rgb, hypotheses_over_time[1:], self.mesh_names, self.camera_params, probabilities=probabilities)
@@ -192,7 +194,7 @@ class OnlineJax3DP3(object):
                 (
                     obs_image_masked,
                     hypotheses_over_time,
-                    probabilities,
+                    probabilities * (1.0 - unknown_object),
                     seg_id
                 )
             )
@@ -319,49 +321,15 @@ class OnlineJax3DP3(object):
         viz=True
     ):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-        point_cloud_image_in_world_frame = t3d.apply_transform(
-            point_cloud_image,
-            camera_pose
-        )
-        point_cloud_image_in_table_frame = t3d.apply_transform(
-            point_cloud_image_in_world_frame,
-            t3d.inverse_pose(self.table_surface_plane_pose)
-        )
 
-        rgb_scaled = jax3dp3.utils.resize(rgb_original,h,w)
-        hsv_scaled = cv2.cvtColor(rgb_scaled, cv2.COLOR_RGB2HSV)
-
-        gray_colors = [jnp.array([158, 9])]
-        error_cumulative = jnp.ones((h,w))
-        for gray in gray_colors:
-            errors = jnp.abs(hsv_scaled[:,:,:2] - gray).sum(-1)
-            value_thresh = hsv_scaled[:,:,-1] < 75.0
-            value_thresh2 = hsv_scaled[:,:,-1] > 175.0
-            error_cumulative *=  np.logical_or((errors > 200), value_thresh, value_thresh2)
-        not_gray_mask = error_cumulative[:,:,None]
-
-  
-        not_gray_or_is_tall = jnp.logical_or(
-            not_gray_mask,
-            (point_cloud_image_in_world_frame[:,:,2] > 0.02)[:,:,None]
-        )
-
-
-        not_too_far_mask = (point_cloud_image_in_world_frame[:,:,0] < FAR_AWAY_THRESHOLD)[:,:,None]
-        not_too_close_mask = (point_cloud_image_in_world_frame[:,:,0] > TOO_CLOSE_THRESHOLD)[:,:,None]
-        not_too_the_side_mask = (jnp.abs(point_cloud_image_in_world_frame[:,:,1]) < SIDE_THRESHOLD)[:,:,None]
-
-        above_table_mask = (
-            point_cloud_image_in_table_frame[:,:,2] > FLOOR_THRESHOLD
-        )[:,:,None]
+        import jax3dp3.segment_scene
+        foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgb_original)[...,None]
+        foreground_mask_scaled = jax3dp3.utils.resize(np.array(foreground_mask), h,w)
+        
 
         point_cloud_image_above_table = (
             point_cloud_image * 
-            above_table_mask * 
-            not_too_far_mask * 
-            not_too_close_mask * 
-            not_too_the_side_mask 
-            * not_gray_or_is_tall
+            foreground_mask_scaled[..., None]
         )
 
         segmentation_image = jax3dp3.utils.segment_point_cloud_image(
@@ -373,6 +341,7 @@ class OnlineJax3DP3(object):
             viz_image = jax3dp3.viz.multi_panel(
                 [
                     jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0),h,w),
+                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original * foreground_mask, 255.0),h,w),
                     jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=far),
                     jax3dp3.viz.get_depth_image(point_cloud_image_above_table[:,:,2],  max=far),
                     jax3dp3.viz.get_depth_image(segmentation_image + 1, max=segmentation_image.max() + 1),
