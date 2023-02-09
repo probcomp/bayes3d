@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import trimesh
 import time
+import jax3dp3.icp
 
 class Jax3DP3Observation(object):
     def __init__(self, rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far):
@@ -48,7 +49,7 @@ class OnlineJax3DP3(object):
         self.set_coarse_to_fine_schedules(
             grid_widths=[0.15, 0.05, 0.04, 0.02],
             angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
-            grid_params=[(7,7,21),(7,7,21),(15, 15, 1), (7,7,21)],
+            grid_params=[(5,5,21),(5,5,21),(15, 15, 1), (5,5,21)],
         )
 
         self.start_renderer()
@@ -93,7 +94,7 @@ class OnlineJax3DP3(object):
                 segmentation_image,
                 contact_param_sweep,
                 face_param_sweep,
-                r,
+                0.001,
                 jnp.linalg.inv(observation.camera_pose) @ self.table_surface_plane_pose,
                 obs_point_cloud_image,
                 outlier_prob,
@@ -170,7 +171,7 @@ class OnlineJax3DP3(object):
             )[0]
             print('exact_match_score:');print(exact_match_score)
 
-            UNKNOWN_OBJECT_THRESHOLD = -50.0
+            UNKNOWN_OBJECT_THRESHOLD = -200.0
             known_object_score = (jnp.array(final_scores) - exact_match_score) / ((obs_image_masked[:,:,2] > 0).sum()) * 1000.0
             print(known_object_score)
             unknown_object = False
@@ -203,7 +204,10 @@ class OnlineJax3DP3(object):
     def learn_new_object(self, observations, timestep):
         print("Object learning time")
         all_clouds = []
-        for (i, observation) in enumerate(observations):
+        indices = [2,5,6]
+        for i in indices:
+            observation = observations[i]
+
             obs_point_cloud_image = self.process_depth_to_point_cloud_image(observation.depth)
             segmentation_image, dashboard_viz  = self.segment_scene(
                 observation.rgb, obs_point_cloud_image, observation.camera_pose,
@@ -211,6 +215,8 @@ class OnlineJax3DP3(object):
                 TOO_CLOSE_THRESHOLD=0.2,
                 FAR_AWAY_THRESHOLD=0.8,
             )
+            dashboard_viz.save(f"shape_learning_{i}.png")
+
             unique = jnp.unique(segmentation_image)
             all_seg_ids = unique[unique != -1]
 
@@ -231,13 +237,39 @@ class OnlineJax3DP3(object):
             # jax3dp3.show_cloud("c1", segment_clouds[1])
             all_clouds.append(best_cloud)
 
-        fused_cloud = jnp.vstack(all_clouds)
+        fused_clouds_over_time = [all_clouds[0]]
+        for i in range(1, len(all_clouds)):
+            fused_cloud = fused_clouds_over_time[-1]
+            best_transform = jax3dp3.icp.icp_open3d(all_clouds[i], fused_cloud)
+            fused_cloud = jnp.vstack(
+                [
+                    fused_cloud,
+                    t3d.apply_transform(all_clouds[i], best_transform)
+                ]
+            )
+            fused_clouds_over_time.append(fused_cloud)
+
+        fused_cloud = fused_clouds_over_time[-1]
         learned_mesh = jax3dp3.mesh.make_alpha_mesh_from_point_cloud(fused_cloud, 0.03)
         learned_mesh = jax3dp3.mesh.center_mesh(learned_mesh)
-        
         jax3dp3.setup_visualizer()
-        jax3dp3.show_cloud("1", fused_cloud)
         jax3dp3.show_trimesh("mesh", learned_mesh)
+        jax3dp3.show_cloud("1", fused_cloud * 3.0)
+
+        # import distinctipy        
+        # colors = distinctipy.get_colors(len(all_clouds), pastel_factor=0.2)
+        # jax3dp3.clear()
+        # jax3dp3.show_cloud(f"2", fused_clouds_over_time[3]*3.0, color=np.array(colors[2]))
+        # jax3dp3.show_cloud(f"1", jnp.vstack(all_clouds)*3.0, color=np.array(colors[1]))
+
+        # jax3dp3.show_cloud(f"1",
+        #     t3d.apply_transform(
+        #         all_clouds[0],
+        #         reg_p2p.transformation
+        #     ) * 3.0,
+        #     color=np.array(colors[1])
+        # )
+
 
         print("Adding new mesh")
         self.add_trimesh(learned_mesh, mesh_name=f"lego_{len(self.model_box_dims)}")

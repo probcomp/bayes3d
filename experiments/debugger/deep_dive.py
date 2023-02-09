@@ -20,14 +20,11 @@ sys.path.extend(["/home/nishadgothoskar/ptamp/pybullet_planning"])
 sys.path.extend(["/home/nishadgothoskar/ptamp"])
 warnings.filterwarnings("ignore")
 
-
-full_filename = "strawberry_error.pkl"
-full_filename = "knife_sim.pkl"
-
-
-full_filename = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
-full_filename = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
-file = open(full_filename,'rb')
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego_multi.pkl")
+file = open(test_pkl_file,'rb')
 camera_images = pickle.load(file)["camera_images"]
 
 
@@ -59,6 +56,9 @@ state.setup_on_initial_frame(
     model_names,
     model_paths
 )
+
+if len(observations) > 1:
+    state.learn_new_object(observations, 1)
 
 state.step(
     observations[-1],

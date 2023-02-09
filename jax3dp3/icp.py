@@ -5,7 +5,8 @@ from jax3dp3.transforms_3d import (
 )
 import jax
 import functools
-
+import open3d as o3d
+import numpy as np
 
 def get_nearest_neighbor(
     obs_xyz: jnp.ndarray,
@@ -68,3 +69,19 @@ def icp(render_func, init_pose, obs_img, outer_iterations, inner_iterations):
             return pose
         return jax.lax.fori_loop(0, inner_iterations, _icp_step_inner, pose_)
     return jax.lax.fori_loop(0, outer_iterations, _icp_step, init_pose)
+
+
+# Get transform to apply to a to make it close to b
+def icp_open3d(a,b):
+    import open3d as od3
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(a)
+
+    pcd2 = o3d.geometry.PointCloud()
+    pcd2.points = o3d.utility.Vector3dVector(b)
+            
+    reg_p2p = o3d.pipelines.registration.registration_icp(
+        pcd, pcd2, 0.05, np.eye(4),
+        o3d.pipelines.registration.TransformationEstimationPointToPoint()
+    )
+    return reg_p2p.transformation

@@ -131,17 +131,17 @@ def c2f_occluded_object_pose_distribution(
         model_box_dims[obj_idx],
         contact_plane_pose
     )
-
-
-    obj_idx = 3
     rendered_object_images = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
     rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_point_cloud_image)
 
+    fully_occluded_weight = jax3dp3.threedp3_likelihood_jit(
+        obs_point_cloud_image, obs_point_cloud_image, r, outlier_prob, outlier_volume
+    )
     weights = jax3dp3.threedp3_likelihood_parallel_jit(
         obs_point_cloud_image, rendered_images, r, outlier_prob, outlier_volume
     )
-    
-    good_poses = pose_proposals[weights >= weights.max() - 0.1]
+
+    good_poses = pose_proposals[weights >= fully_occluded_weight - 0.0001]
 
     good_pose_centers = good_poses[:,:3,-1]
     good_pose_centers_cam_frame = good_pose_centers
