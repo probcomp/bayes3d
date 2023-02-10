@@ -40,7 +40,7 @@ foreground_mask, segmentation_out = jax3dp3.segment_scene.get_segmentation(rgba_
 
 start = time.time()
 foreground_mask, segmentation_out = jax3dp3.segment_scene.get_segmentation(rgba_array, depth_array, fx,fy,cx,cy)
-print(time.time() - start)
+print(time.time() - start) 
 
 rgb_viz = jax3dp3.viz.get_rgb_image(rgba_array, 255.0)
 rgb_viz_masked = jax3dp3.viz.get_rgb_image(rgba_array* foreground_mask[..., None] , 255.0)

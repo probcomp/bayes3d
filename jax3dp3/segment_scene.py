@@ -2,11 +2,8 @@ import torch
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.utils.data
-
-import pickle
-
 import os, sys
-import glob
+import random
 
 from PIL import Image
 import numpy as np
@@ -41,7 +38,16 @@ def compute_xyz(depth_img, fx, fy, px, py, height, width):
     xyz_img = np.stack([x_e, y_e, z_e], axis=-1) # Shape: [H x W x 3]
     return xyz_img
 
-
+def reset(seed):
+    print(f"resetting to seed {seed}")
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    np.random.seed(seed)  # Numpy module.
+    random.seed(seed)  # Python random module.
+    torch.manual_seed(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
 
 def get_foreground_mask(rgba_array):
     """
@@ -90,6 +96,10 @@ def get_segmentation_from_img(
     """
     global SEGMENTATION_NETWORK
     global SEGMENTATION_CROP_NETWORK
+    
+    if not randomize:
+        # fix the random seeds (numpy and caffe) for reproducibility
+        reset(cfg.RNG_SEED)
 
     if SEGMENTATION_NETWORK is None:
         if cfg_file is not None:
@@ -97,10 +107,6 @@ def get_segmentation_from_img(
 
         if len(cfg.TEST.CLASSES) == 0:
             cfg.TEST.CLASSES = cfg.TRAIN.CLASSES
-
-        if not randomize:
-            # fix the random seeds (numpy and caffe) for reproducibility
-            np.random.seed(cfg.RNG_SEED)
 
         # device
         cfg.gpu_id = 0
@@ -132,7 +138,6 @@ def get_segmentation_from_img(
             SEGMENTATION_CROP_NETWORK.eval()
         else:
             SEGMENTATION_CROP_NETWORK = None
-
 
 
     # bgr image
@@ -178,10 +183,9 @@ def get_segmentation_from_img(
 
 def get_segmentation(rgb_array, depth_array, fx, fy, cx, cy):
     rgb_array = rgb_array[:,:,:3].copy()
-    mask_array = get_foreground_mask(rgb_array[:,:,:3])
-    segmentation_array = get_segmentation_from_img(rgb_array[:,:,:3], depth_array, mask_array, fx, fy, cx, cy)
+    mask_array = get_foreground_mask(rgb_array)
+    segmentation_array = get_segmentation_from_img(rgb_array, depth_array, mask_array, fx, fy, cx, cy)
 
     final_segmentation_array = segmentation_array - 1   # -1 for table, 0,1,2... for objects
     print("retrieved segmentation array")
     return mask_array, final_segmentation_array
-
