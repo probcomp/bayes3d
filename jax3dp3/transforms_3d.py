@@ -34,6 +34,15 @@ def rotation_from_axis_angle(axis, angle):
                         [-direction[1], direction[0], 0.0]])
     return R
 
+def rotation_from_rodrigues(rvec):
+    return rotation_from_axis_angle(rvec.reshape(-1), jnp.linalg.norm(rvec))
+
+def transform_from_rvec_tvec(rvec, tvec):
+    return transform_from_rot_and_pos(
+        rotation_from_rodrigues(rvec),
+        tvec.reshape(-1)
+    )
+
 def transform_from_axis_angle(axis, angle):
     M = jnp.identity(4)
     M = M.at[:3, :3].set(rotation_from_axis_angle(axis, angle))

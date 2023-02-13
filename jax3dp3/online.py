@@ -25,6 +25,17 @@ class Jax3DP3Observation(object):
         near = 0.001
         return Jax3DP3Observation( rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far)
 
+    def construct_from_aidan_dict(d, near=0.001, far=5.0):
+        depth = np.array(d["depth"] / 1000.0) 
+        camera_pose = t3d.pybullet_pose_to_transform(d["extrinsics"])
+        rgb = np.array(d["rgb"])
+        K = d["intrinsics"][0]
+        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
+        h,w = depth.shape
+        observation = jax3dp3.Jax3DP3Observation(rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far)
+        return observation
+
+
 class OnlineJax3DP3(object):
     def __init__(self):
         self.model_box_dims = jnp.zeros((0,3))
@@ -40,8 +51,7 @@ class OnlineJax3DP3(object):
         self.face_param_sched = None
         self.likelihood_r_sched = None
 
-    def setup_on_initial_frame(self, observation, model_names, model_paths):
-        
+    def setup_on_initial_frame(self, observation, model_names, meshes):
         self.set_camera_parameters(observation.camera_params, scaling_factor=0.3)
         point_cloud_image = self.process_depth_to_point_cloud_image(observation.depth)
         self.infer_table_plane(point_cloud_image, observation.camera_pose)
@@ -49,13 +59,13 @@ class OnlineJax3DP3(object):
         self.set_coarse_to_fine_schedules(
             grid_widths=[0.15, 0.05, 0.04, 0.02],
             angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
-            grid_params=[(5,5,21),(5,5,21),(15, 15, 1), (5,5,21)],
+            grid_params=[(10,10,17),(10,10,17),(15, 15, 1), (10,10,17)],
         )
 
         self.start_renderer()
-        for (name, path) in zip(model_names, model_paths):
+        for (name, mesh) in zip(model_names, meshes):
             self.add_trimesh(
-                trimesh.load(path), mesh_name=name, mesh_scaling_factor=1.0
+                mesh, mesh_name=name, mesh_scaling_factor=1.0
             )
     
     def step(self, observation, timestep):
@@ -76,49 +86,49 @@ class OnlineJax3DP3(object):
         unique =  np.unique(segmentation_image)
         segmetation_ids = unique[unique != -1]
 
-        r = 0.02
+        r = 0.005
         outlier_prob = 0.01
         outlier_volume = 1.0**3
 
-        if len(self.model_box_dims) >=4:
-            print("Occluded object search...")
-            obj_idx = 3
-            table_dims = self.table_dims
-            contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
-                -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
-                20, 20, 4,
-                jnp.arange(6)
-            )
-            good_poses, pose_proposals, ranked_high_value_seg_ids = jax3dp3.c2f.c2f_occluded_object_pose_distribution(
-                obj_idx,
-                segmentation_image,
-                contact_param_sweep,
-                face_param_sweep,
-                0.001,
-                jnp.linalg.inv(observation.camera_pose) @ self.table_surface_plane_pose,
-                obs_point_cloud_image,
-                outlier_prob,
-                outlier_volume,
-                self.model_box_dims,
-                self.camera_params,
-                0.1
-            )
+        # if len(self.model_box_dims) >=4:
+        #     print("Occluded object search...")
+        #     obj_idx = 3
+        #     table_dims = self.table_dims
+        #     contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
+        #         -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
+        #         20, 20, 4,
+        #         jnp.arange(6)
+        #     )
+        #     good_poses, pose_proposals, ranked_high_value_seg_ids = jax3dp3.c2f.c2f_occluded_object_pose_distribution(
+        #         obj_idx,
+        #         segmentation_image,
+        #         contact_param_sweep,
+        #         face_param_sweep,
+        #         0.001,
+        #         jnp.linalg.inv(observation.camera_pose) @ self.table_surface_plane_pose,
+        #         obs_point_cloud_image,
+        #         outlier_prob,
+        #         outlier_volume,
+        #         self.model_box_dims,
+        #         self.camera_params,
+        #         0.1
+        #     )
 
-            occlusion_viz = jax3dp3.c2f.c2f_occlusion_viz(
-                good_poses,
-                pose_proposals,
-                ranked_high_value_seg_ids,
-                observation.rgb,
-                obj_idx,
-                obs_point_cloud_image,
-                segmentation_image,
-                self.camera_params
-            )
-            occlusion_viz.save(
-                f"occlusion_{timestep}.png"
-            )
-        else:
-            ranked_high_value_seg_ids = None
+        #     occlusion_viz = jax3dp3.c2f.c2f_occlusion_viz(
+        #         good_poses,
+        #         pose_proposals,
+        #         ranked_high_value_seg_ids,
+        #         observation.rgb,
+        #         obj_idx,
+        #         obs_point_cloud_image,
+        #         segmentation_image,
+        #         self.camera_params
+        #     )
+        #     occlusion_viz.save(
+        #         f"occlusion_{timestep}.png"
+        #     )
+        # else:
+        #     ranked_high_value_seg_ids = None
 
         results = []
         for seg_id in segmetation_ids:
@@ -180,7 +190,7 @@ class OnlineJax3DP3(object):
                 unknown_object = True
 
 
-            viz_panels = jax3dp3.c2f.c2f_viz(observation.rgb, hypotheses_over_time[1:], self.mesh_names, self.camera_params, probabilities=probabilities)
+            viz_panels = jax3dp3.c2f.c2f_viz(observation.rgb, hypotheses_over_time[-2:], self.mesh_names, self.camera_params, probabilities=probabilities)
 
             order = np.argsort(-probabilities)
             viz_panels_sorted = []
@@ -204,7 +214,7 @@ class OnlineJax3DP3(object):
     def learn_new_object(self, observations, timestep):
         print("Object learning time")
         all_clouds = []
-        indices = [2,5,6]
+        indices = range(len(observations))
         for i in indices:
             observation = observations[i]
 
@@ -273,7 +283,7 @@ class OnlineJax3DP3(object):
 
         print("Adding new mesh")
         self.add_trimesh(learned_mesh, mesh_name=f"lego_{len(self.model_box_dims)}")
-
+        return learned_mesh
 
 
     def set_camera_parameters(self, camera_params, scaling_factor=1.0):
@@ -378,7 +388,7 @@ class OnlineJax3DP3(object):
                     jax3dp3.viz.get_depth_image(point_cloud_image_above_table[:,:,2],  max=far),
                     jax3dp3.viz.get_depth_image(segmentation_image + 1, max=segmentation_image.max() + 1),
                 ],
-                labels=["RGB", "Depth", "Above Table", "Segmentation. {:d}".format(int(segmentation_image.max() + 1))],
+                labels=["RGB", "RGB Masked", "Depth", "Above Table", "Segmentation. {:d}".format(int(segmentation_image.max() + 1))],
             )
         return segmentation_image, viz_image
 

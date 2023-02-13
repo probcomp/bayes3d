@@ -23,7 +23,7 @@ def get_probs(
     outlier_volume
 ):
     t = data_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
-    probs = jax.scipy.stats.norm.pdf(t, loc=0, scale=r) * outlier_prob + 1.0 * outlier_volume * (1-outlier_prob)
+    probs = jax.scipy.stats.norm.pdf(t, loc=0, scale=r) * outlier_prob + 1.0 / outlier_volume * (1-outlier_prob)
     return probs.sum()
 
 def threedp3_likelihood(

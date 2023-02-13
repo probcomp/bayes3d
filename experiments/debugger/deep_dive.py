@@ -24,6 +24,7 @@ test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_n
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego_multi.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_sim.pkl")
 file = open(test_pkl_file,'rb')
 camera_images = pickle.load(file)["camera_images"]
 
@@ -50,11 +51,15 @@ model_paths = [
     os.path.join(top_level_dir,"models/srl/ycb/004_sugar_box/textured.obj"),
     os.path.join(top_level_dir,"models/srl/ycb/011_banana/textured.obj"),
 ]
+meshes = [
+    trimesh.load(path) for path in model_paths
+]
 
+from IPython import embed; embed()
 state.setup_on_initial_frame(
     observations[0],
     model_names,
-    model_paths
+    meshes
 )
 
 if len(observations) > 1:

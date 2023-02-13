@@ -10,6 +10,7 @@ import jax3dp3.viz
 import jax3dp3.pybullet
 import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
+import functools
 
 import sys
 import cv2
@@ -122,7 +123,7 @@ K = np.array([
 bop_obj_indices = np.array([2,3])
 
 test_img = RGBDImage(
-    rgb_img, depth_img, K, bop_obj_indices
+    np.array(rgb_img), np.array(depth_img), K, bop_obj_indices
 )
 
 offsets_ = []
@@ -155,7 +156,6 @@ scales = jnp.hstack(
 # jax3dp3.show_cloud("1", t3d.point_cloud_image_to_points(model_point_cloud_image_transformed[0]))
 # jax3dp3.show_cloud("2", t3d.point_cloud_image_to_points(obj_coords_xyz), color=np.array([1.0, 0.0, 0.0]))
 
-from IPython import embed; embed()
 
 infer_mlp = siren_jax_from_surfemb(model)
 from threednel.surfemb import utils
@@ -169,15 +169,19 @@ from threednel.likelihood import ndl, ndl_fast
 outlier_scaling = 1 / 70000
 
 filter_shape = (5, 5)
-jax_ndl = ndl_fast.JAXNDL(
-    model=model,
-    n_objs=len(test_img.bop_obj_indices),
-    r=r,
-    outlier_prob=outlier_prob,
-    outlier_volume=outlier_volume,
-    outlier_scaling=outlier_scaling,
-    filter_shape=filter_shape,
+
+
+parallel_ndl = jax.jit(
+    jax.vmap(
+        functools.partial(
+            ndl_fast.neural_descriptor_likelihood,
+            filter_shape=filter_shape
+        )
+        , in_axes=(None, None, None, 0, 0, 0, 0, None, None, None, None),
+    )
 )
+
+
 
 all_particles = []
 viz_images = []
@@ -189,6 +193,7 @@ keys = jax.random.split(jax.random.PRNGKey(3), NUM_PARTICLES)
 drift_poses = jax.vmap(jax3dp3.distributions.gaussian_pose, in_axes=(0,None))(keys, variances)
 initial_pose_estimates = poses.copy()
 particles = jnp.tile(initial_pose_estimates[:, None, :,:], (1, NUM_PARTICLES, 1,1))
+
 for t in range(obs_point_cloud_images.shape[0]):
     print(t)
     obj_idx = 1
@@ -203,10 +208,16 @@ for t in range(obs_point_cloud_images.shape[0]):
     ])
     bop_obj_indices = np.array([2,3])
 
+    images = jax3dp3.render_multiobject_parallel(particles, [0,1])
+    point_cloud_image = images[:,:,:,:3]
+    model_point_cloud_image = jax3dp3.render_multiobject_parallel(particles, [0,1], on_object=1)[:,:,:,:3]
+    segmentation_image = images[:,:,:,3] - 1.0
+
     test_img = RGBDImage(
-        rgb_img, depth_img, K, bop_obj_indices
+        np.array(rgb_img), np.array(depth_img), K, bop_obj_indices
     )
     data_descriptors = surfemb.get_data_descriptors(test_img, scale=1.5, target_shape=(h,w))
+    data_descriptors = jnp.array(data_descriptors)
     data_xyz, _ = depth_to_coords_in_camera(
         test_img.depth, test_img.intrinsics, as_image_shape=True
     )
@@ -215,10 +226,7 @@ for t in range(obs_point_cloud_images.shape[0]):
         data_descriptors, np.array(test_img.bop_obj_indices)
     )
 
-    images = jax3dp3.render_multiobject_parallel(particles, [0,1])
-    point_cloud_image = images[:,:,:,:3]
-    model_point_cloud_image = jax3dp3.render_multiobject_parallel(particles, [0,1], on_object=1)[:,:,:,:3]
-    segmentation_image = images[:,:,:,3] - 1.0
+
 
     segmentation_image_integer = jnp.round(segmentation_image).astype(jnp.int32)
     offsets_array = offsets[segmentation_image_integer + 1]
@@ -236,27 +244,16 @@ for t in range(obs_point_cloud_images.shape[0]):
     model_descriptors = jnp.concatenate(
         model_descriptors_list, axis=0)
 
-    # %%
-    jax_ndl.set_for_new_img(
-        data_xyz=data_xyz,
-        data_descriptors=data_descriptors,
-        log_normalizers=log_normalizers,
-        data_mask=data_mask,
-        bop_obj_indices=test_img.bop_obj_indices,
-        renderer=None,
-    )
-
     p_background = (
-        outlier_prob / outlier_volume * outlier_scaling
+        outlier_prob / outlier_volume * 
     )
-    p_foreground = (1.0 - outlier_prob) / model_mask.sum()
+    p_foreground = (1.0 - outlier_prob) / (segmentation_image_integer >= 0).sum()
 
-    parallel_ndl = jax.vmap(ndl_fast.neural_descriptor_likelihood, in_axes=(None, None, None, 0, 0, 0, 0, None, None, None, None, None))
     weights = parallel_ndl(
-        data_xyz,
+        data_xyz / 1000.0,
         data_descriptors,
         log_normalizers,
-        images,
+        images / 1000.0,
         model_descriptors,
         images[:,:,:,2] > 0.0,
         segmentation_image_integer,
@@ -264,8 +261,11 @@ for t in range(obs_point_cloud_images.shape[0]):
         r,
         p_background,
         p_foreground,
-        filter_shape,
     )
+
+    # weights = jax3dp3.threedp3_likelihood_parallel_jit(
+    #     obs_point_cloud_images[t] / 1000.0, images / 1000.0, r, outlier_prob, outlier_volume
+    # )
 
     # model_descriptors_visualizations = utils.get_model_descriptors_visualizations(
     #     np.array(model_descriptors[0]),
@@ -278,15 +278,6 @@ for t in range(obs_point_cloud_images.shape[0]):
     # )
     # plt.imshow(model_descriptors_visualizations)
     # plt.savefig("descriptors_new.png")
-
-    ###### @Stannis replace this with the new likelihood.
-    # weights = jax3dp3.threedp3_likelihood_parallel_jit(
-    #     obs_point_cloud_images[t] / 1000.0, images / 1000.0, r, outlier_prob, outlier_volume
-    # )
-
-    # weights = jax3dp3.threedp3_likelihood_parallel_jit(
-    #     obs_point_cloud_images[t] / 1000.0, images / 1000.0, r, outlier_prob, outlier_volume
-    # )
 
     parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
     particles = particles[:,parent_idxs]
@@ -321,6 +312,25 @@ for t in range(obs_point_cloud_images.shape[0]):
 
 jax3dp3.viz.make_gif(viz_images, "out.gif")
 
+all_test_images = []
+for t in range(obs_point_cloud_images.shape[0]):
+    print(t)
+    rgb_img = rgb_images[t][:,:,:3]
+    depth_img = obs_point_cloud_images[t,:,:,2]
+    K = np.array([
+        [fx, 0.0, cx],
+        [0.0, fy, cy],
+        [0.0, 0.0, 1.0],
+    ])
+    bop_obj_indices = np.array([2,3])
+    test_img = RGBDImage(
+        np.array(rgb_img), np.array(depth_img), K, bop_obj_indices
+    )
+    all_test_images.append(test_img)
+
+np.savez("data_for_tracking_experiment.npz", 
+        inital_object_poses=np.array(inital_object_poses),
+        bop_obj_indices=np.array(bop_obj_indices), all_test_images=all_test_images)
 
 from IPython import embed; embed()
 
