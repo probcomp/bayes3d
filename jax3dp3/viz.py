@@ -38,11 +38,7 @@ def get_depth_image(image, min=0.0, max=1.0):
     )
     return img
 
-def save_depth_image(image, filename, min=0.0, max=1.0):
-    img = get_depth_image(image, min=min, max=max)
-    img.save(filename)
-
-def get_rgb_image(image, max_val):
+def get_rgb_image(image, max=255.0):
     if image.shape[-1] == 3:
         image_type = "RGB"
     else:
@@ -50,29 +46,11 @@ def get_rgb_image(image, max_val):
 
     img = Image.fromarray(
         np.rint(
-            image / max_val * 255.0
+            image / max * 255.0
         ).astype(np.int8),
         mode=image_type,
     ).convert("RGBA")
     return img
-
-def save_rgb_image(image, max_val, filename):
-    img = get_rgb_image(image, max_val)
-    img.save(filename)
-
-def get_rgba_image(image, max_val):
-    img = Image.fromarray(
-        np.rint(
-            image / max_val * 255.0
-        ).astype(np.int8),
-        mode="RGBA",
-    )
-    return img
-
-
-def save_rgba_image(image, max_val, filename):
-    img = get_rgba_image(image, max_val)
-    img.save(filename)
 
 def overlay_image(img_1, img_2, alpha=0.5):
     return Image.blend(img_1, img_2, alpha=alpha)

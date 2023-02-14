@@ -38,10 +38,11 @@ class Jax3DP3Observation(object):
 
 class OnlineJax3DP3(object):
     def __init__(self):
+        self.original_camera_params = None
+
         self.model_box_dims = jnp.zeros((0,3))
         self.mesh_names = []
         self.meshes = []
-        self.original_camera_params = None
 
         self.table_surface_plane_pose = None
         self.table_dims = None
@@ -51,32 +52,155 @@ class OnlineJax3DP3(object):
         self.face_param_sched = None
         self.likelihood_r_sched = None
 
-    def setup_on_initial_frame(self, observation, model_names, meshes):
-        self.set_camera_parameters(observation.camera_params, scaling_factor=0.3)
-        point_cloud_image = self.process_depth_to_point_cloud_image(observation.depth)
-        self.infer_table_plane(point_cloud_image, observation.camera_pose)
+    def start_renderer(self, camera_params, scaling_factor=0.3):
+        orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far = camera_params
+        self.original_camera_params = (orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far)
+        h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
+        self.camera_params = (h,w,fx,fy,cx,cy, near, far)
 
-        self.set_coarse_to_fine_schedules(
-            grid_widths=[0.15, 0.05, 0.04, 0.02],
-            angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
-            grid_params=[(10,10,17),(10,10,17),(15, 15, 1), (10,10,17)],
+        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
+        jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
+        self.model_box_dims = jnp.zeros((0,3))
+        self.mesh_names = []
+        self.meshes = []
+
+    def add_trimesh(self, mesh, mesh_name=None, mesh_scaling_factor=1.0):
+        mesh.vertices = mesh.vertices * mesh_scaling_factor
+        mesh = jax3dp3.mesh.center_mesh(mesh)
+        self.meshes.append(mesh)
+        self.model_box_dims = jnp.vstack(
+            [
+                self.model_box_dims,
+                jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0]
+            ]
+        )
+        if mesh_name is None:
+            num_objects = len(self.mesh_names)
+            mesh_name = f"type_{num_objects}"
+        self.mesh_names.append(
+            mesh_name
+        )
+        jax3dp3.load_model(mesh)
+
+    def process_depth_to_point_cloud_image(self, sensor_depth):
+        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
+        depth = np.array(sensor_depth)
+        depth = jax3dp3.utils.resize(depth, h, w)
+        depth[depth > far] = far
+        depth[depth < near] = far
+        point_cloud_image = jnp.array(t3d.depth_to_point_cloud_image(depth, fx, fy, cx, cy))
+        return point_cloud_image
+
+    def process_segmentation_mask(self, segmentation):
+        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
+        seg = np.array(segmentation)
+        seg = jax3dp3.utils.resize(seg, h, w)
+        return seg
+    
+    def segment_scene(self, rgb_original, point_cloud_image,
+        viz=True
+    ):
+        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
+
+        import jax3dp3.segment_scene
+        foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgb_original)[...,None]
+        foreground_mask_scaled = jax3dp3.utils.resize(np.array(foreground_mask), h,w)
+        
+
+        point_cloud_image_above_table = (
+            point_cloud_image * 
+            foreground_mask_scaled[..., None]
         )
 
-        self.start_renderer()
-        for (name, mesh) in zip(model_names, meshes):
-            self.add_trimesh(
-                mesh, mesh_name=name, mesh_scaling_factor=1.0
+        segmentation_image = jax3dp3.utils.segment_point_cloud_image(
+            point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=30
+        )
+
+        viz_image = None
+        if viz:
+            viz_image = jax3dp3.viz.multi_panel(
+                [
+                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0),h,w),
+                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original * foreground_mask, 255.0),h,w),
+                    jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=far),
+                    jax3dp3.viz.get_depth_image(point_cloud_image_above_table[:,:,2],  max=far),
+                    jax3dp3.viz.get_depth_image(segmentation_image + 1, max=segmentation_image.max() + 1),
+                ],
+                labels=["RGB", "RGB Masked", "Depth", "Above Table", "Segmentation. {:d}".format(int(segmentation_image.max() + 1))],
             )
+        return segmentation_image, viz_image
+
+    def inference_for_segment(
+        self,
+        rgb_original,
+        obs_point_cloud_image,
+        segmentation_image,
+        segmentation_id,
+        object_ids_to_estimate,
+        camera_pose,
+        r = 0.005,
+        outlier_prob = 0.001,
+        outlier_volume = 1.0**3,
+        viz=True
+    ):
+        state = self
+        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
+        obs_image_masked, obs_image_complement = jax3dp3.get_image_masked_and_complement(
+            obs_point_cloud_image, segmentation_image, segmentation_id, far
+        )
+        contact_init = self.infer_initial_contact_parameters(
+            obs_image_masked, camera_pose
+        )
+
+        latent_hypotheses = []
+        for obj_idx in object_ids_to_estimate:
+            latent_hypotheses += [(-jnp.inf, obj_idx, contact_init, None)]
+
+        start = time.time()
+        hypotheses_over_time = jax3dp3.c2f.c2f_contact_parameters(
+            latent_hypotheses,
+            self.contact_param_sched,
+            self.face_param_sched,
+            r,
+            jnp.linalg.inv(camera_pose) @ self.table_surface_plane_pose,
+            obs_point_cloud_image,
+            obs_image_complement,
+            outlier_prob,
+            outlier_volume,
+            self.model_box_dims
+        )
+        end= time.time()
+        print ("Time elapsed:", end - start)
+
+        if not viz:
+            return hypotheses_over_time, None
+
+        scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
+        normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
+
+        (h,w,fx,fy,cx,cy, near, far) = state.camera_params
+        orig_h, orig_w = rgb_original.shape[:2]
+        images = []
+        rgb_viz = jax3dp3.viz.get_rgb_image(rgb_original)
+        for i in range(len(hypotheses_over_time[-1])):
+            (score, obj_idx, _, pose) = hypotheses_over_time[-1][i]
+            depth = jax3dp3.render_single_object(pose, obj_idx)
+            depth_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(depth[:,:,2], max=1.0),orig_h, orig_w)
+            images.append(jax3dp3.viz.multi_panel([jax3dp3.viz.overlay_image(rgb_viz, depth_viz)],title="{:s} - {:0.4f}".format(state.mesh_names[object_ids_to_estimate[i]], normalized_scores[i])))
+        return hypotheses_over_time, jax3dp3.viz.multi_panel(images)
     
-    def step(self, observation, timestep):
+
+    def step(self, observation, timestep,
+        r = 0.005,
+        outlier_prob = 0.001,
+        outlier_volume = 1.0**3,
+        r_final = 0.001
+    ):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
 
         obs_point_cloud_image = self.process_depth_to_point_cloud_image(observation.depth)
         segmentation_image, dashboard_viz  = self.segment_scene(
-            observation.rgb, obs_point_cloud_image, observation.camera_pose,
-            FLOOR_THRESHOLD=0.0,
-            TOO_CLOSE_THRESHOLD=0.2,
-            FAR_AWAY_THRESHOLD=0.8,
+            observation.rgb, obs_point_cloud_image
         )
         dashboard_viz.save(
             f"dashboard_{timestep}.png"
@@ -86,9 +210,6 @@ class OnlineJax3DP3(object):
         unique =  np.unique(segmentation_image)
         segmetation_ids = unique[unique != -1]
 
-        r = 0.005
-        outlier_prob = 0.01
-        outlier_volume = 1.0**3
 
         # if len(self.model_box_dims) >=4:
         #     print("Occluded object search...")
@@ -129,6 +250,7 @@ class OnlineJax3DP3(object):
         #     )
         # else:
         #     ranked_high_value_seg_ids = None
+        ranked_high_value_seg_ids = None
 
         results = []
         for seg_id in segmetation_ids:
@@ -164,8 +286,7 @@ class OnlineJax3DP3(object):
             probabilities = jax3dp3.c2f.get_probabilites(hypotheses_over_time[-1])
 
             scores = [i[0] for i in hypotheses_over_time[-1]]
-            
-            r_final = 0.005
+            print('scores:');print(scores)
             final_scores = []
             for hyp in hypotheses_over_time[-1]:
                 (_, obj_idx, _, pose) = hyp
@@ -175,7 +296,7 @@ class OnlineJax3DP3(object):
                     obs_point_cloud_image, rendered_images, r_final, outlier_prob, outlier_volume
                 )[0]
                 final_scores.append(score)
-
+            print('final_scores:');print(final_scores)
             exact_match_score = jax3dp3.threedp3_likelihood_parallel_jit(
                 obs_point_cloud_image, jnp.array([obs_point_cloud_image]), r_final, outlier_prob, outlier_volume
             )[0]
@@ -220,10 +341,7 @@ class OnlineJax3DP3(object):
 
             obs_point_cloud_image = self.process_depth_to_point_cloud_image(observation.depth)
             segmentation_image, dashboard_viz  = self.segment_scene(
-                observation.rgb, obs_point_cloud_image, observation.camera_pose,
-                FLOOR_THRESHOLD=0.0,
-                TOO_CLOSE_THRESHOLD=0.2,
-                FAR_AWAY_THRESHOLD=0.8,
+                observation.rgb, obs_point_cloud_image
             )
             dashboard_viz.save(f"shape_learning_{i}.png")
 
@@ -286,45 +404,7 @@ class OnlineJax3DP3(object):
         return learned_mesh
 
 
-    def set_camera_parameters(self, camera_params, scaling_factor=1.0):
-        orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far = camera_params
-        self.original_camera_params = (orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far)
-        h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
-        self.camera_params = (h,w,fx,fy,cx,cy, near, far)
 
-    def start_renderer(self):
-        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-        jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
-        self.model_box_dims = jnp.zeros((0,3))
-        self.mesh_names = []
-        self.meshes = []
-
-    def process_depth_to_point_cloud_image(self, sensor_depth):
-        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-        depth = np.array(sensor_depth)
-        depth = jax3dp3.utils.resize(depth, h, w)
-        depth[depth > far] = far
-        depth[depth < near] = far
-        point_cloud_image = jnp.array(t3d.depth_to_point_cloud_image(depth, fx, fy, cx, cy))
-        return point_cloud_image
-
-    def add_trimesh(self, mesh, mesh_name=None, mesh_scaling_factor=1.0):
-        mesh.vertices = mesh.vertices * mesh_scaling_factor
-        mesh = jax3dp3.mesh.center_mesh(mesh)
-        self.meshes.append(mesh)
-        self.model_box_dims = jnp.vstack(
-            [
-                self.model_box_dims,
-                jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0]
-            ]
-        )
-        if mesh_name is None:
-            num_objects = len(self.mesh_names)
-            mesh_name = f"type_{num_objects}"
-        self.mesh_names.append(
-            mesh_name
-        )
-        jax3dp3.load_model(mesh)
 
     def infer_table_plane(self, point_cloud_image, camera_pose, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
@@ -354,43 +434,6 @@ class OnlineJax3DP3(object):
         self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
             grid_widths=grid_widths, angle_widths=angle_widths, grid_params=grid_params
         )
-
-    def segment_scene(self, rgb_original, point_cloud_image, camera_pose,
-        FAR_AWAY_THRESHOLD = jnp.inf,
-        TOO_CLOSE_THRESHOLD = -jnp.inf,
-        SIDE_THRESHOLD = jnp.inf,
-        FLOOR_THRESHOLD = -jnp.inf,
-        viz=True
-    ):
-        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-
-        import jax3dp3.segment_scene
-        foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgb_original)[...,None]
-        foreground_mask_scaled = jax3dp3.utils.resize(np.array(foreground_mask), h,w)
-        
-
-        point_cloud_image_above_table = (
-            point_cloud_image * 
-            foreground_mask_scaled[..., None]
-        )
-
-        segmentation_image = jax3dp3.utils.segment_point_cloud_image(
-            point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=30
-        )
-
-        viz_image = None
-        if viz:
-            viz_image = jax3dp3.viz.multi_panel(
-                [
-                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0),h,w),
-                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original * foreground_mask, 255.0),h,w),
-                    jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=far),
-                    jax3dp3.viz.get_depth_image(point_cloud_image_above_table[:,:,2],  max=far),
-                    jax3dp3.viz.get_depth_image(segmentation_image + 1, max=segmentation_image.max() + 1),
-                ],
-                labels=["RGB", "RGB Masked", "Depth", "Above Table", "Segmentation. {:d}".format(int(segmentation_image.max() + 1))],
-            )
-        return segmentation_image, viz_image
 
     def infer_initial_contact_parameters(self, image_masked, camera_pose):
         points_in_table_ref_frame =  t3d.apply_transform(

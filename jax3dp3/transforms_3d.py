@@ -43,6 +43,9 @@ def transform_from_rvec_tvec(rvec, tvec):
         tvec.reshape(-1)
     )
 
+def identity_pose():
+    return jnp.eye(4)
+
 def transform_from_axis_angle(axis, angle):
     M = jnp.identity(4)
     M = M.at[:3, :3].set(rotation_from_axis_angle(axis, angle))

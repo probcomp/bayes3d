@@ -84,32 +84,39 @@ def get_test_img(scene_id, img_id, ycb_dir):
     mask_visib_image_paths = sorted(glob(os.path.join(mask_visib_dir, f"{img_id}_*.png")))
     gt_ids = []
     anno = []
+    gt_poses = []
+    masks = []
     for object_gt_data, mask_visib_image_path in zip(objects_gt_data, mask_visib_image_paths):
         mask_visible = jnp.array(Image.open(mask_visib_image_path))
 
         model_R = jnp.array(object_gt_data['cam_R_m2c']).reshape(3,3)
         model_t = jnp.array(object_gt_data['cam_t_m2c']).reshape(3,1)
         model_pose = jnp.vstack([jnp.hstack([model_R, model_t]), jnp.array([0,0,0,1])])
+        model_pose = model_pose.at[:3,3].set(model_pose[:3,3]*1.0/1000.0)
+        gt_poses.append(model_pose)
         
         obj_id = object_gt_data['obj_id'] - 1
 
         gt_ids.append(obj_id)
-        anno.append({'mask_visible': mask_visible, 'gt_poses_m2c': model_pose})
+        masks.append(jnp.array(mask_visible > 0))
 
+    cam_pose = cam_pose.at[:3,3].set(cam_pose[:3,3]*1.0/1000.0)
 
-    # Create the TestImage instance for the image
-    ycbv_img = BOPTestImage(dataset=data_dir,
-                            scene_id=scene_id, 
-                            img_id=img_id,
-                            rgb=rgb,
-                            depth=depth * cam_depth_scale,
-                            intrinsics=cam_K,
-                            camera_pose=cam_pose,
-                            bop_obj_indices=gt_ids,
-                            annotations=anno  # mask and gt poses
-                            )
-    print(f"Retrieved test scene {scene_id} image {img_id} with {len(objects_gt_data)} objects")
-    return ycbv_img
+    observation = jax3dp3.Jax3DP3Observation(
+        rgb,
+        depth * cam_depth_scale / 1000.0,
+        cam_pose,
+        rgb.shape[0],
+        rgb.shape[1],
+        cam_K[0,0],
+        cam_K[1,1],
+        cam_K[0,2],
+        cam_K[1,2],
+        0.01,
+        10.0
+    )
+
+    return observation, gt_ids, jnp.array(gt_poses), masks
 
 
 def create_ycbv_dataset(data_dirname: str) -> dict:
@@ -135,94 +142,3 @@ def create_ycbv_dataset(data_dirname: str) -> dict:
         break  # to do just one scene
         
     return YCBV_DATA
-
-@dataclass
-class BOPTestImage:
-    """BOPTestImage.
-    Args:
-        rgb: Array of shape (H, W, 3)
-        depth: Array of shape (H, W). In meters
-        intrinsics: Array of shape (3, 3)
-        bop_obj_indices: BOP indices of the objects in the image.
-            Ranges from 1 to 21.
-        annotations:
-            model_to_cam: Array of shape (4, 4)
-            mask: Array of shape (H, W)
-            mask_visible: Array of shape (H, W)
-    """
-
-    dataset: str
-    scene_id: int
-    img_id: int
-    rgb: jnp.ndarray
-    depth: jnp.ndarray
-    intrinsics: jnp.ndarray
-    camera_pose: jnp.ndarray
-    bop_obj_indices: list
-    annotations: list
-    # default_scales: np.ndarray
-
-    def get_scene_img_ids(self):
-        return (self.scene_id, self.img_id)
-
-    def get_camera_intrinsics(self):
-        cam_K = self.intrinsics
-        fx, fy, cx, cy = cam_K[0][0], cam_K[1][1], cam_K[0][2], cam_K[1][2]
-        return fx, fy, cx, cy
-    
-    def get_image_dims(self) -> tuple:
-        return self.depth.shape
-    
-    def get_camera_pose(self):
-        return self.camera_pose
-
-    def get_rgb_image(self):
-        return self.rgb
-    
-    def get_depth_image(self):
-        return self.depth 
-
-    def get_segmentation_image(self):
-        segmentation = np.ones((self.get_image_dims())) * -1.0
-
-        for obj_number in range(len(self.get_gt_indices())):
-            segmentation_obj = self.get_object_masks()[obj_number]
-            segmentation[segmentation_obj == 255.0] = obj_number
-
-        return segmentation
-
-    def get_gt_indices(self):
-        return self.bop_obj_indices
-
-    def get_object_masks(self):
-        obj_masks = [anno['mask_visible'] for anno in self.annotations]
-        return obj_masks
-
-    def get_gt_poses(self):
-        gt_poses = [anno['gt_poses_m2c'] for anno in self.annotations]
-        return gt_poses
-
-    def get_gt_poses_world_frame(self):
-        gt_poses_world_frame = [pose @ self.camera_pose for pose in self.get_gt_poses()]
-        return gt_poses_world_frame
-
-
-
-# dataset = create_ycbv_dataset('ycbv_test')
-# scene_data = dataset['000054']
-
-# img_id = 0
-# image = scene_data[img_id]
-
-# K = image.get_camera_intrinsics()
-# gt_indices = image.get_gt_indices()
-# gt_poses = image.get_gt_poses()
-# cam_pose = image.get_camera_pose()
-
-
-# get_test_img('000054', '001568')
-
-
-
-
-# from IPython import embed; embed()
