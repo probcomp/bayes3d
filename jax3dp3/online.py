@@ -138,7 +138,7 @@ class OnlineJax3DP3(object):
         segmentation_id,
         object_ids_to_estimate,
         camera_pose,
-        r = 0.005,
+        r_sweep,
         outlier_prob = 0.001,
         outlier_volume = 1.0**3,
         viz=True
@@ -161,7 +161,7 @@ class OnlineJax3DP3(object):
             latent_hypotheses,
             self.contact_param_sched,
             self.face_param_sched,
-            r,
+            r_sweep,
             jnp.linalg.inv(camera_pose) @ self.table_surface_plane_pose,
             obs_point_cloud_image,
             obs_image_complement,
@@ -182,12 +182,13 @@ class OnlineJax3DP3(object):
         orig_h, orig_w = rgb_original.shape[:2]
         images = []
         rgb_viz = jax3dp3.viz.get_rgb_image(rgb_original)
+        rgb_masked_viz = jax3dp3.viz.get_rgb_image(rgb_original * jax3dp3.utils.resize((segmentation_image == segmentation_id)* 1.0, orig_h,orig_w )[...,None] ) 
         for i in range(len(hypotheses_over_time[-1])):
             (score, obj_idx, _, pose) = hypotheses_over_time[-1][i]
             depth = jax3dp3.render_single_object(pose, obj_idx)
             depth_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(depth[:,:,2], max=1.0),orig_h, orig_w)
             images.append(jax3dp3.viz.multi_panel([jax3dp3.viz.overlay_image(rgb_viz, depth_viz)],title="{:s} - {:0.4f}".format(state.mesh_names[object_ids_to_estimate[i]], normalized_scores[i])))
-        return hypotheses_over_time, jax3dp3.viz.multi_panel(images)
+        return hypotheses_over_time, jax3dp3.viz.multi_panel([rgb_masked_viz, *images])
     
 
     def step(self, observation, timestep,

@@ -25,7 +25,7 @@ def c2f_contact_parameters(
     hypotheses,
     contact_param_sched,
     face_param_sched,
-    r,
+    r_sweep,
     contact_plane_pose,
     obs_point_cloud_image,
     obs_image_complement,
@@ -57,14 +57,15 @@ def c2f_contact_parameters(
             rendered_object_images = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
             rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_image_complement)
 
-            weights = jax3dp3.threedp3_likelihood_parallel_jit(
-                obs_point_cloud_image, rendered_images, r, outlier_prob, outlier_volume
+            
+            weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
+                obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
             )
-            best_idx = jnp.argmax(weights)
+            r_idx, best_idx = jnp.unravel_index(weights.argmax(), weights.shape)
 
             new_hypotheses.append(
                 (
-                    weights[best_idx],
+                    weights[r_idx, best_idx],
                     obj_idx,
                     new_contact_param_sweep[best_idx],
                     pose_proposals[best_idx]
@@ -79,35 +80,6 @@ def get_probabilites(hypotheses):
     scores = jnp.array( [i[0] for i in hypotheses])
     normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
     return normalized_scores
-
-def c2f_viz(rgb, hypotheses_over_time, names, camera_params, probabilities=None):
-    if probabilities is None:
-        probabilities = get_probabilites(hypotheses_over_time[-1])
-
-    (h,w,fx,fy,cx,cy, near, far) = camera_params
-    orig_h, orig_w = rgb.shape[:2]
-    num_objects = len(hypotheses_over_time[0])
-    rgb_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb, 255.0), orig_h, orig_w)
-
-    viz_panels = []
-    for idx in range(num_objects):
-        viz_images = []
-        for hypotheses in hypotheses_over_time:
-            (score, obj_idx, _, pose) = hypotheses[idx]
-            depth = jax3dp3.render_single_object(pose, obj_idx)
-            depth_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(depth[:,:,2], max=far), orig_h, orig_w)
-            viz_images.append(
-                jax3dp3.viz.overlay_image(
-                    rgb_viz,
-                    depth_viz
-                )
-            )
-        viz_panels.append(
-            jax3dp3.viz.multi_panel(
-                viz_images, title="{:s}    -   Probability: {:0.3f}".format(names[idx], probabilities[idx])
-            )
-        )
-    return viz_panels
 
 
 ###### Occlusion check

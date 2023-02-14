@@ -23,8 +23,8 @@ def get_probs(
     outlier_volume
 ):
     t = data_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
-    probs = (jax.scipy.stats.norm.pdf(t, loc=0, scale=r) / num_latent_points).sum()  * outlier_prob + (1-outlier_prob) / outlier_volume 
-    return probs.sum()
+    probs = (jax.scipy.stats.norm.pdf(t, loc=0, scale=r)).sum() * (1.0 - outlier_prob) / num_latent_points   + outlier_prob / outlier_volume 
+    return probs
 
 def threedp3_likelihood(
     obs_xyz: jnp.ndarray,
@@ -41,9 +41,12 @@ def threedp3_likelihood(
     probs = get_probs(indices, obs_xyz, rendered_xyz_padded, filter_size, r, num_latent_points, outlier_prob, outlier_volume)
     return jnp.log(probs).sum()
 
-threedp3_likelihood_parallel_jit = jax.jit(jax.vmap(threedp3_likelihood, in_axes=(None, 0, None, None, None)))
+threedp3_likelihood_parallel = jax.vmap(threedp3_likelihood, in_axes=(None, 0, None, None, None))
+threedp3_likelihood_parallel_jit = jax.jit(threedp3_likelihood_parallel)
 threedp3_likelihood_jit = jax.jit(threedp3_likelihood)
-
+threedp3_likelihood_with_r_parallel_jit = jax.jit(
+    jax.vmap(threedp3_likelihood_parallel, in_axes=(None, None, 0, None, None)),
+)
 
 def pixelwise_likelihood(
     obs_xyz: jnp.ndarray,

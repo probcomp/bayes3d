@@ -22,8 +22,8 @@ warnings.filterwarnings("ignore")
 
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego_multi.pkl")
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_sim.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_real.pkl")
 file = open(test_pkl_file,'rb')
@@ -71,19 +71,23 @@ obs_point_cloud_image = state.process_depth_to_point_cloud_image(observation.dep
 segmentation_image, dashboard_viz = state.segment_scene(observation.rgb, obs_point_cloud_image)
 dashboard_viz.save("dashboard_1.png")
 
-seg_id = 1.0
+
+seg_id = 0.0
 hypotheses_over_time, inference_viz = state.inference_for_segment(
     observation.rgb,
     obs_point_cloud_image,
     segmentation_image,
     seg_id,
     [0,1],
+    # jnp.arange(len(state.meshes)),
     observation.camera_pose, 
-    r=0.005,
+    jnp.array([0.01, 0.005, 0.001]),
     outlier_prob=0.2,
-    outlier_volume=10.0
+    outlier_volume=1.0
 )
 inference_viz.save("predictions.png")
+
+from IPython import embed; embed()
 
 exact_match_score = jax3dp3.threedp3_likelihood_parallel_jit(
     obs_point_cloud_image, jnp.array([obs_point_cloud_image]), 0.0005, 0.2, 1.0
@@ -94,7 +98,6 @@ print(known_object_score)
 
 
 
-from IPython import embed; embed()
 
 
 
