@@ -20,12 +20,12 @@ sys.path.extend(["/home/nishadgothoskar/ptamp/pybullet_planning"])
 sys.path.extend(["/home/nishadgothoskar/ptamp"])
 warnings.filterwarnings("ignore")
 
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego_multi.pkl")
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_sim.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_real.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
 file = open(test_pkl_file,'rb')
 camera_images = pickle.load(file)["camera_images"]
 
@@ -62,26 +62,57 @@ for (mesh, mesh_name) in zip(meshes, model_names):
     state.add_trimesh(mesh, mesh_name)
 
 state.set_coarse_to_fine_schedules(
-    grid_widths=[0.1, 0.01, 0.04, 0.02],
+    grid_widths=[0.15, 0.01, 0.04, 0.02],
     angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
-    grid_params=[(7, 7 ,21),(7, 7 ,21),(15, 15, 1), (7, 7 ,21)],
+    grid_params=[(7,7,21),(7,7,21),(15, 15, 1), (7,7,21)],
 )
 
 obs_point_cloud_image = state.process_depth_to_point_cloud_image(observation.depth)
+
+from IPython import embed; embed()
+
 segmentation_image, dashboard_viz = state.segment_scene(observation.rgb, obs_point_cloud_image)
 dashboard_viz.save("dashboard_1.png")
 
+obj_idx = 1
+good_poses, occlusion_viz = state.occluded_object_search(
+    observation.rgb,
+    obs_point_cloud_image,
+    obj_idx,
+    observation.camera_pose, 
+    0.01,
+    segmentation_image,
+    (20,20,4),
+    outlier_prob=0.2,
+    outlier_volume=1.0
+)
+occlusion_viz.save("occlusion_1.png")
 
-seg_id = 0.0
-hypotheses_over_time, inference_viz = state.inference_for_segment(
+jax3dp3.setup_visualizer()
+jax3dp3.show_cloud("c", t3d.apply_transform(
+    t3d.point_cloud_image_to_points(obs_point_cloud_image),
+    observation.camera_pose
+))
+
+jax3dp3.show_cloud("obj", t3d.apply_transform(
+    state.meshes[obj_idx].vertices,
+    observation.camera_pose @ good_poses[1]
+), color=np.array([1.0, 0.0, 0.0]))
+
+all_imgs = jax3dp3.render_parallel(good_poses, obj_idx)
+x = all_imgs[:,:,:,-1].sum(-1).sum(-1)
+good_poses = good_poses[x>0]
+
+seg_id = 2.0
+hypotheses_over_time, inference_viz = state.classify_segment(
     observation.rgb,
     obs_point_cloud_image,
     segmentation_image,
     seg_id,
-    [0,1],
-    # jnp.arange(len(state.meshes)),
+    # [0,1,2,3,4],
+    jnp.arange(len(state.meshes)),
     observation.camera_pose, 
-    jnp.array([0.01, 0.005, 0.001]),
+    jnp.array([0.01]),
     outlier_prob=0.2,
     outlier_volume=1.0
 )

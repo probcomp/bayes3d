@@ -58,14 +58,38 @@ def overlay_image(img_1, img_2, alpha=0.5):
 def resize_image(img, h, w):
     return img.resize((w, h))
 
+def vstack_images(images, border = 10):
+    max_w = 0
+    sum_h = (len(images)-1)*border
+    for img in images:
+        w,h = img.size
+        max_w = max(max_w, w)
+        sum_h += h
 
-def vstack_images(images):
-    w,h = images[0].size
-    full_image = Image.new('RGB', (w, h * len(images)))
-
-    for i in range(len(images)):
-        full_image.paste(images[i], (0,i * h))
+    full_image = Image.new('RGB', (max_w, sum_h), (255, 255, 255))
+    running_h = 0
+    for img in images:
+        w,h = img.size
+        full_image.paste(img, (int(max_w/2 - w/2), running_h))
+        running_h += h + border
     return full_image
+
+def hstack_images(images, border = 10):
+    max_h = 0
+    sum_w = (len(images)-1)*border
+    for img in images:
+        w,h = img.size
+        max_h = max(max_h, h)
+        sum_w += w
+
+    full_image = Image.new('RGB', (sum_w, max_h),(255, 255, 255))
+    running_w = 0
+    for img in images:
+        w,h = img.size
+        full_image.paste(img, (int(max_h/2 - h/2), running_w))
+        running_w += w + border
+    return full_image
+
 
 ####
 

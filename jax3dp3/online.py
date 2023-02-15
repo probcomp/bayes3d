@@ -130,7 +130,7 @@ class OnlineJax3DP3(object):
             )
         return segmentation_image, viz_image
 
-    def inference_for_segment(
+    def classify_segment(
         self,
         rgb_original,
         obs_point_cloud_image,
@@ -180,18 +180,99 @@ class OnlineJax3DP3(object):
 
         (h,w,fx,fy,cx,cy, near, far) = state.camera_params
         orig_h, orig_w = rgb_original.shape[:2]
-        images = []
         rgb_viz = jax3dp3.viz.get_rgb_image(rgb_original)
-        rgb_masked_viz = jax3dp3.viz.get_rgb_image(rgb_original * jax3dp3.utils.resize((segmentation_image == segmentation_id)* 1.0, orig_h,orig_w )[...,None] ) 
-        for i in range(len(hypotheses_over_time[-1])):
+        mask = jax3dp3.utils.resize((segmentation_image == segmentation_id)* 1.0, orig_h,orig_w)[...,None]
+        rgb_masked_viz = jax3dp3.viz.get_rgb_image(
+            rgb_original * mask
+        )
+        images = [
+            rgb_viz,
+            jax3dp3.viz.overlay_image(rgb_viz, rgb_masked_viz, alpha=0.6)
+        ]
+        top = jax3dp3.viz.multi_panel(
+            images, 
+            labels=["RGB Input", "Segment to Classify"],
+            label_fontsize=50    
+        )
+
+        scores = [i[0] for i in hypotheses_over_time[-1]]
+        order = np.argsort(-np.array(scores))
+
+        images = []
+        labels = []
+        for i in order:
             (score, obj_idx, _, pose) = hypotheses_over_time[-1][i]
             depth = jax3dp3.render_single_object(pose, obj_idx)
             depth_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(depth[:,:,2], max=1.0),orig_h, orig_w)
-            images.append(jax3dp3.viz.multi_panel([jax3dp3.viz.overlay_image(rgb_viz, depth_viz)],title="{:s} - {:0.4f}".format(state.mesh_names[object_ids_to_estimate[i]], normalized_scores[i])))
-        return hypotheses_over_time, jax3dp3.viz.multi_panel([rgb_masked_viz, *images])
+            images.append(
+                jax3dp3.viz.multi_panel(
+                    [jax3dp3.viz.overlay_image(rgb_viz, depth_viz)],
+                    labels=[
+                         "{:s} - {:0.2f}".format(
+                            state.mesh_names[object_ids_to_estimate[i]],
+                            normalized_scores[i]
+                        )
+                    ],
+                    label_fontsize=50
+                )
+            )
+        final_viz = jax3dp3.viz.vstack_images(
+            [top, *images], border= 20
+        )
+        return hypotheses_over_time, final_viz
     
+    def occluded_object_search(
+        self,
+        rgb_original,
+        obs_point_cloud_image,
+        obj_idx,
+        camera_pose,
+        r,
+        segmentation_image,
+        grid_params,
+        outlier_prob = 0.001,
+        outlier_volume = 1.0**3,
+        viz=True
+    ):
 
-    def step(self, observation, timestep,
+        table_dims = self.table_dims
+        contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
+            -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
+            *grid_params,
+            jnp.arange(6)
+        )
+        good_poses, pose_proposals, ranked_high_value_seg_ids = jax3dp3.c2f.c2f_occluded_object_pose_distribution(
+            obj_idx,
+            segmentation_image,
+            contact_param_sweep,
+            face_param_sweep,
+            r,
+            t3d.inverse_pose(camera_pose) @ self.table_surface_plane_pose,
+            obs_point_cloud_image,
+            outlier_prob,
+            outlier_volume,
+            self.model_box_dims,
+            self.camera_params,
+        )
+
+        if not viz:
+            return good_poses, None
+
+        occlusion_viz = jax3dp3.c2f.c2f_occlusion_viz(
+            good_poses,
+            pose_proposals,
+            ranked_high_value_seg_ids,
+            rgb_original,
+            obj_idx,
+            obs_point_cloud_image,
+            segmentation_image,
+            self.camera_params
+        )
+
+        return good_poses, occlusion_viz
+
+    def step(self,
+        observation, timestep,
         r = 0.005,
         outlier_prob = 0.001,
         outlier_volume = 1.0**3,
@@ -211,47 +292,6 @@ class OnlineJax3DP3(object):
         unique =  np.unique(segmentation_image)
         segmetation_ids = unique[unique != -1]
 
-
-        # if len(self.model_box_dims) >=4:
-        #     print("Occluded object search...")
-        #     obj_idx = 3
-        #     table_dims = self.table_dims
-        #     contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
-        #         -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
-        #         20, 20, 4,
-        #         jnp.arange(6)
-        #     )
-        #     good_poses, pose_proposals, ranked_high_value_seg_ids = jax3dp3.c2f.c2f_occluded_object_pose_distribution(
-        #         obj_idx,
-        #         segmentation_image,
-        #         contact_param_sweep,
-        #         face_param_sweep,
-        #         0.001,
-        #         jnp.linalg.inv(observation.camera_pose) @ self.table_surface_plane_pose,
-        #         obs_point_cloud_image,
-        #         outlier_prob,
-        #         outlier_volume,
-        #         self.model_box_dims,
-        #         self.camera_params,
-        #         0.1
-        #     )
-
-        #     occlusion_viz = jax3dp3.c2f.c2f_occlusion_viz(
-        #         good_poses,
-        #         pose_proposals,
-        #         ranked_high_value_seg_ids,
-        #         observation.rgb,
-        #         obj_idx,
-        #         obs_point_cloud_image,
-        #         segmentation_image,
-        #         self.camera_params
-        #     )
-        #     occlusion_viz.save(
-        #         f"occlusion_{timestep}.png"
-        #     )
-        # else:
-        #     ranked_high_value_seg_ids = None
-        ranked_high_value_seg_ids = None
 
         results = []
         for seg_id in segmetation_ids:

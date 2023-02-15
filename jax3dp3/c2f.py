@@ -95,7 +95,6 @@ def c2f_occluded_object_pose_distribution(
     outlier_volume,
     model_box_dims,
     camera_params,
-    threshold
 ):
     pose_proposals = jax3dp3.scene_graph.pose_from_contact_and_face_params_parallel_jit(
         contact_param_sweep,
@@ -125,7 +124,7 @@ def c2f_occluded_object_pose_distribution(
     for (x,y) in pixels:
         if 0<= x < w and 0 <= y < h:
             seg_ids.append(segmentation_image[int(y),int(x)])
-    ranked_high_value_seg_ids =jnp.unique(jnp.array(seg_ids))
+    ranked_high_value_seg_ids = jnp.unique(jnp.array(seg_ids))
     ranked_high_value_seg_ids = ranked_high_value_seg_ids[ranked_high_value_seg_ids != -1]
 
     return good_poses, pose_proposals, ranked_high_value_seg_ids
@@ -159,6 +158,6 @@ def c2f_occlusion_viz(
         best_occluder = jax3dp3.viz.get_depth_image(obs_point_cloud_image[:,:,2],  max=far)
 
     return jax3dp3.viz.multi_panel(
-        [rgb_viz, enumeration_viz_all, overlay_viz, best_occluder],
-        labels=["RGB", "Enumeration", "Pose Dist.", "Occluder"],
+        [rgb_viz, overlay_viz, best_occluder],
+        labels=["RGB", "Pose Distribution", "Likely Occluder"],
     )
