@@ -6,6 +6,7 @@ from matplotlib.colors import rgb2hex
 import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
 
+
 def setup_visualizer():
     global VISUALIZER
     VISUALIZER = meshcat.Visualizer()
@@ -46,18 +47,25 @@ def show_trimesh(channel, mesh, color=None, wireframe=False):
 
 
 def show_pose(channel, pose):
-    pose_part1 = t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.05]))
-    obj = g.Box(np.array([0.01, 0.01, 0.1]))
-    obj2 = g.Box(np.array([0.05, 0.05, 0.05]))
-    pose_part2 = t3d.transform_from_pos(jnp.array([0.0, -0.015, 0.0]))
-    obj3 = g.Box(np.array([0.01, 0.03, 0.01]))
-    mat = g.MeshLambertMaterial(
-                                color=0xff22dd,
+    global VISUALIZER
+    pose_x = t3d.transform_from_pos(jnp.array([0.05, 0.0, 0.0]))
+    objx = g.Box(np.array([0.1, 0.01, 0.01]))
+    matx = g.MeshLambertMaterial(color=0xf41515,
                                 reflectivity=0.8)
 
-    VISUALIZER[channel]["1"].set_object(obj, mat)
-    VISUALIZER[channel]["1"].set_transform(np.array(pose @ pose_part1, dtype=np.float64))
-    VISUALIZER[channel]["2"].set_object(obj2, mat)
-    VISUALIZER[channel]["2"].set_transform(np.array(pose, dtype=np.float64))
-    VISUALIZER[channel]["3"].set_object(obj3, mat)
-    VISUALIZER[channel]["3"].set_transform(np.array(pose @ pose_part2, dtype=np.float64))
+    pose_y = t3d.transform_from_pos(jnp.array([0.0, 0.05, 0.0]))
+    objy = g.Box(np.array([0.01, 0.1, 0.01]))
+    maty = g.MeshLambertMaterial(color=0x40ec00,
+                                reflectivity=0.8)
+
+    pose_z = t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.05]))
+    objz = g.Box(np.array([0.01, 0.01, 0.1]))
+    matz = g.MeshLambertMaterial(color=0x0b5cfc,
+                                reflectivity=0.8)
+
+    VISUALIZER[channel]["x"].set_object(objx, matx)
+    VISUALIZER[channel]["x"].set_transform(np.array(pose @ pose_x, dtype=np.float64))
+    VISUALIZER[channel]["y"].set_object(objy, maty)
+    VISUALIZER[channel]["y"].set_transform(np.array(pose @ pose_y, dtype=np.float64))
+    VISUALIZER[channel]["z"].set_object(objz, matz)
+    VISUALIZER[channel]["z"].set_transform(np.array(pose @ pose_z, dtype=np.float64))

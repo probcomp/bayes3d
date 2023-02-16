@@ -1,12 +1,11 @@
-import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import os
-import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
-import matplotlib
 import jax3dp3.utils
+import matplotlib.pyplot as plt
+import matplotlib
 import graphviz
 import distinctipy
 

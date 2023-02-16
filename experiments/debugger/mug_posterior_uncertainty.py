@@ -31,8 +31,69 @@ state.set_coarse_to_fine_schedules(
 )
 
 
+obs_point_cloud_image = state.process_depth_to_point_cloud_image(observation.depth)
 
-hypotheses_over_time = state.inference_for_segment(
+r_sweep = jnp.array([0.01])
+outlier_prob=0.3
+outlier_volume=1.0
+
+segmentation_image = state.process_segmentation_mask(masks[2]*1.0)
+segmentation_id = 1.0
+obj_idx = 12
+hypotheses_over_time, known_object_scores, _, inference_viz = state.classify_segment(
+    observation.rgb,
+    obs_point_cloud_image,
+    segmentation_image,
+    segmentation_id,
+    [obj_idx],
+    # jnp.arange(len(state.meshes)),
+    observation.camera_pose, 
+    r_sweep,
+    outlier_prob=outlier_prob,
+    outlier_volume=outlier_volume
+)
+inference_viz.save("predictions.png")
+
+(h,w,fx,fy,cx,cy, near, far) = state.camera_params
+obs_image_masked, obs_image_complement = jax3dp3.get_image_masked_and_complement(
+    obs_point_cloud_image, segmentation_image, segmentation_id, far
+)
+
+pose_in_cam_frame = hypotheses_over_time[-1][0][-1] 
+
+
+grid_enumeration = jax3dp3.enumerations.make_rotation_grid_enumeration(100,20)
+pose_proposals = jnp.einsum("ij,ajk->aik", pose_in_cam_frame, grid_enumeration)
+from IPython import embed; embed()
+
+jax3dp3.setup_visualizer()
+
+# get best pose proposal
+rendered_object_images = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
+rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_image_complement)
+
+weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
+    obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
+)[0,:]
+probabilities = jax3dp3.utils.normalize_log_scores(weights)
+
+jax3dp3.clear()
+jax3dp3.show_cloud("obj", t3d.apply_transform(state.meshes[12].vertices, pose_in_cam_frame))
+jax3dp3.show_pose("pose", pose_in_cam_frame)
+order = jnp.argsort(-probabilities)
+for i in order[:10]:
+    jax3dp3.show_pose(f"{i}", pose_proposals[i])
+
+
+
+
+
+jax3dp3.setup_visualizer()
+
+
+
+hypotheses_over_time = state.classify_segment(
+
     state.process_depth_to_point_cloud_image(observation.depth),
     state.process_segmentation_mask(masks[2]*1.0),
     1.0,
