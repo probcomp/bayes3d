@@ -182,15 +182,7 @@ class OnlineJax3DP3(object):
             obs_point_cloud_image, jnp.array([obs_point_cloud_image]), r_sweep[0], outlier_prob, outlier_volume
         )[0]
         final_scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
-        known_object_score = (jnp.array(final_scores) - exact_match_score) / ((segmentation_image == seg_id).sum()) * 1000.0
-        print(known_object_score)
-
-        # unknown_object = 
-
-        # THRESHOLD = -120.0
-        # UNKNOWN_OBJECT = False
-        # if (known_object_score.max() < THRESHOLD):
-        #     UNKNOWN_OBJECT = True
+        known_object_scores = (jnp.array(final_scores) - exact_match_score) / ((segmentation_image == segmentation_id).sum()) * 1000.0
 
         (h,w,fx,fy,cx,cy, near, far) = state.camera_params
         orig_h, orig_w = rgb_original.shape[:2]
@@ -233,7 +225,7 @@ class OnlineJax3DP3(object):
         final_viz = jax3dp3.viz.vstack_images(
             [top, *images], border= 20
         )
-        return hypotheses_over_time, obs_image_masked, final_viz
+        return hypotheses_over_time, known_object_scores, obs_image_masked, final_viz
     
     def occluded_object_search(
         self,
@@ -321,7 +313,7 @@ class OnlineJax3DP3(object):
         results = []
         for seg_id in segmetation_ids:
             print('seg_id:');print(seg_id)
-            hypotheses_over_time, obs_image_masked, inference_viz = self.classify_segment(
+            hypotheses_over_time, known_object_scores, obs_image_masked, inference_viz = self.classify_segment(
                 observation.rgb,
                 obs_point_cloud_image,
                 segmentation_image,
@@ -333,6 +325,10 @@ class OnlineJax3DP3(object):
                 outlier_volume=1.0,
                 viz=True
             )
+
+            UNKNOWN_OBJECT =  known_object_scores.max() < -120.0
+            if UNKNOWN_OBJECT:
+                print("UNKNOWN OBJECT!")
             inference_viz.save(f"classify_{timestep}_seg_id_{seg_id}.png")
 
             scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
@@ -342,7 +338,7 @@ class OnlineJax3DP3(object):
                 (
                     obs_image_masked,
                     hypotheses_over_time,
-                    normalized_scores,
+                    normalized_scores * (1.0 - UNKNOWN_OBJECT),
                     seg_id
                 )
             )

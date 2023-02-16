@@ -68,7 +68,6 @@ obs_point_cloud_image = state.process_depth_to_point_cloud_image(observation.dep
 segmentation_image, dashboard_viz = state.segment_scene(observation.rgb, obs_point_cloud_image)
 dashboard_viz.save("dashboard_1.png")
 
-from IPython import embed; embed()
 # state.step(observation, 1)
 
 seg_id = 0.0
@@ -76,7 +75,7 @@ r_sweep = jnp.array([0.01])
 outlier_prob=0.3
 outlier_volume=1.0
 
-hypotheses_over_time, _, inference_viz = state.classify_segment(
+hypotheses_over_time, known_object_scores, _, inference_viz = state.classify_segment(
     observation.rgb,
     obs_point_cloud_image,
     segmentation_image,
@@ -90,6 +89,7 @@ hypotheses_over_time, _, inference_viz = state.classify_segment(
 )
 inference_viz.save("predictions.png")
 
+from IPython import embed; embed()
 
 obj_idx = 1
 good_poses, occlusion_viz = state.occluded_object_search(
