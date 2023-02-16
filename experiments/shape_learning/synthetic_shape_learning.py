@@ -17,6 +17,7 @@ model_paths = []
 for idx in range(21):
     model_paths.append(os.path.join(model_dir,"obj_" + f"{str(idx+1).rjust(6, '0')}.ply"))
 
+# Setup renderer
 h, w, fx,fy, cx,cy = (
     200,
     200,
@@ -26,6 +27,7 @@ h, w, fx,fy, cx,cy = (
 near,far = 0.1, 5000.0
 jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
 
+# Load object models
 model_box_dims = []
 for path in model_paths:
     mesh = trimesh.load(path)  # 000001 to 000021
@@ -34,12 +36,11 @@ for path in model_paths:
     jax3dp3.load_model(mesh)
 model_box_dims = jnp.array(model_box_dims)
 
-dist_away = 400.0
-
-number_of_views = 4
+# Capture images from different angles
+dist_away = 300.0
+number_of_views = 8
 angles = jnp.arange(number_of_views) * 2*jnp.pi / number_of_views
 object_index = 1
-
 
 camera_poses = []
 for angle in angles:
@@ -76,21 +77,29 @@ for i in range(len(images)):
     clouds.append(cloud)
     clouds_in_world_frame.append(t3d.apply_transform(cloud, camera_poses[i]))
 full_cloud = jnp.vstack(clouds_in_world_frame)
+jax3dp3.show_cloud("full_cloud", full_cloud / 100.0)
 
 
 grid = jax3dp3.make_translation_grid_enumeration_3d(
-    -0.25, -0.25, -0.25,
-    0.25, 0.25, 0.25,
+    -100.0, -100.0, -100.0,
+    100.0, 100.0, 100.0,
     100,100,100
 )
-
-
-
-
 
 images_modified = images.at[images[:,:,:,2]<near,2].set(far)
 
 idx = 2
+
+def get_occluded_occupied_free_masks(grid, camera_pose, depth_image, fx,fy,cx,cy, tolerance = 5.0):
+    grid_in_cam_frame = t3d.apply_transform(grid, t3d.inverse_pose(camera_pose))
+    pixels = jax3dp3.project_cloud_to_pixels(grid_in_cam_frame, fx,fy,cx,cy).astype(jnp.int32)
+    real_depth_vals = depth_image[pixels[:,1],pixels[:,0]]
+    projected_depth_vals = grid_in_cam_frame[:,2]
+    occupied = jnp.abs(real_depth_vals - projected_depth_vals) < tolerance
+    occluded = real_depth_vals < projected_depth_vals
+    occluded = occluded * (1.0 - occupied)
+    free = (1.0 - occluded) * (1.0 - occupied)
+    return occupied > 0, occluded > 0, free > 0
 
 occupied_counts = jnp.zeros_like(grid.shape[0])
 free_counts = jnp.zeros_like(grid.shape[0])
@@ -100,10 +109,11 @@ for idx in range(images.shape[0]):
     free_counts += free
 
 jax3dp3.clear()
-jax3dp3.show_cloud("2", grid[occupied_counts > 0, :] * 4.0)
-
-
+jax3dp3.show_cloud("occupied", grid[occupied_counts > 0, :] / 100.0)
 occluded_mask = (free_counts == 0) * (occupied_counts == 0)
+jax3dp3.show_cloud("occluded", grid[occluded_mask, :] / 100.0, color=np.array([1.0, 0.0, 0.0]))
+
+
 
 occluded_cloud =  t3d.apply_transform(grid[occluded_mask], t3d.inverse_pose(camera_poses[0]))
 occluded_rendered = jax3dp3.render_point_cloud(

@@ -178,6 +178,20 @@ class OnlineJax3DP3(object):
         scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
         normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
 
+        exact_match_score = jax3dp3.threedp3_likelihood_parallel_jit(
+            obs_point_cloud_image, jnp.array([obs_point_cloud_image]), r_sweep[0], outlier_prob, outlier_volume
+        )[0]
+        final_scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
+        known_object_score = (jnp.array(final_scores) - exact_match_score) / ((segmentation_image == seg_id).sum()) * 1000.0
+        print(known_object_score)
+
+        # unknown_object = 
+
+        # THRESHOLD = -120.0
+        # UNKNOWN_OBJECT = False
+        # if (known_object_score.max() < THRESHOLD):
+        #     UNKNOWN_OBJECT = True
+
         (h,w,fx,fy,cx,cy, near, far) = state.camera_params
         orig_h, orig_w = rgb_original.shape[:2]
         rgb_viz = jax3dp3.viz.get_rgb_image(rgb_original)
@@ -219,7 +233,7 @@ class OnlineJax3DP3(object):
         final_viz = jax3dp3.viz.vstack_images(
             [top, *images], border= 20
         )
-        return hypotheses_over_time, final_viz
+        return hypotheses_over_time, obs_image_masked, final_viz
     
     def occluded_object_search(
         self,
@@ -271,12 +285,23 @@ class OnlineJax3DP3(object):
 
         return good_poses, occlusion_viz
 
+    def setup_on_initial_frame(self, observation, meshes, mesh_names):
+        state = self
+        state.start_renderer(observation.camera_params)
+        point_cloud_image = state.process_depth_to_point_cloud_image(observation.depth)
+        state.infer_table_plane(point_cloud_image, observation.camera_pose)
+
+        state.set_coarse_to_fine_schedules(
+            grid_widths=[0.15, 0.01, 0.04, 0.02],
+            angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
+            grid_params=[(7,7,21),(7,7,21),(15, 15, 1), (7,7,21)],
+        )
+
+        for (mesh, mesh_name) in zip(meshes, mesh_names):
+            state.add_trimesh(mesh, mesh_name)
+
     def step(self,
         observation, timestep,
-        r = 0.005,
-        outlier_prob = 0.001,
-        outlier_volume = 1.0**3,
-        r_final = 0.001
     ):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
 
@@ -288,90 +313,40 @@ class OnlineJax3DP3(object):
             f"dashboard_{timestep}.png"
         )
 
-
         unique =  np.unique(segmentation_image)
         segmetation_ids = unique[unique != -1]
 
-
+        object_ids_to_estimate = jnp.arange(len(self.model_box_dims))
+    
         results = []
         for seg_id in segmetation_ids:
             print('seg_id:');print(seg_id)
-            obs_image_masked, obs_image_complement = jax3dp3.get_image_masked_and_complement(
-                obs_point_cloud_image, segmentation_image, seg_id, far
-            )
-            contact_init = self.infer_initial_contact_parameters(
-                obs_image_masked, observation.camera_pose
-            )
-
-            object_ids_to_estimate = jnp.arange(len(self.mesh_names))
-            latent_hypotheses = []
-            for obj_idx in object_ids_to_estimate:
-                latent_hypotheses += [(-jnp.inf, obj_idx, contact_init, None)]
-
-            start = time.time()
-            hypotheses_over_time = jax3dp3.c2f.c2f_contact_parameters(
-                latent_hypotheses,
-                self.contact_param_sched,
-                self.face_param_sched,
-                r,
-                jnp.linalg.inv(observation.camera_pose) @ self.table_surface_plane_pose,
+            hypotheses_over_time, obs_image_masked, inference_viz = self.classify_segment(
+                observation.rgb,
                 obs_point_cloud_image,
-                obs_image_complement,
-                outlier_prob,
-                outlier_volume,
-                self.model_box_dims
+                segmentation_image,
+                seg_id,
+                object_ids_to_estimate,
+                observation.camera_pose,
+                jnp.array([0.005]),
+                outlier_prob=0.2,
+                outlier_volume=1.0,
+                viz=True
             )
-            end= time.time()
-            print ("Time elapsed:", end - start)
+            inference_viz.save(f"classify_{timestep}_seg_id_{seg_id}.png")
+
+            scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
+            normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
             
-            probabilities = jax3dp3.c2f.get_probabilites(hypotheses_over_time[-1])
-
-            scores = [i[0] for i in hypotheses_over_time[-1]]
-            print('scores:');print(scores)
-            final_scores = []
-            for hyp in hypotheses_over_time[-1]:
-                (_, obj_idx, _, pose) = hyp
-                rendered_object_images = jnp.array([jax3dp3.render_single_object(pose, obj_idx)])
-                rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images[...,:3], obs_image_complement)
-                score = jax3dp3.threedp3_likelihood_parallel_jit(
-                    obs_point_cloud_image, rendered_images, r_final, outlier_prob, outlier_volume
-                )[0]
-                final_scores.append(score)
-            print('final_scores:');print(final_scores)
-            exact_match_score = jax3dp3.threedp3_likelihood_parallel_jit(
-                obs_point_cloud_image, jnp.array([obs_point_cloud_image]), r_final, outlier_prob, outlier_volume
-            )[0]
-            print('exact_match_score:');print(exact_match_score)
-
-            UNKNOWN_OBJECT_THRESHOLD = -200.0
-            known_object_score = (jnp.array(final_scores) - exact_match_score) / ((obs_image_masked[:,:,2] > 0).sum()) * 1000.0
-            print(known_object_score)
-            unknown_object = False
-            if known_object_score.max() < UNKNOWN_OBJECT_THRESHOLD:
-                print("I DONT KNOW THIS OBJECT!")
-                unknown_object = True
-
-
-            viz_panels = jax3dp3.c2f.c2f_viz(observation.rgb, hypotheses_over_time[-2:], self.mesh_names, self.camera_params, probabilities=probabilities)
-
-            order = np.argsort(-probabilities)
-            viz_panels_sorted = []
-            scores_string = []
-            for i in order:
-                viz_panels_sorted.append(
-                    viz_panels[i]
-                )
-            jax3dp3.viz.vstack_images(viz_panels_sorted).save(f"classify_{timestep}_seg_id_{seg_id}.png")
-
             results.append(
                 (
                     obs_image_masked,
                     hypotheses_over_time,
-                    probabilities * (1.0 - unknown_object),
+                    normalized_scores,
                     seg_id
                 )
             )
-        return results, ranked_high_value_seg_ids
+        return results, None
 
     def learn_new_object(self, observations, timestep):
         print("Object learning time")
