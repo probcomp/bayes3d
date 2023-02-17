@@ -1,3 +1,6 @@
+import jax3dp3
+import jax3dp3.transforms_3d as t3d
+
 def get_occluded_occupied_free_masks(grid, camera_pose, depth_image, fx,fy,cx,cy, tolerance = 0.01):
     grid_in_cam_frame = t3d.apply_transform(grid, t3d.inverse_pose(camera_pose))
     pixels = jax3dp3.project_cloud_to_pixels(grid_in_cam_frame, fx,fy,cx,cy).astype(jnp.int32)

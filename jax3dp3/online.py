@@ -114,7 +114,7 @@ class OnlineJax3DP3(object):
         )
 
         segmentation_image = jax3dp3.utils.segment_point_cloud_image(
-            point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=30
+            point_cloud_image_above_table, threshold=0.04, min_points_in_cluster=40
         )
 
         viz_image = None
@@ -457,12 +457,43 @@ class OnlineJax3DP3(object):
             )
             fused_clouds_over_time.append(fused_cloud)
 
-        fused_cloud = fused_clouds_over_time[-1]
-        learned_mesh = jax3dp3.mesh.make_alpha_mesh_from_point_cloud(fused_cloud, 0.03)
-        learned_mesh = jax3dp3.mesh.center_mesh(learned_mesh)
+
         jax3dp3.setup_visualizer()
-        jax3dp3.show_trimesh("mesh", learned_mesh)
+        
+        fused_cloud = fused_clouds_over_time[-1]
+        resolution = 0.005
+        fused_cloud = np.rint(fused_cloud / 0.005) * 0.005
         jax3dp3.show_cloud("1", fused_cloud * 3.0)
+        uniq, counts = np.unique(fused_cloud, axis=0, return_counts=True)
+        uniq = uniq[counts > 1]
+
+        labels  = jax3dp3.utils.segment_point_cloud(uniq, threshold=0.01)
+        uniq = uniq[labels == jax3dp3.utils.get_largest_cluster_id_from_segmentation(labels)]
+        jax3dp3.clear()
+        jax3dp3.show_cloud("1", uniq * 3.0)
+
+        fused_cloud = uniq
+
+        import open3d as o3d
+        box = o3d.geometry.TriangleMesh.create_box(resolution,resolution,resolution)
+        cube_vertices = np.array(box.vertices) - np.array([resolution,resolution,resolution])
+        cube_faces = np.array(box.triangles)
+        
+        all_vertices = []
+        all_faces = []
+        for (i,r) in enumerate(fused_cloud):
+            all_vertices.append(cube_vertices + r)
+            all_faces.append(cube_faces + 8*i)
+        all_vertices = np.vstack(all_vertices)
+        all_faces = np.vstack(all_faces)
+        learned_mesh = trimesh.Trimesh(vertices=all_vertices, faces=all_faces)
+
+        jax3dp3.show_trimesh("mesh", learned_mesh)
+
+        # learned_mesh = jax3dp3.mesh.make_alpha_mesh_from_point_cloud(fused_cloud, 0.01)
+        # learned_mesh = jax3dp3.mesh.center_mesh(learned_mesh)
+        # jax3dp3.show_trimesh("mesh", learned_mesh)
+
 
         # import distinctipy        
         # colors = distinctipy.get_colors(len(all_clouds), pastel_factor=0.2)

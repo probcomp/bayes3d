@@ -28,6 +28,8 @@ test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_s
 
 
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_real.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/lego_learning.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/spoon_learning.pkl")
 file = open(test_pkl_file,'rb')
 camera_images = pickle.load(file)["camera_images"]
 
@@ -39,7 +41,7 @@ if type(camera_images) != list:
 observations = [jax3dp3.Jax3DP3Observation.construct_from_camera_image(img, near=0.01, far=2.0) for img in camera_images]
 print('len(observations):');print(len(observations))
 
-observation = observations[0]
+observation = observations[-1]
 state = jax3dp3.OnlineJax3DP3()
 
 top_level_dir = os.path.dirname(os.path.dirname(pybullet_planning.__file__))
@@ -64,15 +66,22 @@ state.set_coarse_to_fine_schedules(
     grid_params=[(7,7,21),(7,7,21),(15, 15, 1), (7,7,21)],
 )
 
+state.learn_new_object(observations, 1)
+
+
+
 obs_point_cloud_image = state.process_depth_to_point_cloud_image(observation.depth)
 segmentation_image, dashboard_viz = state.segment_scene(observation.rgb, obs_point_cloud_image)
 dashboard_viz.save("dashboard_1.png")
+
+state.infer_table_plane(
+    obs_point_cloud_image, observation.camera_pose,  ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008)
 
 # state.step(observation, 1)
 
 seg_id = 0.0
 r_sweep = jnp.array([0.01])
-outlier_prob=0.3
+outlier_prob=0.1
 outlier_volume=1.0
 
 hypotheses_over_time, known_object_scores, _, inference_viz = state.classify_segment(
@@ -88,6 +97,32 @@ hypotheses_over_time, known_object_scores, _, inference_viz = state.classify_seg
     outlier_volume=outlier_volume
 )
 inference_viz.save("predictions.png")
+
+jax3dp3.setup_visualizer()
+
+scores = [i[0] for i in hypotheses_over_time[-1]]
+(score, obj_idx, _, pose) = hypotheses_over_time[-1][np.argmax(scores)]
+
+jax3dp3.clear()
+jax3dp3.show_cloud("c", t3d.apply_transform(
+    t3d.point_cloud_image_to_points(obs_point_cloud_image),
+    observation.camera_pose
+))
+jax3dp3.show_cloud("obj", t3d.apply_transform(
+    state.meshes[obj_idx].vertices,
+    observation.camera_pose @ pose
+), color=np.array([1.0, 0.0, 0.0]))
+jax3dp3.show_pose("pose",state.table_surface_plane_pose)
+
+from IPython import embed; embed()
+
+jax3dp3.show_trimesh("obj2", state.meshes[obj_idx])
+all_imgs = jax3dp3.render_parallel(good_poses, obj_idx)
+x = all_imgs[:,:,:,-1].sum(-1).sum(-1)
+good_poses = good_poses[x>0]
+
+jax3dp3.clear()
+jax3dp3.show_trimesh("obj2", state.meshes[obj_idx])
 
 from IPython import embed; embed()
 
@@ -105,20 +140,7 @@ good_poses, occlusion_viz = state.occluded_object_search(
 )
 occlusion_viz.save("occlusion_1.png")
 
-jax3dp3.setup_visualizer()
-jax3dp3.show_cloud("c", t3d.apply_transform(
-    t3d.point_cloud_image_to_points(obs_point_cloud_image),
-    observation.camera_pose
-))
 
-jax3dp3.show_cloud("obj", t3d.apply_transform(
-    state.meshes[obj_idx].vertices,
-    observation.camera_pose @ good_poses[1]
-), color=np.array([1.0, 0.0, 0.0]))
-
-all_imgs = jax3dp3.render_parallel(good_poses, obj_idx)
-x = all_imgs[:,:,:,-1].sum(-1).sum(-1)
-good_poses = good_poses[x>0]
 
 
 
