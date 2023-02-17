@@ -14,7 +14,7 @@ test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_leg
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/utensils.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
+# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
 with open(test_pkl_file, 'rb') as f:
     camera_images = pickle.load(f)["camera_images"]
 
@@ -45,7 +45,7 @@ print(time.time() - start)
 rgb_viz = jax3dp3.viz.get_rgb_image(rgba_array, 255.0)
 rgb_viz_masked = jax3dp3.viz.get_rgb_image(rgba_array* foreground_mask[..., None] , 255.0)
 depth_viz = jax3dp3.viz.get_depth_image(depth_array, max=far)
-seg_viz = jax3dp3.viz.get_depth_image(segmentation_out[0] + 1, max=4.0)
+seg_viz = jax3dp3.viz.get_depth_image(segmentation_out + 1, max=4.0)
 jax3dp3.viz.multi_panel([rgb_viz, rgb_viz_masked, depth_viz, seg_viz], labels=["RGB", "RGB Masked", "Depth", "Segmentation"]).save("out.png")
 
 from IPython import embed; embed()

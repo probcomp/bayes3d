@@ -176,9 +176,9 @@ def get_segmentation_from_img(
     depth_blob = torch.from_numpy(xyz_img).permute(2, 0, 1)
     sample['depth'] = depth_blob.unsqueeze(0)
 
-    
     out_label, out_label_refined = test_sample(sample, SEGMENTATION_NETWORK, SEGMENTATION_CROP_NETWORK, img_name="tmp")
-    return out_label_refined
+    out_label_refined -= 1   # -1 for table, 0,1,2... for objects
+    return out_label_refined[0]  # for a single image, return first element of [1, h, w] array
 
 
 def get_segmentation(rgb_array, depth_array, fx, fy, cx, cy):
@@ -186,6 +186,5 @@ def get_segmentation(rgb_array, depth_array, fx, fy, cx, cy):
     mask_array = get_foreground_mask(rgb_array)
     segmentation_array = get_segmentation_from_img(rgb_array, depth_array, mask_array, fx, fy, cx, cy)
 
-    final_segmentation_array = segmentation_array - 1   # -1 for table, 0,1,2... for objects
     print("retrieved segmentation array")
-    return mask_array, final_segmentation_array
+    return mask_array, segmentation_array
