@@ -141,7 +141,7 @@ def get_segmentation_from_img(
 
 
     # bgr image
-    rgb = rgb_array
+    rgb = rgb_array[:, :, :3]
     im = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
  
     camera_params = {'fx':fx,

@@ -22,12 +22,11 @@ warnings.filterwarnings("ignore")
 
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego_multi.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_sim.pkl")
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
-
-
+# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
+# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
 # test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_real.pkl")
+# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
+# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/utensils.pkl")
 file = open(test_pkl_file,'rb')
 camera_images = pickle.load(file)["camera_images"]
 
@@ -71,19 +70,38 @@ dashboard_viz.save("dashboard_nn.png")
 
 num_objects = int(cluster_image.max()) + 1
 
+
+final_segmentation = np.zeros(cluster_image.shape) - 1
+final_cluster_id = 0
 for cluster_id in range(num_objects):
+    print("\n\n Cluster id = ", cluster_id)
 
     cluster_region = cluster_image == cluster_id
 
     cluster_region_nn_pred = segmentation_image[cluster_region]
     cluster_region_nn_pred_items = set(np.unique(cluster_region_nn_pred)) - {-1}
 
+    # from IPython import embed; embed()
+
     # TODO
     if len(cluster_region_nn_pred_items) == 1:
-        pass 
+        print("No further segmentation:cluster id ", final_cluster_id)
+        final_segmentation[cluster_region] = final_cluster_id 
+        final_cluster_id += 1
     else:  # split region 
-        pass
+        nn_segmentation = segmentation_image[cluster_region]
+        final_segmentation[cluster_region] = nn_segmentation - nn_segmentation.min() + final_cluster_id
+        print("Extra segmentation: cluster id ", np.unique(final_segmentation[cluster_region]))
+
+        final_cluster_id = final_segmentation[cluster_region].max() + 1
+
     
+viz_image = jax3dp3.viz.get_depth_image(final_segmentation + 1, max=final_segmentation.max() + 1)
+
+viz_image.save("dashboard_final.png")
+
+from IPython import embed; embed()
+
 
 
 
