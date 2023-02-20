@@ -29,6 +29,7 @@ test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_s
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/utensils.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego.pkl")
 # test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/cracker_sugar_banana_real.pkl")
+test_pkl_name = test_pkl_file.split(".")[0].split("/")[-1]
 
 file = open(test_pkl_file,'rb')
 camera_images = pickle.load(file)["camera_images"]
@@ -66,13 +67,13 @@ obs_point_cloud_image = state.process_depth_to_point_cloud_image(observation.dep
 mask_array = state.get_foreground_mask(observation.rgb, obs_point_cloud_image)
 
 cluster_image, dashboard_viz = state.cluster_scene_from_mask(observation.rgb, obs_point_cloud_image, mask_array)
-dashboard_viz.save("dashboard_cluster.png")
+dashboard_viz.save(f"dashboard_cluster_{test_pkl_name}.png")
 
 # from IPython import embed; embed()
 segmentation_image, dashboard_viz = state.segment_scene_from_mask(observation.rgb, observation.depth, mask_array)
 
 if segmentation_image is not None:
-    dashboard_viz.save("dashboard_nn.png")
+    dashboard_viz.save(f"dashboard_nn_{test_pkl_name}.png")
 else:
     segmentation_image = cluster_image  
 
@@ -118,8 +119,7 @@ viz_image = jax3dp3.viz.multi_panel(
 )
 
 
-dashboard_name = test_pkl_file.split(".")[0].split("/")[-1]
-viz_image.save(f"dashboard_final_{dashboard_name}.png")
+viz_image.save(f"dashboard_final_{test_pkl_name}.png")
 
 from IPython import embed; embed()
 
