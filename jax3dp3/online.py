@@ -52,7 +52,7 @@ class OnlineJax3DP3(object):
         self.face_param_sched = None
         self.likelihood_r_sched = None
 
-    def start_renderer(self, camera_params, scaling_factor=0.3):
+    def start_renderer(self, camera_params, scaling_factor=1.0):
         orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far = camera_params
         self.original_camera_params = (orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far)
         h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
@@ -60,7 +60,7 @@ class OnlineJax3DP3(object):
 
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
         # jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
-        jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far, num_layers=100)
+        jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
         self.model_box_dims = jnp.zeros((0,3))
         self.mesh_names = []
         self.meshes = []
@@ -351,7 +351,7 @@ class OnlineJax3DP3(object):
 
     def setup_on_initial_frame(self, observation, meshes, mesh_names):
         state = self
-        state.start_renderer(observation.camera_params)
+        state.start_renderer(observation.camera_params, scaling_factor=0.3)
         point_cloud_image = state.process_depth_to_point_cloud_image(observation.depth)
         state.infer_table_plane(point_cloud_image, observation.camera_pose)
 

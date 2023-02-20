@@ -7,6 +7,10 @@ import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
 
 
+RED = np.array([1.0, 0.0, 0.0])
+GREEN = np.array([0.0, 1.0, 0.0])
+BLUE = np.array([0.0, 0.0, 1.0])
+
 def setup_visualizer():
     global VISUALIZER
     VISUALIZER = meshcat.Visualizer()
@@ -37,29 +41,29 @@ def show_cloud(channel, point_cloud, color=None, size=0.01):
     VISUALIZER[channel].set_object(obj)
 
 
-def show_trimesh(channel, mesh, color=None, wireframe=False):
+def show_trimesh(channel, mesh, color=None, wireframe=False, opacity=1.0):
     global VISUALIZER
     if color is None:
         color = [1, 0, 0]
-    material = g.MeshLambertMaterial(color=int(rgb2hex(color)[1:],16), wireframe=wireframe)
+    material = g.MeshLambertMaterial(color=int(rgb2hex(color)[1:],16), wireframe=wireframe, opacity=opacity)
     obj = g.TriangularMeshGeometry(mesh.vertices, mesh.faces)
     VISUALIZER[channel].set_object(obj, material)
 
 
-def show_pose(channel, pose):
+def show_pose(channel, pose, size=0.1):
     global VISUALIZER
-    pose_x = t3d.transform_from_pos(jnp.array([0.05, 0.0, 0.0]))
-    objx = g.Box(np.array([0.1, 0.01, 0.01]))
+    pose_x = t3d.transform_from_pos(jnp.array([size/2.0, 0.0, 0.0]))
+    objx = g.Box(np.array([size, size/10.0, size/10.0]))
     matx = g.MeshLambertMaterial(color=0xf41515,
                                 reflectivity=0.8)
 
-    pose_y = t3d.transform_from_pos(jnp.array([0.0, 0.05, 0.0]))
-    objy = g.Box(np.array([0.01, 0.1, 0.01]))
+    pose_y = t3d.transform_from_pos(jnp.array([0.0, size/2.0, 0.0]))
+    objy = g.Box(np.array([size/10.0, size, size/10.0]))
     maty = g.MeshLambertMaterial(color=0x40ec00,
                                 reflectivity=0.8)
 
-    pose_z = t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.05]))
-    objz = g.Box(np.array([0.01, 0.01, 0.1]))
+    pose_z = t3d.transform_from_pos(jnp.array([0.0, 0.0, size/2.0]))
+    objz = g.Box(np.array([size/10.0, size/10.0, size]))
     matz = g.MeshLambertMaterial(color=0x0b5cfc,
                                 reflectivity=0.8)
 
