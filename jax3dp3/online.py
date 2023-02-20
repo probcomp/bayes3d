@@ -177,17 +177,18 @@ class OnlineJax3DP3(object):
         
         (_, _, orig_fx, orig_fy, orig_cx, orig_cy, near, far) = self.original_camera_params
         (h, w, _, _, _, _, near, far) = self.camera_params 
-        from IPython import embed; embed()
+        # from IPython import embed; embed()
 
         try:
             # _, segmentation_image = jax3dp3.segment_scene.get_segmentation(rgb_original, depth_original, fx, fy, cx, cy)
             # segmentation_image = segmentation_image[0]
             segmentation_image = jax3dp3.segment_scene.get_segmentation_from_img(rgb_original, depth_original, foreground_mask, orig_fx, orig_fy, orig_cx, orig_cy)
-            from IPython import embed; embed()
+            # from IPython import embed; embed()
             segmentation_image = jax3dp3.utils.resize(np.array(segmentation_image), h,w)
 
         except:
-            raise ValueError("Segmentation net failed")
+            print("WARNING: Segmentation net failed; returning None")
+            return None, None
         
         viz_image = None
         if viz:

@@ -22,11 +22,14 @@ warnings.filterwarnings("ignore")
 
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego_multi.pkl")
 test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_sim.pkl")
-# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
-# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
-# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_real.pkl")
-# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
-# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/utensils.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/strawberry_error.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_real.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/utensils.pkl")
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/red_lego.pkl")
+# test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/cracker_sugar_banana_real.pkl")
+
 file = open(test_pkl_file,'rb')
 camera_images = pickle.load(file)["camera_images"]
 
@@ -65,8 +68,13 @@ mask_array = state.get_foreground_mask(observation.rgb, obs_point_cloud_image)
 cluster_image, dashboard_viz = state.cluster_scene_from_mask(observation.rgb, obs_point_cloud_image, mask_array)
 dashboard_viz.save("dashboard_cluster.png")
 
+# from IPython import embed; embed()
 segmentation_image, dashboard_viz = state.segment_scene_from_mask(observation.rgb, observation.depth, mask_array)
-dashboard_viz.save("dashboard_nn.png")
+
+if segmentation_image is not None:
+    dashboard_viz.save("dashboard_nn.png")
+else:
+    segmentation_image = cluster_image  
 
 num_objects = int(cluster_image.max()) + 1
 
@@ -96,16 +104,25 @@ for cluster_id in range(num_objects):
         final_cluster_id = final_segmentation[cluster_region].max() + 1
 
     
-viz_image = jax3dp3.viz.get_depth_image(final_segmentation + 1, max=final_segmentation.max() + 1)
+final_segmentation_viz = jax3dp3.viz.get_depth_image(final_segmentation + 1, max=final_segmentation.max() + 1)
 
-viz_image.save("dashboard_final.png")
+
+viz_h, viz_w = final_segmentation.shape
+viz_image = jax3dp3.viz.multi_panel(
+    [
+        jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(observation.rgb, 255.0), viz_h, viz_w),
+        jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(observation.rgb * mask_array[:,:,None], 255.0), viz_h, viz_w),
+        final_segmentation_viz,
+    ],
+    labels=["RGB", "RGB Masked", f"Segmentation:{int(final_segmentation.max()) + 1}"]
+)
+
+
+dashboard_name = test_pkl_file.split(".")[0].split("/")[-1]
+viz_image.save(f"dashboard_final_{dashboard_name}.png")
 
 from IPython import embed; embed()
 
-
-
-
-from IPython import embed; embed()
 
 
 
