@@ -7,6 +7,7 @@ import cv2
 import trimesh
 import time
 import jax3dp3.icp
+import warnings
 
 class Jax3DP3Observation(object):
     def __init__(self, rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far):
@@ -98,8 +99,8 @@ class OnlineJax3DP3(object):
         seg = jax3dp3.utils.resize(seg, h, w)
         return seg
     
-    def segment_scene(self, rgb_original, point_cloud_image,
-        viz=True
+    def segment_scene(self, rgb_original, point_cloud_image, depth_original=None,
+        viz=True, use_nn=False
     ):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
 
@@ -113,9 +114,44 @@ class OnlineJax3DP3(object):
             foreground_mask_scaled[..., None]
         )
 
-        segmentation_image = jax3dp3.utils.segment_point_cloud_image(
+        segmentation_image_cluster = jax3dp3.utils.segment_point_cloud_image(
             point_cloud_image_above_table, threshold=0.04, min_points_in_cluster=40
         )
+
+        if use_nn:
+            assert depth_original is not None
+            segmentation_image_nn, _ = self.segment_scene_from_mask(rgb_original, depth_original, foreground_mask)
+
+            # process the final image based on clustering and nn results
+            num_objects = int(segmentation_image_cluster.max()) + 1
+
+            final_segmentation_image = np.zeros(segmentation_image_cluster.shape) - 1
+            final_cluster_id = 0
+            for cluster_id in range(num_objects):
+                print("\n\n Cluster id = ", cluster_id)
+
+                cluster_region = segmentation_image_cluster == cluster_id
+
+                cluster_region_nn_pred = segmentation_image_cluster[cluster_region]
+                cluster_region_nn_pred_items = set(np.unique(cluster_region_nn_pred)) - {-1}
+
+                if len(cluster_region_nn_pred_items) == 1:
+                    # print("No further segmentation:cluster id ", final_cluster_id)
+                    final_segmentation_image[cluster_region] = final_cluster_id 
+                    final_cluster_id += 1
+                else:  # split region 
+                    nn_segmentation = segmentation_image_cluster[cluster_region]
+                    final_segmentation_image[cluster_region] = nn_segmentation - nn_segmentation.min() + final_cluster_id
+                    # print("Extra segmentation: cluster id ", np.unique(final_segmentation_image[cluster_region]))
+
+                    final_cluster_id = final_segmentation_image[cluster_region].max() + 1
+
+            if segmentation_image_nn is None:
+                warnings.warn("Segmentation NN failed; using clustering results")
+                final_segmentation_image = segmentation_image_cluster 
+
+        else:
+            final_segmentation_image = segmentation_image_cluster
 
         viz_image = None
         if viz:
@@ -125,11 +161,11 @@ class OnlineJax3DP3(object):
                     jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original * foreground_mask, 255.0),h,w),
                     jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=far),
                     jax3dp3.viz.get_depth_image(point_cloud_image_above_table[:,:,2],  max=far),
-                    jax3dp3.viz.get_depth_image(segmentation_image + 1, max=segmentation_image.max() + 1),
+                    jax3dp3.viz.get_depth_image(final_segmentation_image + 1, max=final_segmentation_image.max() + 1),
                 ],
-                labels=["RGB", "RGB Masked", "Depth", "Above Table", "Segmentation. {:d}".format(int(segmentation_image.max() + 1))],
+                labels=["RGB", "RGB Masked", "Depth", "Above Table", "Segmentation. {:d}".format(int(final_segmentation_image.max() + 1))],
             )
-        return segmentation_image, viz_image
+        return final_segmentation_image, viz_image
 
     
     def get_foreground_mask(self, rgb_original, point_cloud_image,
@@ -187,7 +223,7 @@ class OnlineJax3DP3(object):
             segmentation_image = jax3dp3.utils.resize(np.array(segmentation_image), h,w)
 
         except:
-            print("WARNING: Segmentation net failed; returning None")
+            warnings.warn("WARNING: Segmentation net failed; returning None")
             return None, None
         
         viz_image = None
