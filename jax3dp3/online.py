@@ -120,15 +120,15 @@ class OnlineJax3DP3(object):
 
         if use_nn:
             assert depth_original is not None
-            segmentation_image_nn, _ = self.segment_scene_from_mask(rgb_original, depth_original, foreground_mask)
+            segmentation_image_nn, _ = self.segment_scene_from_mask_nn(rgb_original, depth_original, foreground_mask)
 
-            # process the final image based on clustering and nn results
+            # process the final segmentation image based on clustering and nn results
             num_objects = int(segmentation_image_cluster.max()) + 1
 
             final_segmentation_image = np.zeros(segmentation_image_cluster.shape) - 1
             final_cluster_id = 0
             for cluster_id in range(num_objects):
-                print("\n\n Cluster id = ", cluster_id)
+                print("Processing cluster id = ", cluster_id)
 
                 cluster_region = segmentation_image_cluster == cluster_id
 
@@ -176,38 +176,8 @@ class OnlineJax3DP3(object):
         foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgb_original)
 
         return foreground_mask
-    
-    def cluster_scene_from_mask(self, rgb_original, point_cloud_image, foreground_mask, 
-                                viz=True):
-        
-        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-
-        foreground_mask_scaled = jax3dp3.utils.resize(np.array(foreground_mask), h,w)
-        
-        point_cloud_image_above_table = (
-            point_cloud_image * 
-            foreground_mask_scaled[..., None]
-        )
-
-        segmentation_image = jax3dp3.utils.segment_point_cloud_image(
-            point_cloud_image_above_table, threshold=0.02, min_points_in_cluster=30
-        )
-
-        viz_image = None
-        if viz:
-            viz_image = jax3dp3.viz.multi_panel(
-                [
-                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0),h,w),
-                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original * foreground_mask[...,None], 255.0),h,w),
-                    jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=far),
-                    jax3dp3.viz.get_depth_image(point_cloud_image_above_table[:,:,2],  max=far),
-                    jax3dp3.viz.get_depth_image(segmentation_image + 1, max=segmentation_image.max() + 1),
-                ],
-                labels=["RGB", "RGB Masked", "Depth", "Above Table", "Segmentation. {:d}".format(int(segmentation_image.max() + 1))],
-            )
-        return segmentation_image, viz_image  
-    
-    def segment_scene_from_mask(self, rgb_original, depth_original, foreground_mask, 
+ 
+    def segment_scene_from_mask_nn(self, rgb_original, depth_original, foreground_mask, 
                                 viz=True):
         
         (_, _, orig_fx, orig_fy, orig_cx, orig_cy, near, far) = self.original_camera_params
@@ -552,7 +522,6 @@ class OnlineJax3DP3(object):
         print("Adding new mesh")
         self.add_trimesh(learned_mesh, mesh_name=f"lego_{len(self.model_box_dims)}")
         return learned_mesh
-
 
     def infer_table_plane(self, point_cloud_image, camera_pose, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
