@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
 
+
 def inverse_pose(t):
     return jnp.linalg.inv(t)
 
@@ -53,10 +54,6 @@ def transform_from_axis_angle(axis, angle):
 
 def add_homogenous_ones(cloud):
     return jnp.concatenate([cloud, jnp.ones((*cloud.shape[:-1],1))],axis=-1)
-
-def point_cloud_image_to_points(point_cloud_image):
-    point_cloud = point_cloud_image[:,:,:3].reshape(-1,3)
-    return point_cloud[point_cloud[:,2]!=0.0, :]
 
 # move point cloud to a specified pose
 # coords: (N,3) point cloud
@@ -204,14 +201,14 @@ def rotation_matrix_to_quaternion(matrix):
     return q * 0.5 / jnp.sqrt(t)
 
 
-def depth_to_point_cloud_image(
+def unproject_depth(
     depth: np.ndarray,
-    fx, fy, cx, cy,
+    intrinsics,
 ) -> np.ndarray:
     K = jnp.array(
         [
-            [fx, 0.0, cx],
-            [0.0, fy, cy],
+            [intrinsics.fx, 0.0, intrinsics.cx],
+            [0.0, intrinsics.fy, intrinsics.cy],
             [0.0, 0.0, 1.0],
         ]
     )
@@ -224,32 +221,3 @@ def depth_to_point_cloud_image(
         np.einsum('ij,j...->i...', np.linalg.inv(K), full_vec), 0, -1
     )
     return coords_in_camera
-
-
-def depth_to_coords_in_camera(
-    depth: np.ndarray,
-    intrinsics: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Convert depth image to coords in camera space for points in mask.
-    Args:
-        depth: Array of shape (H, W).
-        intrinsics: Array of shape (3, 3), camera intrinsic matrix.
-        mask: Array of shape (H, W), with 1s where points are quried.
-        as_image_shape: If True, return arrays of shape (H, W, 3)
-    Returns:
-        np.ndarray: Array of shape (N, 3) or (H, W, 3), coordinates in camera space.
-        np.ndarray: Array of shape (N, 2) or (H, W, 2), coordinates on image plane.
-            N is the number of 1s in mask.
-    """
-    vu = np.mgrid[: depth.shape[0], : depth.shape[1]]
-
-    depth_for_uv = depth[vu[0], vu[1]]
-    full_vec = np.stack(
-        [vu[1] * depth_for_uv, vu[0] * depth_for_uv, depth_for_uv], axis=0
-    )
-    coords_in_camera = np.moveaxis(
-        np.einsum('ij,j...->i...', np.linalg.inv(intrinsics), full_vec), 0, -1
-    )
-    coords_on_image = np.moveaxis(vu, 0, -1)
-    return coords_in_camera, coords_on_image

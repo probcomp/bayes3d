@@ -9,33 +9,6 @@ import time
 import jax3dp3.icp
 import warnings
 
-class Jax3DP3Observation(object):
-    def __init__(self, rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far):
-        self.camera_params = (h,w,fx,fy,cx,cy, near, far)
-        self.rgb = rgb
-        self.depth = depth
-        self.camera_pose = camera_pose
-
-    def construct_from_camera_image(camera_image, near=0.001, far=5.0):
-        depth = np.array(camera_image.depthPixels)
-        rgb = np.array(camera_image.rgbPixels)
-        camera_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose)
-        K = camera_image.camera_matrix
-        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
-        h,w = depth.shape
-        near = 0.001
-        return Jax3DP3Observation( rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far)
-
-    def construct_from_aidan_dict(d, near=0.001, far=5.0):
-        depth = np.array(d["depth"] / 1000.0) 
-        camera_pose = t3d.pybullet_pose_to_transform(d["extrinsics"])
-        rgb = np.array(d["rgb"])
-        K = d["intrinsics"][0]
-        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
-        h,w = depth.shape
-        observation = jax3dp3.Jax3DP3Observation(rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far)
-        return observation
-
 
 class OnlineJax3DP3(object):
     def __init__(self):
@@ -534,3 +507,31 @@ class OnlineJax3DP3(object):
         points_filtered = points_in_table_ref_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
         center_x, center_y, _ = ( points_filtered.min(0) + points_filtered.max(0))/2
         return jnp.array([center_x, center_y, 0.0])
+
+
+class Jax3DP3Observation(object):
+    def __init__(self, rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far):
+        self.camera_params = (h,w,fx,fy,cx,cy, near, far)
+        self.rgb = rgb
+        self.depth = depth
+        self.camera_pose = camera_pose
+
+    def construct_from_camera_image(camera_image, near=0.001, far=5.0):
+        depth = np.array(camera_image.depthPixels)
+        rgb = np.array(camera_image.rgbPixels)
+        camera_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose)
+        K = camera_image.camera_matrix
+        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
+        h,w = depth.shape
+        near = 0.001
+        return Jax3DP3Observation( rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far)
+
+    def construct_from_aidan_dict(d, near=0.001, far=5.0):
+        depth = np.array(d["depth"] / 1000.0) 
+        camera_pose = t3d.pybullet_pose_to_transform(d["extrinsics"])
+        rgb = np.array(d["rgb"])
+        K = d["intrinsics"][0]
+        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
+        h,w = depth.shape
+        observation = jax3dp3.Jax3DP3Observation(rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far)
+        return observation

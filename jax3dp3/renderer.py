@@ -6,50 +6,65 @@ import jax.numpy as jnp
 import jax
 import numpy as np
 import jax.dlpack
-import cv2
 
-RENDERER_ENV = None
-PROJ_LIST = None
 
-def setup_renderer(h, w, fx, fy, cx, cy, near, far, num_layers=2048):
-    global RENDERER_ENV
-    global PROJ_LIST
-    RENDERER_ENV = dr.RasterizeGLContext(h, w, output_db=False)
-    PROJ_LIST = list(jax3dp3.camera.open_gl_projection_matrix(h, w, fx, fy, cx, cy, near, far).reshape(-1))
-    dr._get_plugin(gl=True).setup(
-        RENDERER_ENV.cpp_wrapper,
-        h,w, num_layers
-    )
+class Renderer(object):
+    def __init__(self, intrinsics, num_layers=2048):
+        self.intrinsics = intrinsics
+        self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
+        self.proj_list = list(jax3dp3.camera.open_gl_projection_matrix(
+            intrinsics.height, intrinsics.width, intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy, intrinsics.near, intrinsics.far
+        ).reshape(-1))
+        
+        dr._get_plugin(gl=True).setup(
+            self.renderer_env.cpp_wrapper,
+            intrinsics.height, intrinsics.width, num_layers
+        )
 
-def load_model(mesh):
-    vertices = np.array(mesh.vertices)
-    vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)
-    triangles = np.array(mesh.faces)
-    dr._get_plugin(gl=True).load_vertices_fwd(
-        RENDERER_ENV.cpp_wrapper, torch.tensor(vertices.astype("f"), device='cuda'),
-        torch.tensor(triangles.astype(np.int32), device='cuda'),
-    )
+        self.meshes =[]
+        self.mesh_names =[]
 
-def render_to_torch(poses, idx, on_object=0):
-    poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(poses))
-    images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(RENDERER_ENV.cpp_wrapper, poses_torch, PROJ_LIST, idx, on_object)
-    return images_torch
+    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0):
+        mesh = trimesh.load(mesh_filename)
+        self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor)
 
-def render_single_object(pose, idx):
-    images_torch = render_to_torch(pose[None, None, :, :], [idx])
-    return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+    def add_mesh(self, mesh, mesh_name=None, scaling_factor=1.0):
+        
+        if mesh_name is None:
+            mesh_name = f"object_{len(self.meshes)}"
+        
+        mesh.vertices = mesh.vertices * scaling_factor
+        self.meshes.append(mesh)
+        self.mesh_names.append(mesh_name)
 
-def render_parallel(poses, idx):
-    images_torch = render_to_torch(poses[None, :, :, :], [idx])
-    return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+        vertices = np.array(mesh.vertices)
+        vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)
+        triangles = np.array(mesh.faces)
+        dr._get_plugin(gl=True).load_vertices_fwd(
+            self.renderer_env.cpp_wrapper, torch.tensor(vertices.astype("f"), device='cuda'),
+            torch.tensor(triangles.astype(np.int32), device='cuda'),
+        )
 
-def render_multiobject(poses, indices):
-    images_torch = render_to_torch(poses[:, None, :, :], indices)
-    return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+    def render_to_torch(self, poses, idx, on_object=0):
+        poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(poses))
+        images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(self.renderer_env.cpp_wrapper, poses_torch, self.proj_list, idx, on_object)
+        return images_torch
 
-def render_multiobject_parallel(poses, indices, on_object=0):
-    images_torch = render_to_torch(poses, indices, on_object=on_object)
-    return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+    def render_single_object(self, pose, idx):
+        images_torch = self.render_to_torch(pose[None, None, :, :], [idx])
+        return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+
+    def render_parallel(self, poses, idx):
+        images_torch = self.render_to_torch(poses[None, :, :, :], [idx])
+        return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+
+    def render_multiobject(self, poses, indices):
+        images_torch = self.render_to_torch(poses[:, None, :, :], indices)
+        return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+
+    def render_multiobject_parallel(self, poses, indices, on_object=0):
+        images_torch = self.render_to_torch(poses, indices, on_object=on_object)
+        return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
 
 def render_point_cloud(point_cloud, h, w, fx,fy,cx,cy, near, far, pixel_smudge):
     transformed_cloud = point_cloud

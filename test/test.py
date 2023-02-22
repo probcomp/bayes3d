@@ -1,7 +1,7 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-import jax3dp3
+import jax3dp3 as j
 import time
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
@@ -10,23 +10,18 @@ import cv2
 import trimesh
 import os
 
-h, w, fx,fy, cx,cy = (
-    300,
-    300,
-    200.0,200.0,
-    150.0,150.0
+intrinsics = j.Intrinsics(
+    height=300,
+    width=300,
+    fx=200.0, fy=200.0,
+    cx=150.0, cy=150.0,
+    near=0.001, far=50.0
 )
-near,far = 0.001, 50.0
-r = 0.1
-outlier_prob = 0.01
 
-jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
+renderer = j.Renderer(intrinsics)
+renderer.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/cube.obj"))
 
-mesh = trimesh.load(os.path.join(jax3dp3.utils.get_assets_dir(),"sample_objs/cube.obj"))
-
-jax3dp3.load_model(mesh)
-
-num_frames = 40
+num_frames = 60
 
 gt_poses = [
     jnp.array([
@@ -54,19 +49,15 @@ print("gt_poses.shape", gt_poses.shape)
 
 
 
-gt_images = jax3dp3.render_parallel(gt_poses,0)
+gt_images = renderer.render_parallel(gt_poses,0)
 print("gt_images.shape", gt_images.shape)
 print((gt_images[0,:,:,-1] > 0 ).sum())
 
-def scorer(rendered_image, gt, r, outlier_prob, outlier_volume):
-    weight = jax3dp3.likelihood.threedp3_likelihood(gt, rendered_image, r, outlier_prob, outlier_volume)
-    return weight
-scorer_parallel = jax.vmap(scorer, in_axes=(0, None, None, None, None))
-scorer_parallel_jit = jax.jit(scorer_parallel)
-
-translation_deltas = jax3dp3.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
+translation_deltas = j.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
 key = jax.random.PRNGKey(3)
-rotation_deltas = jax.vmap(lambda key: jax3dp3.distributions.gaussian_vmf(key, 0.00001, 800.0))(jax.random.split(key, 100))
+rotation_deltas = jax.vmap(lambda key: j.distributions.gaussian_vmf(key, 0.00001, 800.0))(
+    jax.random.split(key, 100)
+)
 
 pose_estimate = gt_poses[0]
 
@@ -74,13 +65,13 @@ start = time.time()
 pose_estimates_over_time = []
 for gt_image in gt_images:
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, translation_deltas)
-    images = jax3dp3.render_parallel(proposals, 0)
-    weights_new = scorer_parallel_jit(images, gt_image, 0.05, 0.1, 10**3)
+    rendered_images = renderer.render_parallel(proposals, 0)
+    weights_new = j.threedp3_likelihood_parallel_jit(gt_image, rendered_images, 0.05, 0.1, 10**3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, rotation_deltas)
-    images = jax3dp3.render_parallel(proposals, 0)
-    weights_new = scorer_parallel_jit(images, gt_image, 0.05, 0.1, 10**3)
+    rendered_images = renderer.render_parallel(proposals, 0)
+    weights_new = j.threedp3_likelihood_parallel_jit(gt_image, rendered_images, 0.05, 0.1, 10**3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     pose_estimates_over_time.append(pose_estimate)
@@ -92,15 +83,15 @@ print ("FPS:", gt_poses.shape[0] / (end - start))
 viz_images = []
 max_depth = 10.0
 for i in range(gt_images.shape[0]):
-    gt_img = jax3dp3.viz.get_depth_image(gt_images[i,:,:,2], max=max_depth)
-    rendered_image = jax3dp3.render_single_object(pose_estimates_over_time[i], 0)
-    rendered_img = jax3dp3.viz.get_depth_image(rendered_image[:,:,2], max=max_depth)
+    gt_img = j.viz.get_depth_image(gt_images[i,:,:,2], max=max_depth)
+    rendered_image = renderer.render_single_object(pose_estimates_over_time[i], 0)
+    rendered_img = j.viz.get_depth_image(rendered_image[:,:,2], max=max_depth)
     viz_images.append(
-        jax3dp3.viz.multi_panel(
+        j.viz.multi_panel(
             [gt_img, rendered_img],
             ["Ground Truth", "Inferred Reconstruction"],
         )
     )
-jax3dp3.viz.make_gif_from_pil_images(viz_images,"test.gif")
+j.viz.make_gif_from_pil_images(viz_images,"test.gif")
 
 from IPython import embed; embed()

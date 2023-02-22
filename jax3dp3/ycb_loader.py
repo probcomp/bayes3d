@@ -7,7 +7,7 @@ from glob import glob
 from PIL import Image
 
 import json
-import jax3dp3
+import jax3dp3 as j
 import jax.numpy as jnp
 import numpy as np
 import pickle
@@ -101,11 +101,7 @@ def get_test_img(scene_id, img_id, ycb_dir):
         masks.append(jnp.array(mask_visible > 0))
 
     cam_pose = cam_pose.at[:3,3].set(cam_pose[:3,3]*1.0/1000.0)
-
-    observation = jax3dp3.Jax3DP3Observation(
-        rgb,
-        depth * cam_depth_scale / 1000.0,
-        cam_pose,
+    intrinsics = j.Intrinsics(
         rgb.shape[0],
         rgb.shape[1],
         cam_K[0,0],
@@ -113,32 +109,13 @@ def get_test_img(scene_id, img_id, ycb_dir):
         cam_K[0,2],
         cam_K[1,2],
         0.01,
-        10.0
+        2.0
+    )
+    return (
+        rgb, 
+        depth * cam_depth_scale / 1000.0,
+        cam_pose,
+        intrinsics,
+        gt_ids, jnp.array(gt_poses), masks
     )
 
-    return observation, gt_ids, jnp.array(gt_poses), masks
-
-
-def create_ycbv_dataset(data_dirname: str) -> dict:
-    YCBV_DATA = {}
-    data_dir = os.path.join(jax3dp3.utils.get_data_dir(), data_dirname)
-
-    scene_ids = os.listdir(data_dir)
-
-    for scene_id in scene_ids:
-        YCBV_DATA[scene_id] = []
-        scene_data_dir = os.path.join(data_dir, scene_id)  # depth, mask, mask_visib, rgb; scene_camera.json, scene_gt_info.json, scene_gt.json
-        scene_rgb_images_dir = os.path.join(scene_data_dir, 'rgb')
-
-        for img_filename in os.listdir(scene_rgb_images_dir):
-            img_id = img_filename.split(".")[0]
-
-            ycbv_img = get_test_img(scene_id, img_id, data_dirname)
-
-            YCBV_DATA[scene_id].append(ycbv_img)
-            print(f"Processed scene {scene_id} image {img_id}")
-        
-        print('\n')
-        break  # to do just one scene
-        
-    return YCBV_DATA

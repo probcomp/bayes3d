@@ -1,6 +1,25 @@
 import jax.numpy as jnp
 import numpy as np
 from .transforms_3d import add_homogenous_ones
+from collections import namedtuple
+
+# Declaring namedtuple()
+Intrinsics = namedtuple('Intrinsics', ['height', 'width', 'fx', 'fy', 'cx', 'cy', 'near', 'far'])
+
+RENDERER_ENV = None
+PROJ_LIST = None
+MESHES = []
+MESH_NAMES = []
+
+def scale_camera_parameters(intrinsics, scaling_factor):
+    new_fx = intrinsics.fx * scaling_factor
+    new_fy = intrinsics.fy * scaling_factor
+    new_cx = intrinsics.cx * scaling_factor
+    new_cy = intrinsics.cy * scaling_factor
+
+    new_h = int(np.round(intrinsics.height  * scaling_factor))
+    new_w = int(np.round(intrinsics.width * scaling_factor))
+    return Intrinsics(new_h, new_w, new_fx, new_fy, new_cx, new_cy, intrinsics.near, intrinsics.far)    
 
 def camera_rays_from_params(height, width, fx, fy, cx, cy):
     rows, cols = jnp.meshgrid(jnp.arange(width), jnp.arange(height))
@@ -39,13 +58,3 @@ def open_gl_projection_matrix(h, w, fx, fy, cx, cy, near, far):
         ]
     )
     return orth @ persp @ view
-
-def scale_camera_parameters(h,w,fx,fy,cx,cy, scaling_factor):
-    new_fx = fx * scaling_factor
-    new_fy = fy * scaling_factor
-    new_cx = cx * scaling_factor
-    new_cy = cy * scaling_factor
-
-    new_h = int(np.round(h  * scaling_factor))
-    new_w = int(np.round(w * scaling_factor))
-    return new_h, new_w, new_fx, new_fy, new_cx, new_cy

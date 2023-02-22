@@ -1,20 +1,23 @@
-from jax3dp3.scene_graph import get_poses
 import jax.numpy as jnp
-import jax
-import jax3dp3.transforms_3d as t3d
-from jax3dp3.rendering.shape import get_rectangular_prism_shape
-from jax3dp3.rendering.jax_rendering import render_sphere, render_planes_multiobject,render_planes_multiobject_rays
-from jax3dp3.viz import save_depth_image, get_depth_image
-from jax3dp3.camera import camera_rays_from_params
-from jax3dp3.likelihood import threedp3_likelihood
-from jax3dp3.utils import make_centered_grid_enumeration_2d_points
-import jax3dp3.viz
-from jax.scipy.special import logsumexp
-import matplotlib.pyplot as plt
-from PIL import Image
-from jax3dp3.batched_scorer import batched_scorer_parallel
-import time
-import matplotlib
+import jax3dp3 as j
+import trimesh
+
+table_dims = jnp.array([27.0, 0.1, 20.0])
+
+model_names = ["bunny", "sphere", "pyramid", "cube"]
+intrinsics = j.Intrinsics(
+    200,
+    400,
+    400.0,
+    400.0,
+    200.0,
+    100.0,
+    0.0,
+    10.0
+)
+meshes = []
+
+
 
 box_dims = jnp.array([
     [27.0, 0.1, 20.0],
