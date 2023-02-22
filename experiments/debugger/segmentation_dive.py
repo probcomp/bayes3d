@@ -50,7 +50,6 @@ state.setup_on_initial_frame(observations[0], [], [])
 
 obs_point_cloud_image = state.process_depth_to_point_cloud_image(observation.depth)
 # segmentation_image, dashboard_viz = state.segment_scene(observation.rgb, obs_point_cloud_image)
-segmentation_image, dashboard_viz = state.segment_scene(observation.rgb, obs_point_cloud_image)
 segmentation_image, dashboard_viz = state.segment_scene(observation.rgb, obs_point_cloud_image, observation.depth, use_nn=True)
 
 

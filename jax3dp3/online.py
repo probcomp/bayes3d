@@ -149,7 +149,6 @@ class OnlineJax3DP3(object):
             if segmentation_image_nn is None:
                 warnings.warn("Segmentation NN failed; using clustering results")
                 final_segmentation_image = segmentation_image_cluster 
-
         else:
             final_segmentation_image = segmentation_image_cluster
 
