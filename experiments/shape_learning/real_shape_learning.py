@@ -19,54 +19,59 @@ sys.path.extend(["/home/nishadgothoskar/ptamp/pybullet_planning"])
 sys.path.extend(["/home/nishadgothoskar/ptamp"])
 warnings.filterwarnings("ignore")
 
-
-full_filename = "red_lego_multi.pkl"
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs", full_filename)
+test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/spoon_learning.pkl")
 file = open(test_pkl_file,'rb')
-camera_images = pickle.load(file)
-file.close()
+camera_images = pickle.load(file)["camera_images"]
 
-camera_data_file = os.path.join(jax3dp3.utils.get_assets_dir(),"camera_data.pkl")
-gripper_to_cam, (fx,fy,cx,cy) = pickle.load(open(camera_data_file,"rb"))
-gripper_pose_to_cam_pose = jnp.array(gripper_to_cam)
+observations = [jax3dp3.Jax3DP3Observation.construct_from_camera_image(img, near=0.01, far=2.0) for img in camera_images]
+print('len(observations):');print(len(observations))
 
-h,w = camera_images[0]["rgb"].shape[:2]
-
-
-observations = [
-    jax3dp3.Jax3DP3Observation.construct_from_aidan_dict(d) for d in camera_images
-]
-for i in range(len(observations)):
-    observations[i].camera_pose = observations[i].camera_pose @ gripper_pose_to_cam_pose
-    observations[i].camera_params = (h,w,fx,fy,cx,cy,0.01, 5.0)
-
-rgb_viz = []
-for obs in observations:
-    rgb_viz.append(
-        jax3dp3.viz.get_rgb_image(obs.rgb, 255.0)
-    )
-jax3dp3.viz.multi_panel(rgb_viz).save("rgb.png")
-
-
+observation = observations[-1]
 state = jax3dp3.OnlineJax3DP3()
-state.setup_on_initial_frame(observations[0], [],[])
-jax3dp3.setup_visualizer()
 
-clouds = []
-clouds_in_world_frame = []
-for observation in observations:
-    obs_point_cloud_image = state.process_depth_to_point_cloud_image(observation.depth)
-    cloud = t3d.point_cloud_image_to_points(obs_point_cloud_image)
-    clouds.append(cloud)
-    clouds_in_world_frame.append(t3d.apply_transform(cloud, observation.camera_pose))
-fused_cloud = jnp.vstack(clouds_in_world_frame)
+state.setup_on_initial_frame(observations[-1], [], [])
 
-import distinctipy
-colors = distinctipy.get_colors(len(clouds_in_world_frame), pastel_factor=0.2)
-jax3dp3.clear()
-for i in range(len(clouds_in_world_frame)):
-    jax3dp3.show_cloud(f"{i}", clouds_in_world_frame[i]*3.0, color=np.array(colors[i]))
+all_clouds = []
+indices = range(len(observations))
+self = state
+for i in indices:
+    observation = observations[i]
 
-state.learn_new_object(observations, 1)
+    obs_point_cloud_image = self.process_depth_to_point_cloud_image(observation.depth)
+    segmentation_image, dashboard_viz  = self.segment_scene(
+        observation.rgb, obs_point_cloud_image
+    )
+    dashboard_viz.save(f"shape_learning_{i}.png")
 
-from IPython import embed; embed()
+    unique = jnp.unique(segmentation_image)
+    all_seg_ids = unique[unique != -1]
+
+    segment_clouds = []
+    dist_to_center = []
+    for seg_id in all_seg_ids: 
+        cloud = t3d.apply_transform(
+            t3d.point_cloud_image_to_points(
+                jax3dp3.get_image_masked(obs_point_cloud_image, segmentation_image, seg_id)
+            ),
+            observation.camera_pose
+        )
+        segment_clouds += [cloud]
+        dist_to_center += [
+            jnp.linalg.norm(jnp.mean(cloud, axis=0) - jnp.array([0.5, 0.0, 0.0]))
+        ]
+    best_cloud = segment_clouds[np.argmin(dist_to_center)]
+    # jax3dp3.show_cloud("c1", segment_clouds[1])
+    all_clouds.append(best_cloud)
+
+
+fused_clouds_over_time = [all_clouds[0]]
+for i in range(1, len(all_clouds)):
+    fused_cloud = fused_clouds_over_time[-1]
+    best_transform = jax3dp3.icp.icp_open3d(all_clouds[i], fused_cloud)
+    fused_cloud = jnp.vstack(
+        [
+            fused_cloud,
+            t3d.apply_transform(all_clouds[i], best_transform)
+        ]
+    )
+    fused_clouds_over_time.append(fused_cloud)

@@ -85,7 +85,7 @@ def hstack_images(images, border = 10):
     running_w = 0
     for img in images:
         w,h = img.size
-        full_image.paste(img, (int(max_h/2 - h/2), running_w))
+        full_image.paste(img, (running_w, int(max_h/2 - h/2)))
         running_w += w + border
     return full_image
 
