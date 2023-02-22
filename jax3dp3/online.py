@@ -132,7 +132,7 @@ class OnlineJax3DP3(object):
                 final_segmentation_image = segmentation_image_cluster 
             else:    
                 final_segmentation_image = np.zeros(segmentation_image_cluster.shape) - 1
-                final_cluster_id = 0
+                max_cluster_id = 0
                 for cluster_id in range(num_objects):
                     print("Processing cluster id = ", cluster_id)
 
@@ -142,15 +142,15 @@ class OnlineJax3DP3(object):
                     cluster_region_nn_pred_items = set(np.unique(cluster_region_nn_pred)) - {-1}
 
                     if len(cluster_region_nn_pred_items) == 1:
-                        # print("No further segmentation:cluster id ", final_cluster_id)
-                        final_segmentation_image[cluster_region] = final_cluster_id 
-                        final_cluster_id += 1
+                        # print("No further segmentation:cluster id ", max_cluster_id)
+                        final_segmentation_image[cluster_region] = max_cluster_id 
+                        max_cluster_id += 1
                     else:  # split region 
                         nn_segmentation = segmentation_image_cluster[cluster_region]
-                        final_segmentation_image[cluster_region] = nn_segmentation - nn_segmentation.min() + final_cluster_id
+                        final_segmentation_image[cluster_region] = nn_segmentation - nn_segmentation.min() + max_cluster_id
                         # print("Extra segmentation: cluster id ", np.unique(final_segmentation_image[cluster_region]))
 
-                        final_cluster_id = final_segmentation_image[cluster_region].max() + 1
+                        max_cluster_id = final_segmentation_image[cluster_region].max() + 1
 
         else:
             final_segmentation_image = segmentation_image_cluster
