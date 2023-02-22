@@ -102,10 +102,11 @@ class OnlineJax3DP3(object):
     def segment_scene(self, rgb_original, point_cloud_image, depth_original=None,
         viz=True, use_nn=False
     ):
+        (_, _, orig_fx, orig_fy, orig_cx, orig_cy, near, far) = self.original_camera_params
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
 
         import jax3dp3.segment_scene
-        foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgb_original)[...,None]
+        foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgb_original)[...,None]   # h x w x 1
         foreground_mask_scaled = jax3dp3.utils.resize(np.array(foreground_mask), h,w)
         
 
@@ -120,35 +121,37 @@ class OnlineJax3DP3(object):
 
         if use_nn:
             assert depth_original is not None
-            segmentation_image_nn, _ = self.segment_scene_from_mask_nn(rgb_original, depth_original, foreground_mask)
+            segmentation_image_nn = jax3dp3.segment_scene.get_segmentation_from_img(rgb_original, depth_original, foreground_mask[:,:,0], orig_fx, orig_fy, orig_cx, orig_cy)
+            segmentation_image_nn = jax3dp3.utils.resize(np.array(segmentation_image_nn), h,w)
 
             # process the final segmentation image based on clustering and nn results
             num_objects = int(segmentation_image_cluster.max()) + 1
 
-            final_segmentation_image = np.zeros(segmentation_image_cluster.shape) - 1
-            final_cluster_id = 0
-            for cluster_id in range(num_objects):
-                print("Processing cluster id = ", cluster_id)
-
-                cluster_region = segmentation_image_cluster == cluster_id
-
-                cluster_region_nn_pred = segmentation_image_cluster[cluster_region]
-                cluster_region_nn_pred_items = set(np.unique(cluster_region_nn_pred)) - {-1}
-
-                if len(cluster_region_nn_pred_items) == 1:
-                    # print("No further segmentation:cluster id ", final_cluster_id)
-                    final_segmentation_image[cluster_region] = final_cluster_id 
-                    final_cluster_id += 1
-                else:  # split region 
-                    nn_segmentation = segmentation_image_cluster[cluster_region]
-                    final_segmentation_image[cluster_region] = nn_segmentation - nn_segmentation.min() + final_cluster_id
-                    # print("Extra segmentation: cluster id ", np.unique(final_segmentation_image[cluster_region]))
-
-                    final_cluster_id = final_segmentation_image[cluster_region].max() + 1
-
             if segmentation_image_nn is None:
                 warnings.warn("Segmentation NN failed; using clustering results")
                 final_segmentation_image = segmentation_image_cluster 
+            else:    
+                final_segmentation_image = np.zeros(segmentation_image_cluster.shape) - 1
+                final_cluster_id = 0
+                for cluster_id in range(num_objects):
+                    print("Processing cluster id = ", cluster_id)
+
+                    cluster_region = segmentation_image_cluster == cluster_id
+
+                    cluster_region_nn_pred = segmentation_image_cluster[cluster_region]
+                    cluster_region_nn_pred_items = set(np.unique(cluster_region_nn_pred)) - {-1}
+
+                    if len(cluster_region_nn_pred_items) == 1:
+                        # print("No further segmentation:cluster id ", final_cluster_id)
+                        final_segmentation_image[cluster_region] = final_cluster_id 
+                        final_cluster_id += 1
+                    else:  # split region 
+                        nn_segmentation = segmentation_image_cluster[cluster_region]
+                        final_segmentation_image[cluster_region] = nn_segmentation - nn_segmentation.min() + final_cluster_id
+                        # print("Extra segmentation: cluster id ", np.unique(final_segmentation_image[cluster_region]))
+
+                        final_cluster_id = final_segmentation_image[cluster_region].max() + 1
+
         else:
             final_segmentation_image = segmentation_image_cluster
 
@@ -176,36 +179,6 @@ class OnlineJax3DP3(object):
         foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgb_original)
 
         return foreground_mask
- 
-    def segment_scene_from_mask_nn(self, rgb_original, depth_original, foreground_mask, 
-                                viz=True):
-        
-        (_, _, orig_fx, orig_fy, orig_cx, orig_cy, near, far) = self.original_camera_params
-        (h, w, _, _, _, _, near, far) = self.camera_params 
-        # from IPython import embed; embed()
-
-        try:
-            # _, segmentation_image = jax3dp3.segment_scene.get_segmentation(rgb_original, depth_original, fx, fy, cx, cy)
-            # segmentation_image = segmentation_image[0]
-            segmentation_image = jax3dp3.segment_scene.get_segmentation_from_img(rgb_original, depth_original, foreground_mask, orig_fx, orig_fy, orig_cx, orig_cy)
-            # from IPython import embed; embed()
-            segmentation_image = jax3dp3.utils.resize(np.array(segmentation_image), h,w)
-
-        except:
-            warnings.warn("WARNING: Segmentation net failed; returning None")
-            return None, None
-        
-        viz_image = None
-        if viz:
-            viz_image = jax3dp3.viz.multi_panel(
-                [
-                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0),h,w),
-                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original * foreground_mask[:,:,None], 255.0),h,w),
-                    jax3dp3.viz.get_depth_image(segmentation_image + 1, max=segmentation_image.max() + 1),
-                ],
-                labels=["RGB", "RGB Masked", "Segmentation. {:d}".format(int(segmentation_image.max() + 1))],
-            )
-        return segmentation_image, viz_image  
         
     def classify_segment(
         self,
