@@ -221,3 +221,19 @@ def unproject_depth(
         np.einsum('ij,j...->i...', np.linalg.inv(K), full_vec), 0, -1
     )
     return coords_in_camera
+
+
+def transform_from_pos_target_up(pos, target, up):
+    z = target- pos
+    z = z / jnp.linalg.norm(z)
+
+    x = jnp.cross(up,z)
+    x = x / jnp.linalg.norm(x)
+
+    y = jnp.cross(z,x)
+    y = y / jnp.linalg.norm(y)
+
+    R = jnp.hstack([
+        x.T,y.T,z.T
+    ])
+    return transform_from_rot_and_pos(R, pos)

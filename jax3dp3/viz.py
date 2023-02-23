@@ -172,7 +172,8 @@ def multi_panel_vertical(images, middle_width=10, title_border=20, fontsize=20):
 
     return dst
     
-
+def distinct_colors(num_colors, pastel_factor=0.5):
+    return distinctipy.get_colors(num_colors, pastel_factor=pastel_factor)
 
 # Max Val
 

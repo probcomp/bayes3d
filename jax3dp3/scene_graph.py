@@ -82,7 +82,7 @@ def absolute_poses_from_scene_graph(start_poses, box_dims, edges, contact_params
         new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0, 0))(poses, box_dims, edges, contact_params, face_parent, face_child)
         return (new_poses, new_poses)
     return jax.lax.scan(_f, start_poses, jnp.ones(edges.shape[0]))[0]
-
+absolute_poses_from_scene_graph_jit = jax.jit(absolute_poses_from_scene_graph)
 
 def enumerate_contact_and_face_parameters(min_x,min_y,min_angle, max_x, max_y, max_angle, num_x, num_y, num_angle, faces):
     contact_params_sweep = jax3dp3.enumerations.make_translation_grid_enumeration_3d(

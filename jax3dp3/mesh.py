@@ -7,7 +7,7 @@ from itertools import product
 import open3d as o3d
 
 def center_mesh(mesh):
-    _, pose = jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)
+    _, pose = jax3dp3.utils.aabb(mesh.vertices)
     shift = np.array(pose[:3,3])
     mesh.vertices = mesh.vertices - shift
     return mesh

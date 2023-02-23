@@ -46,7 +46,7 @@ class OnlineJax3DP3(object):
         self.model_box_dims = jnp.vstack(
             [
                 self.model_box_dims,
-                jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0]
+                jax3dp3.utils.aabb(mesh.vertices)[0]
             ]
         )
         if mesh_name is None:

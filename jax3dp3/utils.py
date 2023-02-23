@@ -84,7 +84,7 @@ def make_cube_point_cloud(side_width, num_points):
     object_model_cloud = np.vstack(all_faces)
     return jnp.array(object_model_cloud)
 
-def axis_aligned_bounding_box(object_points):
+def aabb(object_points):
     maxs = jnp.max(object_points,axis=0)
     mins = jnp.min(object_points,axis=0)
     dims = (maxs - mins)
@@ -109,7 +109,7 @@ def find_plane(point_cloud, threshold):
     return plane_pose
 
 def get_bounding_box_z_axis_aligned(point_cloud):
-    dims, pose = axis_aligned_bounding_box(point_cloud)
+    dims, pose = aabb(point_cloud)
     point_cloud_centered = t3d.apply_transform(point_cloud, t3d.inverse_pose(pose))
     
     (cx,cy), (width,height), rotation_deg = cv2.minAreaRect(np.array(point_cloud_centered[:,:2]))
@@ -118,7 +118,7 @@ def get_bounding_box_z_axis_aligned(point_cloud):
         jnp.array([cx,cy, 0.0])
     )
     new_pose = pose @ pose_shift
-    dims, _ = axis_aligned_bounding_box( t3d.apply_transform(point_cloud, t3d.inverse_pose(new_pose)))
+    dims, _ = aabb( t3d.apply_transform(point_cloud, t3d.inverse_pose(new_pose)))
     return dims, new_pose
 
 def find_table_pose_and_dims(point_cloud, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
