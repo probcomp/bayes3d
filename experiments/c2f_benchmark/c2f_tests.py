@@ -267,7 +267,7 @@ for test_obj_name in TEST_OBJ_NAMES:
             mesh.vertices = mesh.vertices * model_scaling_factor
             mesh = jax3dp3.mesh.center_mesh(mesh)
 
-            model_box_dims.append(jax3dp3.utils.axis_aligned_bounding_box(mesh.vertices)[0])
+            model_box_dims.append(jax3dp3.utils.aabb(mesh.vertices)[0])
             jax3dp3.load_model(mesh)
         model_box_dims = jnp.array(model_box_dims)
 

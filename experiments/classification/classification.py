@@ -26,13 +26,14 @@ test_pkl_file = os.path.join(j.utils.get_assets_dir(),"sample_imgs/strawberry_er
 
 test_pkl_file = os.path.join(j.utils.get_assets_dir(),"sample_imgs/lego_learning.pkl")
 test_pkl_file = os.path.join(j.utils.get_assets_dir(),"sample_imgs/spoon_learning.pkl")
-test_pkl_file = os.path.join(j.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
 test_pkl_file = os.path.join(j.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
 
 test_pkl_file = os.path.join(j.utils.get_assets_dir(),"sample_imgs/knife_spoon_real.pkl")
 
 test_pkl_file = os.path.join(j.utils.get_assets_dir(),"sample_imgs/knife_spoon_box_real.pkl")
 test_pkl_file = os.path.join(j.utils.get_assets_dir(),"sample_imgs/knife_sim.pkl")
+
+test_pkl_file = os.path.join(j.utils.get_assets_dir(),"sample_imgs/demo2_nolight.pkl")
 file = open(test_pkl_file,'rb')
 camera_images = pickle.load(file)["camera_images"]
 

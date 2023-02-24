@@ -8,7 +8,6 @@ import jax3dp3.pybullet
 import jax.numpy as jnp
 import os
 import pybullet as p
-import pybullet_planning
 import trimesh
 import numpy as np
 
@@ -22,12 +21,10 @@ h, w, fx,fy, cx,cy = (
 )
 near,far = 0.001, 5.0
 
-top_level_dir = os.path.dirname(os.path.dirname(pybullet_planning.__file__))
-model_path = os.path.join(top_level_dir,"models/srl/ycb/024_bowl/textured.obj")
-model_path = os.path.join(top_level_dir,"models/srl/ycb/025_mug/textured.obj")
-model_path = os.path.join(top_level_dir,"models/srl/ycb/035_power_drill/textured.obj")
+
+model_path = os.path.join(j.utils.get_assets_dir() ,"bop/ycbv/models/obj_000013.ply")
 mesh = trimesh.load(model_path)
-mesh = jax3dp3.mesh.center_mesh(mesh)
+mesh.vertices = mesh.vertices / 1000.0
 name= "mug"
 
 camera_pose = t3d.transform_from_rot_and_pos(
@@ -63,6 +60,7 @@ obj_pose = t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), -jnp.pi/4 -
 # j.viz.get_rgb_image(rgb).save("mug_hidden.png")
 
 # np.savez("data.npz", depth=depth)
+
 
 gt_depth =  np.load("data.npz")["depth"]
 camera_params = (h,w,fx,fy,cx,cy,near,far)

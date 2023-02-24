@@ -6,10 +6,12 @@ from collections import namedtuple
 # Declaring namedtuple()
 Intrinsics = namedtuple('Intrinsics', ['height', 'width', 'fx', 'fy', 'cx', 'cy', 'near', 'far'])
 
-RENDERER_ENV = None
-PROJ_LIST = None
-MESHES = []
-MESH_NAMES = []
+def K_from_intrinsics(intrinsics):
+    return np.array([
+        [intrinsics.fx ,0.0, intrinsics.cx],
+        [0.0 , intrinsics.fy, intrinsics.cy],
+        [0.0 ,0.0, 1.0],
+    ])
 
 def scale_camera_parameters(intrinsics, scaling_factor):
     new_fx = intrinsics.fx * scaling_factor

@@ -67,19 +67,18 @@ def c2f_contact_parameters(
 
             new_contact_param_sweep = contact_params + contact_param_sweep_delta
             
-            pose_proposals = jax3dp3.scene_graph.pose_from_contact_and_face_params_parallel_jit(
+            pose_proposals, weights, _ = c2f_score_contact_parameters(
+                renderer,
+                obj_idx,
+                obs_point_cloud_image,
+                obs_point_cloud_image_complement,
                 new_contact_param_sweep,
                 face_param_sweep,
-                model_box_dims[obj_idx],
-                contact_plane_pose_in_cam_frame
-            )
-
-            # get best pose proposal
-            rendered_object_images = renderer.render_parallel(pose_proposals, obj_idx)[...,:3]
-            rendered_images = jax3dp3.splice_image_parallel(rendered_object_images, obs_point_cloud_image_complement)
-
-            weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
-                obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
+                r_sweep,
+                contact_plane_pose_in_cam_frame,
+                outlier_prob,
+                outlier_volume,
+                model_box_dims,
             )
             r_idx, best_idx = jnp.unravel_index(weights.argmax(), weights.shape)
 
@@ -96,25 +95,21 @@ def c2f_contact_parameters(
         hypotheses = new_hypotheses
     return hypotheses_over_time
 
-def get_probabilites(hypotheses):
-    scores = jnp.array( [i[0] for i in hypotheses])
-    normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
-    return normalized_scores
 
 
 ###### Occlusion check
-def c2f_occluded_object_pose_distribution(
+def c2f_score_contact_parameters(
+    renderer,
     obj_idx,
-    segmentation_image,
+    obs_point_cloud_image,
+    obs_point_cloud_image_complement,
     contact_param_sweep,
     face_param_sweep,
-    r,
+    r_sweep,
     contact_plane_pose_in_cam_frame,
-    obs_point_cloud_image,
     outlier_prob,
     outlier_volume,
     model_box_dims,
-    camera_params,
 ):
     pose_proposals = jax3dp3.scene_graph.pose_from_contact_and_face_params_parallel_jit(
         contact_param_sweep,
@@ -122,33 +117,18 @@ def c2f_occluded_object_pose_distribution(
         model_box_dims[obj_idx],
         contact_plane_pose_in_cam_frame
     )
-    rendered_object_images = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
-    rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_point_cloud_image)
 
+    # get best pose proposal
+    rendered_object_images = renderer.render_parallel(pose_proposals, obj_idx)[...,:3]
+    rendered_images = jax3dp3.splice_image_parallel(rendered_object_images, obs_point_cloud_image_complement)
+
+    weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
+        obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
+    )
     fully_occluded_weight = jax3dp3.threedp3_likelihood_jit(
-        obs_point_cloud_image, obs_point_cloud_image, r, outlier_prob, outlier_volume
+        obs_point_cloud_image, obs_point_cloud_image, r_sweep[0], outlier_prob, outlier_volume
     )
-    weights = jax3dp3.threedp3_likelihood_parallel_jit(
-        obs_point_cloud_image, rendered_images, r, outlier_prob, outlier_volume
-    )
-
-    good_poses = pose_proposals[weights >= fully_occluded_weight - 0.0001]
-
-    good_pose_centers = good_poses[:,:3,-1]
-    good_pose_centers_cam_frame = good_pose_centers
-
-    (h,w,fx,fy,cx,cy, near, far) = camera_params
-    pixels = jax3dp3.project_cloud_to_pixels(good_pose_centers_cam_frame,fx,fy,cx,cy).astype(jnp.int32)
-
-    seg_ids = []
-    for (x,y) in pixels:
-        if 0<= x < w and 0 <= y < h:
-            seg_ids.append(segmentation_image[int(y),int(x)])
-    ranked_high_value_seg_ids = jnp.unique(jnp.array(seg_ids))
-    ranked_high_value_seg_ids = ranked_high_value_seg_ids[ranked_high_value_seg_ids != -1]
-
-    return good_poses, pose_proposals, ranked_high_value_seg_ids
-
+    return pose_proposals, weights, fully_occluded_weight
 
 def c2f_occlusion_viz(
     good_poses,
@@ -181,3 +161,9 @@ def c2f_occlusion_viz(
         [rgb_viz, overlay_viz, best_occluder],
         labels=["RGB", "Pose Distribution", "Likely Occluder"],
     )
+
+
+def get_probabilites(hypotheses):
+    scores = jnp.array( [i[0] for i in hypotheses])
+    normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
+    return normalized_scores

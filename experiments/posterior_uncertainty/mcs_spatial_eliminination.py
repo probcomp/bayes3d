@@ -21,27 +21,27 @@ h,w,fx,fy,cx,cy,near,far = (
     d["camera_intrinsics"]["far"],
 )
 
-state = j.OnlineJax3DP3()
-state.start_renderer((h,w,fx,fy,cx,cy,near,far),scaling_factor=0.3)
-obs_point_cloud_image = state.process_depth_to_point_cloud_image(depth)
-
-
-j.setup_visualizer()
-j.show_cloud("1", t3d.point_cloud_image_to_points(obs_point_cloud_image))
+far=10.0
+original_intrinsics = j.Intrinsics(h,w,fx,fy,cx,cy,near,far)
+intrinsics = j.camera.scale_camera_parameters(original_intrinsics, 0.3)
+renderer = j.Renderer(intrinsics)
 
 mesh = trimesh.load(os.path.join(j.utils.get_assets_dir(), "sample_objs/sphere.obj"))
 mesh.vertices = mesh.vertices * 0.35
-j.show_cloud("2", mesh.vertices)
+renderer.add_mesh(mesh)
 
-state.add_trimesh(mesh,"ball")
+depth_scaled =  j.utils.resize(depth, intrinsics.height, intrinsics.width)
+segmentation_image  = 1.0 * (depth_scaled > intrinsics.near) * (depth_scaled < intrinsics.far)
+depth_masked, depth_complement = j.get_masked_and_complement_image(depth_scaled, segmentation_image, 1.0, intrinsics)
+obs_point_cloud_image = j.t3d.unproject_depth(depth_scaled, intrinsics)
 
+from IPython import embed; embed()
 
-surface_plane = t3d.transform_from_rot_and_pos(
+contact_plane_pose_in_cam_frame = t3d.transform_from_rot_and_pos(
     t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi/2),
     jnp.array([0.0, floor_plane, 5.0])
 )
-j.show_cloud("1", t3d.apply_transform(t3d.point_cloud_image_to_points(obs_point_cloud_image), jnp.eye(4)))
-j.show_cloud("1", t3d.apply_transform(t3d.point_cloud_image_to_points(obs_point_cloud_image), t3d.inverse_pose(surface_plane) ))
+
 
 table_dims = jnp.array([20.0, 20.0])
 grid_params = (50,50,1)
@@ -51,42 +51,39 @@ contact_param_sweep, face_param_sweep = j.scene_graph.enumerate_contact_and_face
     jnp.arange(1)
 )
 
-segmentation_image = obs_point_cloud_image[:,:,0]
-good_poses, pose_proposals, ranked_high_value_seg_ids = j.c2f.c2f_occluded_object_pose_distribution(
+r_sweep = jnp.array([0.02])
+outlier_prob=0.1
+outlier_volume=1.0
+model_box_dims = jnp.array([j.utils.aabb(m.vertices)[0] for m in renderer.meshes])
+
+pose_proposals, weights, perfect_score = j.c2f.c2f_score_contact_parameters(
+    renderer,
     0,
-    segmentation_image,
+    obs_point_cloud_image,
+    obs_point_cloud_image,
     contact_param_sweep,
     face_param_sweep,
-    0.01,
-    surface_plane,
-    obs_point_cloud_image,
-    0.01,
-    1.0,
-    state.model_box_dims,
-    state.camera_params,
+    r_sweep,
+    contact_plane_pose_in_cam_frame,
+    outlier_prob,
+    outlier_volume,
+    model_box_dims,
 )
-print(good_poses.shape)
 
-far_plane = 10.0
-depth_viz = j.viz.get_depth_image(obs_point_cloud_image[:,:,2],max=far_plane)
-depth_viz.save("depth.png")
+good_poses = pose_proposals[weights[0,:] >= (perfect_score - 0.0001)]
 
-good_poses_image = j.render_multiobject(good_poses, [0 for _ in range(good_poses.shape[0])])
+good_poses_image = renderer.render_multiobject(good_poses, [0 for _ in range(good_poses.shape[0])])
 posterior = j.viz.get_depth_image(good_poses_image[:,:,2], max=far)
 
+depth_viz = j.get_depth_image(depth_scaled,max=intrinsics.far)
 j.viz.multi_panel(
     [
         depth_viz,
         posterior,
-        j.viz.overlay_image(depth_viz, posterior, alpha=0.7)
+        j.viz.overlay_image(depth_viz, posterior, alpha=0.6)
     ],
     labels=["Observed Depth", "Posterior", "Overlay"],
     label_fontsize=15
 ).save("overlay.png")
 
-
-occlusion_viz.save("occlusion.png")
-
-j.clear()
-j.show_cloud("1", t3d.point_cloud_image_to_points(obs_point_cloud_image))
-j.show_cloud("3", t3d.apply_transform(mesh.vertices,good_poses[0]), color=j.RED)
+from IPython import embed; embed()

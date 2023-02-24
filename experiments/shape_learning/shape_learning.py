@@ -99,6 +99,6 @@ jax3dp3.meshcat.VISUALIZER.delete()
 
 
 
-bbox = jax3dp3.utils.axis_aligned_bounding_box(cloud)
+bbox = jax3dp3.utils.aabb(cloud)
 
 from IPython import embed; embed()
