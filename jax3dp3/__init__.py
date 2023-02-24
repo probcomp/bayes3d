@@ -18,3 +18,4 @@ from . import scene_graph
 from . import ycb_loader
 from . import occlusion
 from . import blenderproc
+from . import kubric
