@@ -3,6 +3,8 @@ import heapq
 import jax
 import jax.numpy as jnp
 import jax3dp3
+import jax3dp3 as j
+import jax3dp3.transforms_3d as t3d
 import numpy as np
 
 def make_schedules(grid_widths, angle_widths, grid_params):
@@ -18,22 +20,41 @@ def make_schedules(grid_widths, angle_widths, grid_params):
         )
         contact_param_sched.append(c)
         face_param_sched.append(f)
-    return contact_param_sched, face_param_sched
+    return (contact_param_sched, face_param_sched)
 
 
 def c2f_contact_parameters(
-    hypotheses,
-    contact_param_sched,
-    face_param_sched,
-    r_sweep,
-    contact_plane_pose,
+    renderer,
     obs_point_cloud_image,
-    obs_image_complement,
+    obs_point_cloud_image_masked,
+    obs_point_cloud_image_complement,
+    sched,
+    contact_plane_pose_in_cam_frame,
+    r_sweep,
     outlier_prob,
     outlier_volume,
-    model_box_dims
+    model_box_dims,
 ):
+    contact_param_sched, face_param_sched = sched
+
+    masked_cloud = obs_point_cloud_image_masked.reshape(-1, 3)
+    masked_cloud = masked_cloud[masked_cloud[:,2] < renderer.intrinsics.far,:]
+    points_in_table_ref_frame =  t3d.apply_transform(
+        masked_cloud,
+        t3d.inverse_pose(contact_plane_pose_in_cam_frame)
+    )
+    point_seg = j.utils.segment_point_cloud(points_in_table_ref_frame, 0.1)
+    points_filtered = points_in_table_ref_frame[point_seg == j.utils.get_largest_cluster_id_from_segmentation(point_seg)]
+    center_x, center_y, _ = ( points_filtered.min(0) + points_filtered.max(0))/2
+    
+    contact_init = jnp.array([center_x, center_y, 0.0])
+
+    hypotheses = []
+    for obj_idx in jnp.arange(len(renderer.meshes)):
+        hypotheses += [(-jnp.inf, obj_idx, contact_init, None)]
+
     hypotheses_over_time = [hypotheses]
+
 
     for c2f_iter in range(len(contact_param_sched)):
         contact_param_sweep_delta, face_param_sweep = contact_param_sched[c2f_iter], face_param_sched[c2f_iter]
@@ -50,14 +71,13 @@ def c2f_contact_parameters(
                 new_contact_param_sweep,
                 face_param_sweep,
                 model_box_dims[obj_idx],
-                contact_plane_pose
+                contact_plane_pose_in_cam_frame
             )
 
             # get best pose proposal
-            rendered_object_images = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
-            rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_image_complement)
+            rendered_object_images = renderer.render_parallel(pose_proposals, obj_idx)[...,:3]
+            rendered_images = jax3dp3.splice_image_parallel(rendered_object_images, obs_point_cloud_image_complement)
 
-            
             weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
                 obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
             )
@@ -89,7 +109,7 @@ def c2f_occluded_object_pose_distribution(
     contact_param_sweep,
     face_param_sweep,
     r,
-    contact_plane_pose,
+    contact_plane_pose_in_cam_frame,
     obs_point_cloud_image,
     outlier_prob,
     outlier_volume,
@@ -100,7 +120,7 @@ def c2f_occluded_object_pose_distribution(
         contact_param_sweep,
         face_param_sweep,
         model_box_dims[obj_idx],
-        contact_plane_pose
+        contact_plane_pose_in_cam_frame
     )
     rendered_object_images = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
     rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_point_cloud_image)

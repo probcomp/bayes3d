@@ -1,11 +1,41 @@
 import jax3dp3.nvdiffrast.common as dr
 import torch
 import jax3dp3.camera
+import jax3dp3 as j
+import jax3dp3.transforms_3d as t3d
 import trimesh
 import jax.numpy as jnp
 import jax
 import numpy as np
 import jax.dlpack
+
+
+class RGBD(object):
+    def __init__(self, rgb, depth, camera_pose, intrinsics):
+        self.intrinsics = intrinsics
+        self.rgb = rgb
+        self.depth = depth
+        self.camera_pose = camera_pose
+
+    def construct_from_camera_image(camera_image, near=0.001, far=5.0):
+        depth = np.array(camera_image.depthPixels)
+        rgb = np.array(camera_image.rgbPixels)
+        camera_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose)
+        K = camera_image.camera_matrix
+        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
+        h,w = depth.shape
+        near = 0.001
+        return RGBD(rgb, depth, camera_pose, j.Intrinsics(h,w,fx,fy,cx,cy,near,far))
+
+    def construct_from_aidan_dict(d, near=0.001, far=5.0):
+        depth = np.array(d["depth"] / 1000.0) 
+        camera_pose = t3d.pybullet_pose_to_transform(d["extrinsics"])
+        rgb = np.array(d["rgb"])
+        K = d["intrinsics"][0]
+        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
+        h,w = depth.shape
+        observation = RGBD(rgb, depth, camera_pose, j.Intrinsics(h,w,fx,fy,cx,cy,near,far))
+        return observation
 
 
 class Renderer(object):
@@ -66,50 +96,31 @@ class Renderer(object):
         images_torch = self.render_to_torch(poses, indices, on_object=on_object)
         return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
 
-def render_point_cloud(point_cloud, h, w, fx,fy,cx,cy, near, far, pixel_smudge):
+def render_point_cloud(point_cloud, intrinsics, pixel_smudge=0):
     transformed_cloud = point_cloud
     point_cloud = jnp.vstack([jnp.zeros((1, 3)), transformed_cloud])
-    pixels = project_cloud_to_pixels(point_cloud, fx,fy,cx,cy)
-    x, y = jnp.meshgrid(jnp.arange(w), jnp.arange(h))
+    pixels = project_cloud_to_pixels(point_cloud, intrinsics)
+    x, y = jnp.meshgrid(jnp.arange(intrinsics.width), jnp.arange(intrinsics.height))
     matches = (jnp.abs(x[:, :, None] - pixels[:, 0]) <= pixel_smudge) & (jnp.abs(y[:, :, None] - pixels[:, 1]) <= pixel_smudge)
     matches = matches * (far - point_cloud[:,-1][None, None, :])
     a = jnp.argmax(matches, axis=-1)    
     return point_cloud[a]
     
-def project_cloud_to_pixels(point_cloud, fx,fy,cx,cy):
+def project_cloud_to_pixels(point_cloud, intrinsics):
     point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
-    temp1 = point_cloud_normalized[:, :2] * jnp.array([fx,fy])
-    temp2 = temp1 + jnp.array([cx, cy])
+    temp1 = point_cloud_normalized[:, :2] * jnp.array([intrinsics.fx,intrinsics.fy])
+    temp2 = temp1 + jnp.array([intrinsics.cx, intrinsics.cy])
     pixels = jnp.round(temp2) 
     return pixels
 
-def get_image_masked(point_cloud_image, segmentation_image, segmentation_id):
-    mask =  (segmentation_image == segmentation_id)[:,:,None]
-    image_masked = point_cloud_image * mask
-    return image_masked
-
-def get_image_masked_and_complement(point_cloud_image, segmentation_image, segmentation_id, far):
-    mask =  (segmentation_image == segmentation_id)[:,:,None]
-    image_masked = point_cloud_image * mask
-    image_masked_complement = point_cloud_image * (1.0 - mask) + mask * far
-    return image_masked, image_masked_complement
-
-def get_complement_masked_images(images_unmasked, gt_img_complement):
-    blocked = images_unmasked[:,:,:,2] >= gt_img_complement[None,:,:,2] 
-    nonzero = gt_img_complement[None, :, :, 2] != 0
-
-    images = images_unmasked * (1-(blocked * nonzero))[:,:,:, None]  # rendered model images
-    return images
-
-def get_complement_masked_image(image_unmasked, gt_img_complement):
-    blocked = image_unmasked[:,:,2] >= gt_img_complement[:,:,2] 
-    nonzero = gt_img_complement[:, :, 2] != 0
-
-    image = image_unmasked * (1-(blocked * nonzero))[:,:,None] # rendered model image
-    return image
+def get_masked_and_complement_image(depth_image, segmentation_image, segmentation_id, intrinsics):
+    mask =  (segmentation_image == segmentation_id)
+    masked_image = depth_image * mask + intrinsics.far * (1.0 - mask)
+    complement_image = depth_image * (1.0 - mask) + intrinsics.far * mask
+    return masked_image, complement_image
 
 
-def splice_in_object_parallel(rendered_object_image, obs_image_complement):
+def splice_image_parallel(rendered_object_image, obs_image_complement):
     keep_masks = jnp.logical_or(
         (rendered_object_image[:,:,:,2] <= obs_image_complement[None, :,:, 2]) * 
         rendered_object_image[:,:,:,2] > 0.0

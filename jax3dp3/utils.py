@@ -121,7 +121,7 @@ def get_bounding_box_z_axis_aligned(point_cloud):
     dims, _ = aabb( t3d.apply_transform(point_cloud, t3d.inverse_pose(new_pose)))
     return dims, new_pose
 
-def find_table_pose_and_dims(point_cloud, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
+def find_plane_and_dims(point_cloud, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
     plane_pose = find_plane(np.array(point_cloud), ransac_threshold)
     points_in_plane_frame = t3d.apply_transform(point_cloud, jnp.linalg.inv(plane_pose))
     inliers = (jnp.abs(points_in_plane_frame[:,2]) < inlier_threshold)
@@ -176,3 +176,17 @@ def voxelize(data, resolution):
 
 def resize(depth, h, w):
     return cv2.resize(depth, (w,h),interpolation=0)
+
+def infer_table_plane(point_cloud_image, camera_pose, intrinsics, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
+    point_cloud_flat = point_cloud_image.reshape(-1, 3)
+    point_cloud_flat_not_far = point_cloud_flat[point_cloud_flat[:,2] < intrinsics.far, :]
+    table_pose, table_dims = find_plane_and_dims(
+        t3d.apply_transform(point_cloud_flat_not_far, camera_pose), 
+        ransac_threshold=ransac_threshold, inlier_threshold=inlier_threshold, segmentation_threshold=segmentation_threshold
+    )
+
+    table_pose_in_cam_frame = t3d.inverse_pose(camera_pose) @ table_pose
+    if table_pose_in_cam_frame[2,2] > 0:
+        table_pose = table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
+    
+    return table_pose, table_dims

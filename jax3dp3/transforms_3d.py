@@ -202,9 +202,12 @@ def rotation_matrix_to_quaternion(matrix):
 
 
 def unproject_depth(
-    depth: np.ndarray,
+    depth_in: np.ndarray,
     intrinsics,
 ) -> np.ndarray:
+    depth = jnp.array(depth_in)
+    depth.at[depth > intrinsics.far].set(intrinsics.far)
+    depth.at[depth < intrinsics.near].set(intrinsics.far)
     K = jnp.array(
         [
             [intrinsics.fx, 0.0, intrinsics.cx],

@@ -5,6 +5,8 @@ import torch.utils.data
 import os, sys
 import random
 
+import jax3dp3
+
 from PIL import Image
 import numpy as np
 import cv2
@@ -29,6 +31,78 @@ BACKGROUND_SUBTRACTION_INTERFACE = None
 SEGMENTATION_NETWORK = None
 SEGMENTATION_CROP_NETWORK = None
 
+
+def segment_scene(rgb_original, point_cloud_image, intrinsics, depth_original=None, intrinsics_original=None, use_nn=False,  viz=True):
+    far = intrinsics.far
+    h,w = intrinsics.height, intrinsics.width
+
+
+    foreground_mask = get_foreground_mask(rgb_original)[...,None]   # h x w x 1
+    foreground_mask_scaled = jax3dp3.utils.resize(np.array(foreground_mask), h,w)
+    
+    point_cloud_image_above_table = (
+        point_cloud_image * 
+        foreground_mask_scaled[..., None]
+    )
+
+    segmentation_image_cluster = jax3dp3.utils.segment_point_cloud_image(
+        point_cloud_image_above_table, threshold=0.04, min_points_in_cluster=40
+    )
+
+    if use_nn:
+        assert depth_original is not None
+        orig_fx, orig_fy, orig_cx, orig_cy = intrinsics_original.fx, intrinsics_original.fy, intrinsics_original.cx, intrinsics_original.cy
+        segmentation_image_nn = jax3dp3.segment_scene.get_segmentation_from_img(rgb_original, depth_original, foreground_mask[:,:,0], orig_fx, orig_fy, orig_cx, orig_cy)
+        segmentation_image_nn = jax3dp3.utils.resize(np.array(segmentation_image_nn), h,w)
+
+        # process the final segmentation image based on clustering and nn results
+        num_objects = int(segmentation_image_cluster.max()) + 1
+
+        if segmentation_image_nn is None:
+            warnings.warn("Segmentation NN failed; using clustering results")
+            final_segmentation_image = segmentation_image_cluster 
+        else:    
+            final_segmentation_image = np.zeros(segmentation_image_cluster.shape) - 1
+            max_cluster_id = 0
+            for cluster_id in range(num_objects):
+                print("Processing cluster id = ", cluster_id)
+
+                cluster_region = segmentation_image_cluster == cluster_id
+
+                cluster_region_nn_pred = segmentation_image_cluster[cluster_region]
+                cluster_region_nn_pred_items = set(np.unique(cluster_region_nn_pred)) - {-1}
+
+                if len(cluster_region_nn_pred_items) == 1:
+                    # print("No further segmentation:cluster id ", max_cluster_id)
+                    final_segmentation_image[cluster_region] = max_cluster_id 
+                    max_cluster_id += 1
+                else:  # split region 
+                    nn_segmentation = segmentation_image_cluster[cluster_region]
+                    final_segmentation_image[cluster_region] = nn_segmentation - nn_segmentation.min() + max_cluster_id
+                    # print("Extra segmentation: cluster id ", np.unique(final_segmentation_image[cluster_region]))
+
+                    max_cluster_id = final_segmentation_image[cluster_region].max() + 1
+
+    else:
+        final_segmentation_image = segmentation_image_cluster
+
+    viz_image = None
+    if viz:
+        unique_vals = np.unique(final_segmentation_image)
+        unique_vals = unique_vals[unique_vals != -1]
+        images = [jax3dp3.viz.get_depth_image(final_segmentation_image==i, max=1.0) for i in unique_vals]
+        viz_image = jax3dp3.viz.multi_panel(
+            [
+                jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0),h,w),
+                jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original * foreground_mask, 255.0),h,w),
+                jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=far),
+                jax3dp3.viz.get_depth_image(point_cloud_image_above_table[:,:,2],  max=far),
+                jax3dp3.viz.get_depth_image(final_segmentation_image + 1, max=final_segmentation_image.max() + 1),
+                *images
+            ],
+            labels=["RGB", "RGB Masked", "Depth", "Above Table", "Segmentation : {:d}".format(int(final_segmentation_image.max() + 1)), *[f"{i}" for i in unique_vals] ] ,
+        )
+    return final_segmentation_image, foreground_mask, viz_image
 
 def compute_xyz(depth_img, fx, fy, px, py, height, width):
     indices = util_.build_matrix_of_indices(height, width)

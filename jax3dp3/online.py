@@ -1,4 +1,4 @@
-import jax3dp3
+import jax3dp3 as j
 import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
 import jax
@@ -10,7 +10,7 @@ import jax3dp3.icp
 import warnings
 
 
-class OnlineJax3DP3(object):
+class Onlinej(object):
     def __init__(self):
         self.original_camera_params = None
 
@@ -29,24 +29,24 @@ class OnlineJax3DP3(object):
     def start_renderer(self, camera_params, scaling_factor=1.0):
         orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far = camera_params
         self.original_camera_params = (orig_h, orig_w, orig_fx, orig_fy, orig_cx, orig_cy, near, far)
-        h,w,fx,fy,cx,cy = jax3dp3.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
+        h,w,fx,fy,cx,cy = j.camera.scale_camera_parameters(orig_h,orig_w,orig_fx,orig_fy,orig_cx,orig_cy, scaling_factor)
         self.camera_params = (h,w,fx,fy,cx,cy, near, far)
 
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-        # jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
-        jax3dp3.setup_renderer(h, w, fx, fy, cx, cy, near, far)
+        # j.setup_renderer(h, w, fx, fy, cx, cy, near, far)
+        j.setup_renderer(h, w, fx, fy, cx, cy, near, far)
         self.model_box_dims = jnp.zeros((0,3))
         self.mesh_names = []
         self.meshes = []
 
     def add_trimesh(self, mesh, mesh_name=None, mesh_scaling_factor=1.0):
         mesh.vertices = mesh.vertices * mesh_scaling_factor
-        mesh = jax3dp3.mesh.center_mesh(mesh)
+        mesh = j.mesh.center_mesh(mesh)
         self.meshes.append(mesh)
         self.model_box_dims = jnp.vstack(
             [
                 self.model_box_dims,
-                jax3dp3.utils.aabb(mesh.vertices)[0]
+                j.utils.aabb(mesh.vertices)[0]
             ]
         )
         if mesh_name is None:
@@ -55,12 +55,12 @@ class OnlineJax3DP3(object):
         self.mesh_names.append(
             mesh_name
         )
-        jax3dp3.load_model(mesh)
+        j.load_model(mesh)
 
     def process_depth_to_point_cloud_image(self, sensor_depth):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
         depth = np.array(sensor_depth)
-        depth = jax3dp3.utils.resize(depth, h, w)
+        depth = j.utils.resize(depth, h, w)
         depth[depth > far] = far
         depth[depth < near] = far
         point_cloud_image = jnp.array(t3d.depth_to_point_cloud_image(depth, fx, fy, cx, cy))
@@ -69,78 +69,8 @@ class OnlineJax3DP3(object):
     def process_segmentation_mask(self, segmentation):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
         seg = np.array(segmentation)
-        seg = jax3dp3.utils.resize(seg, h, w)
+        seg = j.utils.resize(seg, h, w)
         return seg
-    
-    def segment_scene(self, rgb_original, point_cloud_image, depth_original=None,
-        viz=True, use_nn=False
-    ):
-        (_, _, orig_fx, orig_fy, orig_cx, orig_cy, near, far) = self.original_camera_params
-        (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-
-        import jax3dp3.segment_scene
-        foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgb_original)[...,None]   # h x w x 1
-        foreground_mask_scaled = jax3dp3.utils.resize(np.array(foreground_mask), h,w)
-        
-
-        point_cloud_image_above_table = (
-            point_cloud_image * 
-            foreground_mask_scaled[..., None]
-        )
-
-        segmentation_image_cluster = jax3dp3.utils.segment_point_cloud_image(
-            point_cloud_image_above_table, threshold=0.04, min_points_in_cluster=40
-        )
-
-        if use_nn:
-            assert depth_original is not None
-            segmentation_image_nn = jax3dp3.segment_scene.get_segmentation_from_img(rgb_original, depth_original, foreground_mask[:,:,0], orig_fx, orig_fy, orig_cx, orig_cy)
-            segmentation_image_nn = jax3dp3.utils.resize(np.array(segmentation_image_nn), h,w)
-
-            # process the final segmentation image based on clustering and nn results
-            num_objects = int(segmentation_image_cluster.max()) + 1
-
-            if segmentation_image_nn is None:
-                warnings.warn("Segmentation NN failed; using clustering results")
-                final_segmentation_image = segmentation_image_cluster 
-            else:    
-                final_segmentation_image = np.zeros(segmentation_image_cluster.shape) - 1
-                max_cluster_id = 0
-                for cluster_id in range(num_objects):
-                    print("Processing cluster id = ", cluster_id)
-
-                    cluster_region = segmentation_image_cluster == cluster_id
-
-                    cluster_region_nn_pred = segmentation_image_cluster[cluster_region]
-                    cluster_region_nn_pred_items = set(np.unique(cluster_region_nn_pred)) - {-1}
-
-                    if len(cluster_region_nn_pred_items) == 1:
-                        # print("No further segmentation:cluster id ", max_cluster_id)
-                        final_segmentation_image[cluster_region] = max_cluster_id 
-                        max_cluster_id += 1
-                    else:  # split region 
-                        nn_segmentation = segmentation_image_cluster[cluster_region]
-                        final_segmentation_image[cluster_region] = nn_segmentation - nn_segmentation.min() + max_cluster_id
-                        # print("Extra segmentation: cluster id ", np.unique(final_segmentation_image[cluster_region]))
-
-                        max_cluster_id = final_segmentation_image[cluster_region].max() + 1
-
-        else:
-            final_segmentation_image = segmentation_image_cluster
-
-        viz_image = None
-        if viz:
-            viz_image = jax3dp3.viz.multi_panel(
-                [
-                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0),h,w),
-                    jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original * foreground_mask, 255.0),h,w),
-                    jax3dp3.viz.get_depth_image(point_cloud_image[:,:,2],  max=far),
-                    jax3dp3.viz.get_depth_image(point_cloud_image_above_table[:,:,2],  max=far),
-                    jax3dp3.viz.get_depth_image(final_segmentation_image + 1, max=final_segmentation_image.max() + 1),
-                ],
-                labels=["RGB", "RGB Masked", "Depth", "Above Table", "Segmentation. {:d}".format(int(final_segmentation_image.max() + 1))],
-            )
-        return final_segmentation_image, viz_image
 
     
     def get_foreground_mask(self, rgb_original, point_cloud_image,
@@ -148,8 +78,8 @@ class OnlineJax3DP3(object):
     ):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
 
-        import jax3dp3.segment_scene
-        foreground_mask = jax3dp3.segment_scene.get_foreground_mask(rgb_original)
+        import j.segment_scene
+        foreground_mask = j.segment_scene.get_foreground_mask(rgb_original)
 
         return foreground_mask
         
@@ -168,7 +98,7 @@ class OnlineJax3DP3(object):
     ):
         state = self
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
-        obs_image_masked, obs_image_complement = jax3dp3.get_image_masked_and_complement(
+        obs_image_masked, obs_image_complement = j.get_image_masked_and_complement(
             obs_point_cloud_image, segmentation_image, segmentation_id, far
         )
         contact_init = self.infer_initial_contact_parameters(
@@ -180,7 +110,7 @@ class OnlineJax3DP3(object):
             latent_hypotheses += [(-jnp.inf, obj_idx, contact_init, None)]
 
         start = time.time()
-        hypotheses_over_time = jax3dp3.c2f.c2f_contact_parameters(
+        hypotheses_over_time = j.c2f.c2f_contact_parameters(
             latent_hypotheses,
             self.contact_param_sched,
             self.face_param_sched,
@@ -199,9 +129,9 @@ class OnlineJax3DP3(object):
             return hypotheses_over_time, None
 
         scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
-        normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
+        normalized_scores = j.utils.normalize_log_scores(scores)
 
-        exact_match_score = jax3dp3.threedp3_likelihood_parallel_jit(
+        exact_match_score = j.threedp3_likelihood_parallel_jit(
             obs_point_cloud_image, jnp.array([obs_point_cloud_image]), r_sweep[0], outlier_prob, outlier_volume
         )[0]
         final_scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
@@ -209,16 +139,16 @@ class OnlineJax3DP3(object):
 
         (h,w,fx,fy,cx,cy, near, far) = state.camera_params
         orig_h, orig_w = rgb_original.shape[:2]
-        rgb_viz = jax3dp3.viz.get_rgb_image(rgb_original)
-        mask = jax3dp3.utils.resize((segmentation_image == segmentation_id)* 1.0, orig_h,orig_w)[...,None]
-        rgb_masked_viz = jax3dp3.viz.get_rgb_image(
+        rgb_viz = j.viz.get_rgb_image(rgb_original)
+        mask = j.utils.resize((segmentation_image == segmentation_id)* 1.0, orig_h,orig_w)[...,None]
+        rgb_masked_viz = j.viz.get_rgb_image(
             rgb_original * mask
         )
         images = [
             rgb_viz,
-            jax3dp3.viz.overlay_image(rgb_viz, rgb_masked_viz, alpha=0.6)
+            j.viz.overlay_image(rgb_viz, rgb_masked_viz, alpha=0.6)
         ]
-        top = jax3dp3.viz.multi_panel(
+        top = j.viz.multi_panel(
             images, 
             labels=["RGB Input", "Segment to Classify"],
             label_fontsize=50    
@@ -231,11 +161,11 @@ class OnlineJax3DP3(object):
         labels = []
         for i in order:
             (score, obj_idx, _, pose) = hypotheses_over_time[-1][i]
-            depth = jax3dp3.render_single_object(pose, obj_idx)
-            depth_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(depth[:,:,2], max=1.0),orig_h, orig_w)
+            depth = j.render_single_object(pose, obj_idx)
+            depth_viz = j.viz.resize_image(j.viz.get_depth_image(depth[:,:,2], max=1.0),orig_h, orig_w)
             images.append(
-                jax3dp3.viz.multi_panel(
-                    [jax3dp3.viz.overlay_image(rgb_viz, depth_viz)],
+                j.viz.multi_panel(
+                    [j.viz.overlay_image(rgb_viz, depth_viz)],
                     labels=[
                          "{:s} - {:0.2f}".format(
                             state.mesh_names[object_ids_to_estimate[i]],
@@ -245,7 +175,7 @@ class OnlineJax3DP3(object):
                     label_fontsize=50
                 )
             )
-        final_viz = jax3dp3.viz.vstack_images(
+        final_viz = j.viz.vstack_images(
             [top, *images], border= 20
         )
         return hypotheses_over_time, known_object_scores, obs_image_masked, final_viz
@@ -265,12 +195,12 @@ class OnlineJax3DP3(object):
     ):
 
         table_dims = self.table_dims
-        contact_param_sweep, face_param_sweep = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
+        contact_param_sweep, face_param_sweep = j.scene_graph.enumerate_contact_and_face_parameters(
             -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
             *grid_params,
             jnp.arange(6)
         )
-        good_poses, pose_proposals, ranked_high_value_seg_ids = jax3dp3.c2f.c2f_occluded_object_pose_distribution(
+        good_poses, pose_proposals, ranked_high_value_seg_ids = j.c2f.c2f_occluded_object_pose_distribution(
             obj_idx,
             segmentation_image,
             contact_param_sweep,
@@ -287,7 +217,7 @@ class OnlineJax3DP3(object):
         if not viz:
             return good_poses, None
 
-        occlusion_viz = jax3dp3.c2f.c2f_occlusion_viz(
+        occlusion_viz = j.c2f.c2f_occlusion_viz(
             good_poses,
             pose_proposals,
             ranked_high_value_seg_ids,
@@ -355,7 +285,7 @@ class OnlineJax3DP3(object):
             inference_viz.save(f"classify_{timestep}_seg_id_{seg_id}.png")
 
             scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
-            normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
+            normalized_scores = j.utils.normalize_log_scores(scores)
             
             results.append(
                 (
@@ -388,7 +318,7 @@ class OnlineJax3DP3(object):
             for seg_id in all_seg_ids: 
                 cloud = t3d.apply_transform(
                     t3d.point_cloud_image_to_points(
-                        jax3dp3.get_image_masked(obs_point_cloud_image, segmentation_image, seg_id)
+                        j.get_image_masked(obs_point_cloud_image, segmentation_image, seg_id)
                     ),
                     observation.camera_pose
                 )
@@ -397,13 +327,13 @@ class OnlineJax3DP3(object):
                     jnp.linalg.norm(jnp.mean(cloud, axis=0) - jnp.array([0.5, 0.0, 0.0]))
                 ]
             best_cloud = segment_clouds[np.argmin(dist_to_center)]
-            # jax3dp3.show_cloud("c1", segment_clouds[1])
+            # j.show_cloud("c1", segment_clouds[1])
             all_clouds.append(best_cloud)
 
         fused_clouds_over_time = [all_clouds[0]]
         for i in range(1, len(all_clouds)):
             fused_cloud = fused_clouds_over_time[-1]
-            best_transform = jax3dp3.icp.icp_open3d(all_clouds[i], fused_cloud)
+            best_transform = j.icp.icp_open3d(all_clouds[i], fused_cloud)
             fused_cloud = jnp.vstack(
                 [
                     fused_cloud,
@@ -413,19 +343,19 @@ class OnlineJax3DP3(object):
             fused_clouds_over_time.append(fused_cloud)
 
 
-        jax3dp3.setup_visualizer()
+        j.setup_visualizer()
         
         fused_cloud = fused_clouds_over_time[-1]
         resolution = 0.005
         fused_cloud = np.rint(fused_cloud / 0.005) * 0.005
-        jax3dp3.show_cloud("1", fused_cloud * 3.0)
+        j.show_cloud("1", fused_cloud * 3.0)
         uniq, counts = np.unique(fused_cloud, axis=0, return_counts=True)
         uniq = uniq[counts > 1]
 
-        labels  = jax3dp3.utils.segment_point_cloud(uniq, threshold=0.01)
-        uniq = uniq[labels == jax3dp3.utils.get_largest_cluster_id_from_segmentation(labels)]
-        jax3dp3.clear()
-        jax3dp3.show_cloud("1", uniq * 3.0)
+        labels  = j.utils.segment_point_cloud(uniq, threshold=0.01)
+        uniq = uniq[labels == j.utils.get_largest_cluster_id_from_segmentation(labels)]
+        j.clear()
+        j.show_cloud("1", uniq * 3.0)
 
         fused_cloud = uniq
 
@@ -443,20 +373,20 @@ class OnlineJax3DP3(object):
         all_faces = np.vstack(all_faces)
         learned_mesh = trimesh.Trimesh(vertices=all_vertices, faces=all_faces)
 
-        jax3dp3.show_trimesh("mesh", learned_mesh)
+        j.show_trimesh("mesh", learned_mesh)
 
-        # learned_mesh = jax3dp3.mesh.make_alpha_mesh_from_point_cloud(fused_cloud, 0.01)
-        # learned_mesh = jax3dp3.mesh.center_mesh(learned_mesh)
-        # jax3dp3.show_trimesh("mesh", learned_mesh)
+        # learned_mesh = j.mesh.make_alpha_mesh_from_point_cloud(fused_cloud, 0.01)
+        # learned_mesh = j.mesh.center_mesh(learned_mesh)
+        # j.show_trimesh("mesh", learned_mesh)
 
 
         # import distinctipy        
         # colors = distinctipy.get_colors(len(all_clouds), pastel_factor=0.2)
-        # jax3dp3.clear()
-        # jax3dp3.show_cloud(f"2", fused_clouds_over_time[3]*3.0, color=np.array(colors[2]))
-        # jax3dp3.show_cloud(f"1", jnp.vstack(all_clouds)*3.0, color=np.array(colors[1]))
+        # j.clear()
+        # j.show_cloud(f"2", fused_clouds_over_time[3]*3.0, color=np.array(colors[2]))
+        # j.show_cloud(f"1", jnp.vstack(all_clouds)*3.0, color=np.array(colors[1]))
 
-        # jax3dp3.show_cloud(f"1",
+        # j.show_cloud(f"1",
         #     t3d.apply_transform(
         #         all_clouds[0],
         #         reg_p2p.transformation
@@ -473,7 +403,7 @@ class OnlineJax3DP3(object):
         (h,w,fx,fy,cx,cy, near, far) = self.camera_params
         point_cloud_flat = t3d.point_cloud_image_to_points(point_cloud_image)
         point_cloud_flat_not_far = point_cloud_flat[point_cloud_flat[:,2] < far, :]
-        table_pose, table_dims = jax3dp3.utils.find_table_pose_and_dims(
+        table_pose, table_dims = j.utils.find_table_pose_and_dims(
             t3d.apply_transform(point_cloud_flat_not_far, camera_pose), 
             ransac_threshold=ransac_threshold, inlier_threshold=inlier_threshold, segmentation_threshold=segmentation_threshold
         )
@@ -483,7 +413,7 @@ class OnlineJax3DP3(object):
             table_pose = table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
             
         table_face_param = 2
-        table_surface_plane_pose = jax3dp3.scene_graph.get_contact_plane(
+        table_surface_plane_pose = j.scene_graph.get_contact_plane(
             table_pose,
             table_dims,
             table_face_param
@@ -494,7 +424,7 @@ class OnlineJax3DP3(object):
 
     def set_coarse_to_fine_schedules(self, grid_widths, angle_widths, grid_params):
         assert len(grid_widths) == len(angle_widths) == len(grid_params)
-        self.contact_param_sched, self.face_param_sched = jax3dp3.c2f.make_schedules(
+        self.contact_param_sched, self.face_param_sched = j.c2f.make_schedules(
             grid_widths=grid_widths, angle_widths=angle_widths, grid_params=grid_params
         )
 
@@ -503,35 +433,7 @@ class OnlineJax3DP3(object):
             t3d.point_cloud_image_to_points(image_masked), 
             t3d.inverse_pose(self.table_surface_plane_pose).dot(camera_pose)
         )
-        point_seg = jax3dp3.utils.segment_point_cloud(points_in_table_ref_frame, 0.1)
-        points_filtered = points_in_table_ref_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
+        point_seg = j.utils.segment_point_cloud(points_in_table_ref_frame, 0.1)
+        points_filtered = points_in_table_ref_frame[point_seg == j.utils.get_largest_cluster_id_from_segmentation(point_seg)]
         center_x, center_y, _ = ( points_filtered.min(0) + points_filtered.max(0))/2
         return jnp.array([center_x, center_y, 0.0])
-
-
-class Jax3DP3Observation(object):
-    def __init__(self, rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far):
-        self.camera_params = (h,w,fx,fy,cx,cy, near, far)
-        self.rgb = rgb
-        self.depth = depth
-        self.camera_pose = camera_pose
-
-    def construct_from_camera_image(camera_image, near=0.001, far=5.0):
-        depth = np.array(camera_image.depthPixels)
-        rgb = np.array(camera_image.rgbPixels)
-        camera_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose)
-        K = camera_image.camera_matrix
-        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
-        h,w = depth.shape
-        near = 0.001
-        return Jax3DP3Observation( rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far)
-
-    def construct_from_aidan_dict(d, near=0.001, far=5.0):
-        depth = np.array(d["depth"] / 1000.0) 
-        camera_pose = t3d.pybullet_pose_to_transform(d["extrinsics"])
-        rgb = np.array(d["rgb"])
-        K = d["intrinsics"][0]
-        fx, fy, cx, cy = K[0,0],K[1,1],K[0,2],K[1,2]
-        h,w = depth.shape
-        observation = jax3dp3.Jax3DP3Observation(rgb, depth, camera_pose, h,w,fx,fy,cx,cy,near,far)
-        return observation
