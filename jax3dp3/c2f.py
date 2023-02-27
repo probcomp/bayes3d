@@ -9,18 +9,16 @@ import numpy as np
 
 def make_schedules(grid_widths, angle_widths, grid_params):
     ## version of make_schedules with angle range reduction based on previous iter
-    contact_param_sched = []
-    face_param_sched = []
+    sched = []
 
     for (grid_width, angle_width, grid_param) in zip(grid_widths, angle_widths, grid_params):
-        c, f = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
+        cf = jax3dp3.scene_graph.enumerate_contact_and_face_parameters(
             -grid_width, -grid_width, -angle_width, +grid_width, +grid_width, angle_width, 
             *grid_param,
             jnp.arange(6)
         )
-        contact_param_sched.append(c)
-        face_param_sched.append(f)
-    return (contact_param_sched, face_param_sched)
+        sched.append(cf)
+    return sched
 
 
 def c2f_contact_parameters(
@@ -35,7 +33,6 @@ def c2f_contact_parameters(
     outlier_volume,
     model_box_dims,
 ):
-    contact_param_sched, face_param_sched = sched
 
     masked_cloud = obs_point_cloud_image_masked.reshape(-1, 3)
     masked_cloud = masked_cloud[masked_cloud[:,2] < renderer.intrinsics.far,:]
@@ -56,8 +53,8 @@ def c2f_contact_parameters(
     hypotheses_over_time = [hypotheses]
 
 
-    for c2f_iter in range(len(contact_param_sched)):
-        contact_param_sweep_delta, face_param_sweep = contact_param_sched[c2f_iter], face_param_sched[c2f_iter]
+    for c2f_iter in range(len(sched)):
+        contact_param_sweep_delta, face_param_sweep = sched[c2f_iter]
         new_hypotheses = []
 
         for hyp in hypotheses:
@@ -67,15 +64,14 @@ def c2f_contact_parameters(
 
             new_contact_param_sweep = contact_params + contact_param_sweep_delta
             
-            pose_proposals, weights, _ = c2f_score_contact_parameters(
+            pose_proposals, weights, _ = score_contact_parameters(
                 renderer,
                 obj_idx,
                 obs_point_cloud_image,
                 obs_point_cloud_image_complement,
-                new_contact_param_sweep,
-                face_param_sweep,
-                r_sweep,
+                (new_contact_param_sweep, face_param_sweep),
                 contact_plane_pose_in_cam_frame,
+                r_sweep,
                 outlier_prob,
                 outlier_volume,
                 model_box_dims,
@@ -98,19 +94,19 @@ def c2f_contact_parameters(
 
 
 ###### Occlusion check
-def c2f_score_contact_parameters(
+def score_contact_parameters(
     renderer,
     obj_idx,
     obs_point_cloud_image,
     obs_point_cloud_image_complement,
-    contact_param_sweep,
-    face_param_sweep,
-    r_sweep,
+    sweep,
     contact_plane_pose_in_cam_frame,
+    r_sweep,
     outlier_prob,
     outlier_volume,
     model_box_dims,
 ):
+    contact_param_sweep, face_param_sweep = sweep
     pose_proposals = jax3dp3.scene_graph.pose_from_contact_and_face_params_parallel_jit(
         contact_param_sweep,
         face_param_sweep,

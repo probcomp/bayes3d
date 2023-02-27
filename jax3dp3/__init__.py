@@ -1,10 +1,4 @@
-from .enumerations import *
-from .renderer import *
-from .likelihood import *
-from .meshcat import *
-from .online import *
-from .camera import *
-from .viz import *
+
 
 import jax3dp3.transforms_3d as t3d
 
@@ -18,4 +12,12 @@ from . import scene_graph
 from . import ycb_loader
 from . import occlusion
 from . import blenderproc
-from . import kubric
+from . import kubric_interface
+
+from .enumerations import *
+from .renderer import *
+from .likelihood import *
+from .meshcat import *
+from .online import *
+from .camera import *
+from .viz import *
