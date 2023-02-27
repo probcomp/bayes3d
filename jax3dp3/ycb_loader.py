@@ -112,10 +112,12 @@ def get_test_img(scene_id, img_id, ycb_dir):
         2.0
     )
     return (
-        rgb, 
-        depth * cam_depth_scale / 1000.0,
-        cam_pose,
-        intrinsics,
+        j.RGBD(
+            rgb, 
+            depth * cam_depth_scale / 1000.0,
+            cam_pose,
+            intrinsics
+        ),
         gt_ids, jnp.array(gt_poses), masks
     )
 
