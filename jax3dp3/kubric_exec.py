@@ -56,6 +56,4 @@ for i in range(len(mesh_paths)):
 # --- render (and save the blender file)
 # renderer.save_state("helloworld.blend")
 frame = renderer.render_still()
-
-print(type(frame["rgba"]))
 np.savez("/tmp/output.npz", rgba=frame["rgba"], segmentation=frame["segmentation"], depth=frame["depth"])

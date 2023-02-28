@@ -42,7 +42,7 @@ def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0
     command_string2 = f""" kubricdockerhub/kubruntu /usr/bin/python3 {path}/jax3dp3/kubric_exec.py"""
     print(command_string + command_strings + command_string2)
     subprocess.run([command_string + command_strings + command_string2], shell=True)
-
+    print("RAN exec")
     data = np.load("/tmp/output.npz")
     return data["rgba"], data["segmentation"], data["depth"]
 
