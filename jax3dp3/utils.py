@@ -171,8 +171,13 @@ def get_largest_cluster_id_from_segmentation(segmentation_array_or_img):
 def normalize_log_scores(log_p):
     return jnp.exp(log_p - logsumexp(log_p))
 
-def voxelize(data, resolution):
+def discretize(data, resolution):
     return jnp.round(data /resolution) * resolution
+
+def voxelize(data, resolution):
+    data = discretize(data, resolution)
+    data = jnp.unique(data, axis=0)
+    return data
 
 def resize(depth, h, w):
     return cv2.resize(np.array(depth), (w,h),interpolation=0)
