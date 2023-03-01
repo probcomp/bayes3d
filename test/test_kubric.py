@@ -3,7 +3,7 @@ import jax3dp3 as j
 import trimesh
 import os
 import numpy as np
-import pybullet_planning
+# import pybullet_planning
 
 
 # rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv")
@@ -24,10 +24,13 @@ intrinsics = j.Intrinsics(
 )
 
 
-top_level_dir = os.path.dirname(os.path.dirname(pybullet_planning.__file__))
+# top_level_dir = os.path.dirname(os.path.dirname(pybullet_planning.__file__))
+top_level_dir = os.path.dirname(os.path.dirname(j.__file__))
+knife_dir = "assets/sample_objs/ycb_knife/textured.obj"
+
 mesh_names = ["knife", "spoon", "cracker_box", "strawberry", "mustard_bottle", "sugar_box","banana"]
 model_paths = [
-    os.path.join(top_level_dir,"models/srl/ycb/032_knife/textured.obj"),
+    os.path.join(top_level_dir, knife_dir),
 ]
 
 gt_poses = jnp.array([
@@ -39,10 +42,8 @@ rgb, segmentation, depth = j.kubric_interface.render_kubric(model_paths, gt_pose
 rgb_viz = j.get_rgb_image(rgb)
 depth_viz = j.get_depth_image(depth, max=10.0)
 seg_viz = j.get_depth_image(segmentation, max=segmentation.max())
-
 j.setup_visualizer()
 j.show_cloud("1",j.t3d.unproject_depth(depth[:,:,0], intrinsics).reshape(-1,3))
-
 j.multi_panel(
     [
         rgb_viz,

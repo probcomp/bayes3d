@@ -14,11 +14,12 @@
 
 import logging
 import kubric as kb
-from kubric.renderer.blender import Blender as KubricRenderer
 import numpy as np
-import os
+from custom_cam import KubCamera
+from kubric.renderer.blender import Blender as KubricRenderer
 from kubric.core.color import get_color
 
+#unpacking the data from the npz file
 data_file = "/tmp/blenderproc_kubric.npz"
 data = np.load(data_file, allow_pickle=True)
 mesh_paths = data["mesh_paths"]
@@ -28,6 +29,12 @@ K = data["K"]
 height = data["height"]
 width = data["width"]
 scaling_factor = data["scaling_factor"]
+fx = data["fx"]
+fy = data["fy"]
+cx = data["cx"]
+cy = data["cy"]
+near = data["near"]
+far = data["far"]
 
 logging.basicConfig(level="INFO")
 
@@ -35,8 +42,10 @@ logging.basicConfig(level="INFO")
 scene = kb.Scene(resolution=(width.item(), height.item()))
 scene.ambient_illumination = get_color("red")
 renderer = KubricRenderer(scene)
-scene += kb.PerspectiveCamera(name="camera", position=(0, 0, 0),
+camera = KubCamera(name="camera", position=(0, 0, 0),
                               look_at=(0, 0, 1))
+camera.update_intrinsic_values(height, width, fx.item(), fy.item(), cx.item(), cy.item(), near.item(), far.item())
+scene += camera
 scene += kb.DirectionalLight(
     name="sun", position=(0, -0.0, 0),
     look_at=(0, 0, 1), intensity=10.5
@@ -56,6 +65,4 @@ for i in range(len(mesh_paths)):
 # --- render (and save the blender file)
 # renderer.save_state("helloworld.blend")
 frame = renderer.render_still()
-
-print(type(frame["rgba"]))
 np.savez("/tmp/output.npz", rgba=frame["rgba"], segmentation=frame["segmentation"], depth=frame["depth"])
