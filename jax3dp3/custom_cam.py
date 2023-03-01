@@ -11,11 +11,11 @@ class KubCamera(kb.PerspectiveCamera):
         super().__init__(focal_length=focal_length, sensor_width=sensor_width, position=position,
                      quaternion=quaternion, up=up, front=front, look_at=look_at, euler=euler,
                      **kwargs)
-        self.f_x = self.focal_length
-        self.f_y = self.focal_length
+        self.f_x = focal_length
+        self.f_y = focal_length
+        self.width, self.height = 1., 1.
         self.p_x = self.width / 2
         self.p_y = self.height / 2
-        self.width, self.height = 1., 1.
 
         
     @property

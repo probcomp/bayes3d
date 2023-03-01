@@ -28,7 +28,13 @@ def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0
         camera_pose=cam_pose_pos_quat,
         K=K,
         height=intrinsics.height,
-        width=intrinsics.width
+        width=intrinsics.width,
+        fx = intrinsics.fx,
+        fy = intrinsics.fy,
+        cx = intrinsics.cx,
+        cy = intrinsics.cy,
+        near = intrinsics.near,
+        far = intrinsics.far
     )
 
     path = os.path.dirname(os.path.dirname(__file__))
@@ -42,7 +48,6 @@ def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0
     command_string2 = f""" kubricdockerhub/kubruntu /usr/bin/python3 {path}/jax3dp3/kubric_exec.py"""
     print(command_string + command_strings + command_string2)
     subprocess.run([command_string + command_strings + command_string2], shell=True)
-    print("RAN exec")
     data = np.load("/tmp/output.npz")
     return data["rgba"], data["segmentation"], data["depth"]
 
