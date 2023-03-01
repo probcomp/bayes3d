@@ -42,9 +42,9 @@ logging.basicConfig(level="INFO")
 scene = kb.Scene(resolution=(width.item(), height.item()))
 scene.ambient_illumination = get_color("red")
 renderer = KubricRenderer(scene)
-camera = KubCamera(name="camera", position=(0, 0, 0),
-                              look_at=(0, 0, 1))
-camera.update_intrinsic_values(height, width, fx.item(), fy.item(), cx.item(), cy.item(), near.item(), far.item())
+camera = KubCamera(name="camera", position=(0, 0, 0),look_at=(0, 0, 1), 
+                   f_x = fx.item(), f_y = fy.item(), p_x = cx.item(), p_y = cy.item(), near = near.item(), far = far.item())
+# print(f"sanity check{camera.sanity_check()}")
 scene += camera
 scene += kb.DirectionalLight(
     name="sun", position=(0, -0.0, 0),
@@ -65,4 +65,6 @@ for i in range(len(mesh_paths)):
 # --- render (and save the blender file)
 # renderer.save_state("helloworld.blend")
 frame = renderer.render_still()
+print(f"RENDERED FRAME ")
 np.savez("/tmp/output.npz", rgba=frame["rgba"], segmentation=frame["segmentation"], depth=frame["depth"])
+print(f"SAVED FRAME USING NP")
