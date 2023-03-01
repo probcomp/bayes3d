@@ -1,0 +1,3 @@
+[submodule "posecnn-pytorch/PoseCNN-PyTorch"]
+	path = posecnn-pytorch/PoseCNN-PyTorch
+	url = ./posecnn-pytorch/PoseCNN-PyTorch/
