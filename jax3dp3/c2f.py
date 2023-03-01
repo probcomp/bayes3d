@@ -92,8 +92,6 @@ def c2f_contact_parameters(
     return hypotheses_over_time
 
 
-
-###### Occlusion check
 def score_contact_parameters(
     renderer,
     obj_idx,
@@ -125,6 +123,29 @@ def score_contact_parameters(
         obs_point_cloud_image, obs_point_cloud_image, r_sweep[0], outlier_prob, outlier_volume
     )
     return pose_proposals, weights, fully_occluded_weight
+
+def score_poses(
+    renderer,
+    obj_idx,
+    obs_point_cloud_image,
+    obs_point_cloud_image_complement,
+    pose_proposals,
+    r_sweep,
+    outlier_prob,
+    outlier_volume,
+):
+    # get best pose proposal
+    rendered_object_images = renderer.render_parallel(pose_proposals, obj_idx)[...,:3]
+    rendered_images = jax3dp3.splice_image_parallel(rendered_object_images, obs_point_cloud_image_complement)
+
+    weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
+        obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
+    )
+    fully_occluded_weight = jax3dp3.threedp3_likelihood_jit(
+        obs_point_cloud_image, obs_point_cloud_image, r_sweep[0], outlier_prob, outlier_volume
+    )
+    return weights, fully_occluded_weight
+
 
 def c2f_occlusion_viz(
     good_poses,

@@ -175,7 +175,7 @@ def voxelize(data, resolution):
     return jnp.round(data /resolution) * resolution
 
 def resize(depth, h, w):
-    return cv2.resize(depth, (w,h),interpolation=0)
+    return cv2.resize(np.array(depth), (w,h),interpolation=0)
 
 def infer_table_plane(point_cloud_image, camera_pose, intrinsics, ransac_threshold=0.001, inlier_threshold=0.002, segmentation_threshold=0.008):
     point_cloud_flat = point_cloud_image.reshape(-1, 3)

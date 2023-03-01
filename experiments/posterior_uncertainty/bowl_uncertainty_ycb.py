@@ -1,138 +1,145 @@
 
-import jax3dp3
+import jax3dp3 as j 
 import trimesh
 import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
 import os
+import numpy as np
 
-jax3dp3.setup_visualizer()
 
-
-observation, gt_ids, gt_poses, masks = jax3dp3.ycb_loader.get_test_img(
-    '55', '22', "/home/nishadgothoskar/data/bop/ycbv"
+image, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
+    '48', '1', "/home/nishadgothoskar/data/bop/ycbv"
 )
-jax3dp3.viz.get_rgb_image(observation.rgb, 255.0).save("rgb.png")
+i = 2
 
-state = jax3dp3.OnlineJax3DP3()
-state.start_renderer(observation.camera_params)
 
-model_dir = os.path.join(jax3dp3.utils.get_assets_dir(), "bop/ycbv/models")
-model_names = jax3dp3.ycb_loader.MODEL_NAMES
-meshes = [trimesh.load(os.path.join(model_dir,"obj_" + f"{str(idx+1).rjust(6, '0')}.ply")) for idx in range(21)]
-for (mesh, mesh_name) in zip(meshes, model_names):
-    state.add_trimesh(mesh, mesh_name, mesh_scaling_factor=1.0/1000.0)
+# image, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
+#     '53', '1', "/home/nishadgothoskar/data/bop/ycbv"
+# )
+# i = 2
+rgb_viz = j.viz.get_rgb_image(image.rgb, 255.0)
 
-state.table_surface_plane_pose  = jnp.eye(4)
+intrinsics = j.camera.scale_camera_parameters(image.intrinsics, 0.3)
+renderer = j.Renderer(intrinsics)
 
-i = 5
-obj_idx = gt_ids[i]
-segmentation_image = state.process_segmentation_mask(masks[i]*1.0)
+model_dir = "/home/nishadgothoskar/data/bop/ycbv/models"
+for idx in range(1,22):
+    renderer.add_mesh_from_file(os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply"),scaling_factor=1.0/1000.0)
+model_names = j.ycb_loader.MODEL_NAMES
+
+
+obj_id = gt_ids[i]
+segmentation_image = j.utils.resize(np.array(masks[i])*1.0, intrinsics.height, intrinsics.width)
 segmentation_id = 1.0
 
-
-img = jax3dp3.render_multiobject(gt_poses, gt_ids)
-jax3dp3.viz.get_depth_image(img[:,:,2],max=2.0).save("reconstruction.png")
-
-
-state.set_coarse_to_fine_schedules(
-    grid_widths=[0.1, 0.01, 0.04, 0.02],
-    angle_widths=[jnp.pi, jnp.pi, 0.001, jnp.pi/10],
-    grid_params=[(7, 7 ,21),(7, 7 ,21),(15, 15, 1), (7, 7 ,21)],
+mask = j.utils.resize((segmentation_image == segmentation_id)* 1.0, image.intrinsics.height, image.intrinsics.width)[...,None]
+rgb_masked_viz = j.viz.get_rgb_image(
+    image.rgb * mask
 )
+overlay = j.viz.overlay_image(rgb_viz, rgb_masked_viz, alpha=0.6)
+overlay.save("masked_rgb.png")
 
 
-obs_point_cloud_image = state.process_depth_to_point_cloud_image(observation.depth)
+obj_pose = image.camera_pose @ gt_poses[i]
 
-r_sweep = jnp.array([0.005])
+reconstruction = j.resize_image(j.get_depth_image(renderer.render_single_object(t3d.inverse_pose(image.camera_pose) @ obj_pose, obj_id)[:,:,2], max=intrinsics.far), 
+                                image.intrinsics.height,
+                                image.intrinsics.width)
+j.overlay_image(reconstruction, rgb_viz).save("reconstruction.png")
+
+depth_scaled =  j.utils.resize(image.depth, intrinsics.height, intrinsics.width)
+obs_point_cloud_image = t3d.unproject_depth(depth_scaled, intrinsics)
+depth_masked, depth_complement = j.get_masked_and_complement_image(depth_scaled, segmentation_image, segmentation_id, intrinsics)
+obs_point_cloud_image_masked = t3d.unproject_depth(depth_masked, intrinsics)
+obs_point_cloud_image_complement = t3d.unproject_depth(depth_complement, intrinsics)
+
+
+angles = jnp.linspace(0.0, 2*jnp.pi, 100)
+import jax
+rotations = jax.vmap(t3d.transform_from_axis_angle,in_axes=(None, 0))(jnp.array([0.0,0.0, 1.0]), angles)
+translations = j.enumerations.make_translation_grid_enumeration(
+    -0.01,-0.01,0.0,
+    0.01,0.01,0.0,
+    5,5,1
+)
+deltas = jnp.einsum("aij,bjk->abik", rotations, translations).reshape(-1, 4, 4)
+pose_proposals = obj_pose @ deltas
+
+r_sweep = jnp.array([0.02])
 outlier_prob=0.3
 outlier_volume=1.0
 
-hypotheses_over_time, known_object_scores, _, inference_viz = state.classify_segment(
-    observation.rgb,
+weights, fully_occluded_weight = j.c2f.score_poses(
+    renderer,
+    obj_id,
     obs_point_cloud_image,
-    segmentation_image,
-    segmentation_id,
-    [obj_idx],
-    # jnp.arange(len(state.meshes)),
-    observation.camera_pose, 
+    obs_point_cloud_image_complement,
+    t3d.inverse_pose(image.camera_pose) @ pose_proposals,
     r_sweep,
-    outlier_prob=outlier_prob,
-    outlier_volume=outlier_volume
-)
-inference_viz.save("predictions.png")
-
-(h,w,fx,fy,cx,cy, near, far) = state.camera_params
-obs_image_masked, obs_image_complement = jax3dp3.get_image_masked_and_complement(
-    obs_point_cloud_image, segmentation_image, segmentation_id, far
+    outlier_prob,
+    outlier_volume,
 )
 
-pose_in_cam_frame = hypotheses_over_time[-1][0][-1] 
+probabilities = j.utils.normalize_log_scores(weights)
+probabilities = probabilities.ravel()
+print(probabilities.sort())
 
 
-grid_enumeration = jax3dp3.enumerations.make_rotation_grid_enumeration(70,50)
-pose_proposals = jnp.einsum("ij,ajk->aik", pose_in_cam_frame, grid_enumeration)
-
-
-
-
-# get best pose proposal
-rendered_object_images = jax3dp3.render_parallel(pose_proposals, obj_idx)[...,:3]
-rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_image_complement)
-
-weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
-    obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
-)[0,:]
-probabilities = jax3dp3.utils.normalize_log_scores(weights)
-
-jax3dp3.clear()
-jax3dp3.show_cloud("obj", t3d.apply_transform(state.meshes[obj_idx].vertices, pose_in_cam_frame))
-jax3dp3.show_pose("pose", pose_in_cam_frame)
 order = jnp.argsort(-probabilities)
-print(probabilities[order][:10])
-for i in order[:1]:
-    jax3dp3.show_pose(f"{i}", pose_proposals[i])
+NUM = (probabilities > 0.05).sum()
 
+rendered_object_images = renderer.render_parallel(t3d.inverse_pose(image.camera_pose) @ pose_proposals, obj_id)[...,:3]
 
-jax3dp3.show_pose(f"identity", jnp.eye(4))
-
-
-
-jax3dp3.setup_visualizer()
-
-
-
-hypotheses_over_time = state.classify_segment(
-
-    state.process_depth_to_point_cloud_image(observation.depth),
-    state.process_segmentation_mask(masks[2]*1.0),
-    1.0,
-    gt_ids,
-    observation.camera_pose, 
-    r=0.01,
-    outlier_prob=0.1
-)
-scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
-print(jax3dp3.utils.normalize_log_scores(scores))
-
-
-(h,w,fx,fy,cx,cy, near, far) = state.camera_params
-orig_h, orig_w = observation.rgb.shape[:2]
 images = []
-rgb_viz = jax3dp3.viz.get_rgb_image(observation.rgb)
-for hyp in hypotheses_over_time[-1]:
-    (score, obj_idx, _, pose) = hyp
-    depth = jax3dp3.render_single_object(pose, obj_idx)
-    depth_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_depth_image(depth[:,:,2], max=1.0),orig_h, orig_w)
-    images.append(jax3dp3.viz.multi_panel([jax3dp3.viz.overlay_image(rgb_viz, depth_viz)],title="{:0.4f}".format(score)))
+for i in order[:NUM]:
+    img = j.viz.get_depth_image(rendered_object_images[i][:,:,2],max=1.0)
+    images.append(img)
+j.viz.multi_panel(images, labels=["{:0.2f}".format(p) for p in probabilities[order[:NUM]]]).save("posterior.png")
 
-
-jax3dp3.viz.multi_panel(images).save("predictions.png")
-
+for i in order[:NUM]:
+    j.show_pose(f"{i}", pose_proposals[i])
 
 
 
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+import numpy as np
+from itertools import product, combinations
 
 
 
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+# make the grid lines transparent
+ax.xaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+ax.yaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+ax.zaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
+x = np.cos(u)*np.sin(v)
+y = np.sin(u)*np.sin(v)
+z = np.cos(v)
+ax.axes.set_xlim3d(-1.1, 1.1) 
+ax.axes.set_ylim3d(-1.1, 1.1) 
+ax.axes.set_zlim3d(-1.1, 1.1) 
+ax.set_aspect("equal")
+ax.plot_wireframe(x, y, z, color=(0.0, 0.0, 0.0, 0.3), linewidths=0.3)
 
-state = jax3dp3.OnlineJax3DP3()
+
+ax.axes.set_zticks([])
+ax.axes.set_xticks([])
+ax.axes.set_yticks([])
+
+points = []
+for i in order[:NUM]:
+    points.append(pose_proposals[i][:3,0])
+points = np.array(points)
+
+z = 0.1
+for i in np.arange(.1,1.01,.1):
+    ax.scatter(points[:,0], points[:,1], points[:,2], s=(50*i*(z*.9+.1))**2, color=(1,0,0,.5/i/10))
+
+plt.tight_layout()
+plt.savefig("sphere.png")

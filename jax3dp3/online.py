@@ -52,7 +52,7 @@ def run_occlusion_search(image, renderer, obj_idx, timestep=1):
     overlay_viz = jax3dp3.viz.overlay_image(rgb_viz, enumeration_viz)
     overlay_viz.save(f"occlusion_{timestep}.png")
 
-def run_classification(image, renderer, timestep=1):
+def run_classification(image, renderer, timestep=1, segmentation_image=None):
     intrinsics = renderer.intrinsics
     depth_scaled =  j.utils.resize(image.depth, intrinsics.height, intrinsics.width)
     obs_point_cloud_image = t3d.unproject_depth(depth_scaled, intrinsics)
@@ -65,18 +65,19 @@ def run_classification(image, renderer, timestep=1):
     #         t3d.inverse_pose(table_plane) @ image.camera_pose
     #     ) 
     # )
-
-    import jax3dp3.segment_scene
-    segmentation_image, mask, viz = jax3dp3.segment_scene.segment_scene(
-        image.rgb,
-        obs_point_cloud_image,
-        intrinsics
-    )
-    viz.save(f"dashboard_{timestep}.png")
+    if segmentation_image is None:
+        import jax3dp3.segment_scene
+        segmentation_image, mask, viz = jax3dp3.segment_scene.segment_scene(
+            image.rgb,
+            obs_point_cloud_image,
+            intrinsics
+        )
+        viz.save(f"dashboard_{timestep}.png")
 
     all_segmentation_ids = np.unique(segmentation_image)
     all_segmentation_ids = all_segmentation_ids[all_segmentation_ids != -1]
 
+    all_hypotheses_over_time = []
     for segmentation_id in all_segmentation_ids:
         depth_masked, depth_complement = j.get_masked_and_complement_image(depth_scaled, segmentation_image, segmentation_id, intrinsics)
         j.get_depth_image(depth_masked, max=intrinsics.far).save("masked.png")
@@ -101,6 +102,8 @@ def run_classification(image, renderer, timestep=1):
         scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
         normalized_scores = j.utils.normalize_log_scores(scores)
         order = np.argsort(-np.array(scores))
+
+        all_hypotheses_over_time.append(hypotheses_over_time)
 
         orig_h, orig_w = image.rgb.shape[:2]
         rgb_viz = j.get_rgb_image(image.rgb)
@@ -140,4 +143,3 @@ def run_classification(image, renderer, timestep=1):
             [top, *viz_images], border= 20
         )
         final_viz.save(f"classify_{timestep}_seg_id_{segmentation_id}.png")
-    

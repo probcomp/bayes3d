@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import graphviz
 import distinctipy
+import jax.numpy as jnp
 
 def make_gif(images, filename):
     images[0].save(
@@ -36,6 +37,12 @@ def get_depth_image(image, min=0.0, max=1.0):
         np.rint(cm((np.clip(np.array(image), min, max) - min) / (max - min)) * 255.0).astype(np.int8), mode="RGBA"
     )
     return img
+
+def add_rgba_dimension(particles_rendered):
+    if particles_rendered.shape[-1] == 3:
+        p = jnp.concatenate([particles_rendered, 255.0 * jnp.ones((*particles_rendered.shape[:2],1))],axis=-1)
+        return p
+    return particles_rendered
 
 def get_rgb_image(image, max=255.0):
     if image.shape[-1] == 3:
