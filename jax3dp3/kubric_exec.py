@@ -15,7 +15,6 @@
 import logging
 import kubric as kb
 import numpy as np
-from custom_cam import KubCamera
 from kubric.renderer.blender import Blender as KubricRenderer
 from kubric.core.color import get_color
 
@@ -38,14 +37,18 @@ far = data["far"]
 
 logging.basicConfig(level="INFO")
 
+#convert intrinsics to focal_length, sensor_width
+focal_length = fx / width
+sensor_width = 1 
+print(f"POSES: {poses}")
+print(f"CAMERA POSE: {camera_pose}")
+
 # --- create scene and attach a renderer to it
 scene = kb.Scene(resolution=(width.item(), height.item()))
 scene.ambient_illumination = get_color("red")
 renderer = KubricRenderer(scene)
-camera = KubCamera(name="camera", position=(0, 0, 0),look_at=(0, 0, 1), 
-                   f_x = fx.item(), f_y = fy.item(), p_x = cx.item(), p_y = cy.item(), near = near.item(), far = far.item())
-# print(f"sanity check{camera.sanity_check()}")
-scene += camera
+# --- create perspective camera 
+scene += kb.PerspectiveCamera(name="camera", position = (0,0,0), look_at=(0,0,1), focal_length=focal_length, sensor_width=sensor_width)
 scene += kb.DirectionalLight(
     name="sun", position=(0, -0.0, 0),
     look_at=(0, 0, 1), intensity=10.5
