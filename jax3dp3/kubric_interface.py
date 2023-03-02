@@ -11,6 +11,11 @@ import os
 # 4. In the final part of this function load the rgb and depth data that Kubric generated, and return it
 
 def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0):
+    #asset intrinsics are compatible with Blender camera parameters
+    assert intrinsics.fx == intrinsics.fy, "fx and fy must be equal"
+    assert intrinsics.cx == intrinsics.width/2, "cx must be width/2"
+    assert intrinsics.cy == intrinsics.height/2, "cy must be height/2"
+
     K = j.camera.K_from_intrinsics(intrinsics)
     poses_pos_quat = []
     for i in range(len(poses)):
