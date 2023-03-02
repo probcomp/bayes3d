@@ -16,7 +16,7 @@ def render_blenderproc(mesh_paths, poses, camera_pose, intrinsics, scaling_facto
         width=intrinsics.width
     )
 
-    bproc_script_path = os.path.join(os.path.dirname(j.__file__), "blenderproc/blenderproc_exec.py")
+    bproc_script_path = os.path.join(os.path.dirname(j.__file__), "photorealistic_renderers/blenderproc_exec.py")
     subprocess.run([f"blenderproc run {bproc_script_path} /tmp/blenderproc.npz"], shell=True)
 
     rgb = None
