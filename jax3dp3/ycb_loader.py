@@ -101,6 +101,7 @@ def get_test_img(scene_id, img_id, ycb_dir):
         masks.append(jnp.array(mask_visible > 0))
 
     cam_pose = cam_pose.at[:3,3].set(cam_pose[:3,3]*1.0/1000.0)
+    cam_K = np.array(cam_K)
     intrinsics = j.Intrinsics(
         rgb.shape[0],
         rgb.shape[1],

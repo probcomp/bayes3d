@@ -10,6 +10,10 @@ import graphviz
 import distinctipy
 import jax.numpy as jnp
 
+RED = np.array([1.0, 0.0, 0.0])
+GREEN = np.array([0.0, 1.0, 0.0])
+BLUE = np.array([0.0, 0.0, 1.0])
+
 def make_gif(images, filename):
     images[0].save(
         fp=filename,
@@ -180,9 +184,8 @@ def multi_panel_vertical(images, middle_width=10, title_border=20, fontsize=20):
     return dst
     
 def distinct_colors(num_colors, pastel_factor=0.5):
-    return distinctipy.get_colors(num_colors, pastel_factor=pastel_factor)
+    return [np.array(i) for i in distinctipy.get_colors(num_colors, pastel_factor=pastel_factor)]
 
-# Max Val
 
 def viz_graph(num_nodes, edges, filename, node_names=None):
     if node_names is None:

@@ -1,5 +1,6 @@
 import jax3dp3 as j
 import numpy as np
+import jax.numpy as jnp
 import subprocess
 import h5py
 import os
@@ -24,7 +25,8 @@ def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0
             np.array(j.t3d.rotation_matrix_to_quaternion(poses[i,:3,:3]))
         ))
 
-    cam_pose_pos_quat = (np.array(poses[i,:3,3]), np.array(j.t3d.rotation_matrix_to_quaternion(poses[i,:3,:3])))
+    camera_pose = camera_pose @ j.t3d.transform_from_axis_angle(jnp.array([1.0, 0.0,0.0]), jnp.pi)
+    cam_pose_pos_quat = (np.array(camera_pose[:3,3]), np.array(j.t3d.rotation_matrix_to_quaternion(camera_pose[:3,:3])))
 
     np.savez("/tmp/blenderproc_kubric.npz", 
         mesh_paths=mesh_paths,
@@ -50,10 +52,10 @@ def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0
         f""" --volume {os.path.dirname(p)}:{os.path.dirname(p)} """ for p in mesh_paths
     ])
     
-    command_string2 = f""" kubricdockerhub/kubruntu /usr/bin/python3 {path}/jax3dp3/kubric_exec.py"""
+    command_string2 = f""" kubricdockerhub/kubruntu /usr/bin/python3 {path}/jax3dp3/photorealistic_renderers/kubric_exec.py"""
     print(command_string + command_strings + command_string2)
     subprocess.run([command_string + command_strings + command_string2], shell=True)
     data = np.load("/tmp/output.npz")
-    return data["rgba"], data["segmentation"], data["depth"]
+    return data["rgba"], data["segmentation"], data["depth"][:,:,0]
 
     #Load RGB and depth images from file

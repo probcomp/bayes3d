@@ -48,7 +48,8 @@ scene = kb.Scene(resolution=(width.item(), height.item()))
 scene.ambient_illumination = get_color("red")
 renderer = KubricRenderer(scene)
 # --- create perspective camera 
-scene += kb.PerspectiveCamera(name="camera", position = (0,0,0), look_at=(0,0,1), focal_length=focal_length, sensor_width=sensor_width)
+scene += kb.PerspectiveCamera(name="camera",
+    position =camera_pose[0],quaternion=camera_pose[1], focal_length=focal_length, sensor_width=sensor_width)
 scene += kb.DirectionalLight(
     name="sun", position=(0, -0.0, 0),
     look_at=(0, 0, 1), intensity=10.5
