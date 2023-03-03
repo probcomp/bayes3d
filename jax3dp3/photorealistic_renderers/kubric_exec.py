@@ -34,6 +34,7 @@ cx = data["cx"]
 cy = data["cy"]
 near = data["near"]
 far = data["far"]
+intensity = float(data["intensity"])
 
 logging.basicConfig(level="INFO")
 
@@ -45,14 +46,14 @@ print(f"CAMERA POSE: {camera_pose}")
 
 # --- create scene and attach a renderer to it
 scene = kb.Scene(resolution=(width.item(), height.item()))
-scene.ambient_illumination = get_color("red")
+# scene.ambient_illumination = get_color("red")
 renderer = KubricRenderer(scene)
 # --- create perspective camera 
 scene += kb.PerspectiveCamera(name="camera",
     position =camera_pose[0],quaternion=camera_pose[1], focal_length=focal_length, sensor_width=sensor_width)
 scene += kb.DirectionalLight(
     name="sun", position=(0, -0.0, 0),
-    look_at=(0, 0, 1), intensity=10.5
+    look_at=(0, 0, 1), intensity=intensity
 )
 
 for i in range(len(mesh_paths)):

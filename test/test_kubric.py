@@ -4,17 +4,28 @@ import trimesh
 import os
 import numpy as np
 import pybullet_planning
+import trimesh
 
-
-rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv")
 
 model_dir = "/home/nishadgothoskar/models"
 mesh_paths = []
 model_names = j.ycb_loader.MODEL_NAMES
+offset_poses = []
 for name in model_names:
+    mesh_path = os.path.join(model_dir,name,"textured.obj")
+    _, pose = j.mesh.center_mesh(trimesh.load(mesh_path), return_pose=True)
+    offset_poses.append(pose)
     mesh_paths.append(
-        os.path.join(model_dir,name,"textured.obj")
+        mesh_path
     )
+
+
+
+rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
+    # '48', '1', "/home/nishadgothoskar/data/bop/ycbv"
+    # '52', '1', "/home/nishadgothoskar/data/bop/ycbv"
+    '55', '22', "/home/nishadgothoskar/data/bop/ycbv"
+)
 
 paths = []
 for i in gt_ids:
@@ -26,7 +37,18 @@ intrinsics = j.Intrinsics(
     rgbd.intrinsics.width/2, rgbd.intrinsics.height/2,
     rgbd.intrinsics.near, rgbd.intrinsics.far
 )
-rgb, seg, depth = j.kubric_interface.render_kubric(paths, gt_poses, jnp.eye(4), intrinsics, scaling_factor=1.0)
+poses = jnp.array([
+    gt_poses[i] @ j.t3d.inverse_pose(offset_poses[gt_ids[i]])
+    for i in range(len(gt_ids))
+])
+
+rgb, seg, depth = j.kubric_interface.render_kubric(paths, poses, jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
+seg = seg[...,0]
+
+rgba = j.viz.add_rgba_dimension(rgb)
+rgba[seg == 0,-1] = 0.0
+j.get_rgb_image(rgba).save("background_transparent.png")
+
 
 rgb_viz = j.get_rgb_image(rgb)
 depth_viz = j.get_depth_image(depth, max=intrinsics.far)
