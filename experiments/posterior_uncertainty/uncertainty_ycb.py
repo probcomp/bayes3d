@@ -7,27 +7,40 @@ import os
 import numpy as np
 
 
-image, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
-    '48', '1', "/home/nishadgothoskar/data/bop/ycbv"
-)
-i = 2
+# image, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
+#     '48', '1', "/home/nishadgothoskar/data/bop/ycbv"
+# )
+# i = 2
 
 
 # image, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
 #     '53', '1', "/home/nishadgothoskar/data/bop/ycbv"
 # )
 # i = 2
+
+data = np.load(os.path.join(j.utils.get_assets_dir(), "3dnel.npz"), allow_pickle=True)
+image = data["rgbd"].item()
+gt_ids = data["gt_ids"]
+gt_poses = data["gt_poses"]
+seg_ids = jnp.unique(image.segmentation)
+seg_ids = seg_ids[seg_ids != 0]
+masks = [image.segmentation == i for i in seg_ids]
+
 rgb_viz = j.viz.get_rgb_image(image.rgb, 255.0)
+rgb_viz.save("rgb.png")
 
 intrinsics = j.camera.scale_camera_parameters(image.intrinsics, 0.3)
 renderer = j.Renderer(intrinsics)
 
 model_dir = "/home/nishadgothoskar/data/bop/ycbv/models"
 for idx in range(1,22):
-    renderer.add_mesh_from_file(os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply"),scaling_factor=1.0/1000.0)
+    renderer.add_mesh_from_file(
+        os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply"),
+        scaling_factor=1.0/1000.0
+    )
 model_names = j.ycb_loader.MODEL_NAMES
 
-
+i = 4
 obj_id = gt_ids[i]
 segmentation_image = j.utils.resize(np.array(masks[i])*1.0, intrinsics.height, intrinsics.width)
 segmentation_id = 1.0
@@ -36,7 +49,11 @@ mask = j.utils.resize((segmentation_image == segmentation_id)* 1.0, image.intrin
 rgb_masked_viz = j.viz.get_rgb_image(
     image.rgb * mask
 )
-overlay = j.viz.overlay_image(rgb_viz, rgb_masked_viz, alpha=0.6)
+
+alpha=0.3
+overlay_image = image.rgb * alpha + (1-alpha)* image.rgb * mask
+overlay_image[:,:,-1] = 255.0
+overlay = j.get_rgb_image(overlay_image)
 overlay.save("masked_rgb.png")
 
 
@@ -60,13 +77,13 @@ rotations = jax.vmap(t3d.transform_from_axis_angle,in_axes=(None, 0))(jnp.array(
 translations = j.enumerations.make_translation_grid_enumeration(
     -0.01,-0.01,0.0,
     0.01,0.01,0.0,
-    5,5,1
+    10,10,1
 )
 deltas = jnp.einsum("aij,bjk->abik", rotations, translations).reshape(-1, 4, 4)
 pose_proposals = obj_pose @ deltas
 
-r_sweep = jnp.array([0.02])
-outlier_prob=0.3
+r_sweep = jnp.array([0.01])
+outlier_prob=0.2
 outlier_volume=1.0
 
 weights, fully_occluded_weight = j.c2f.score_poses(
@@ -86,7 +103,7 @@ print(probabilities.sort())
 
 
 order = jnp.argsort(-probabilities)
-NUM = (probabilities > 0.05).sum()
+NUM = (probabilities > 0.005).sum()
 
 rendered_object_images = renderer.render_parallel(t3d.inverse_pose(image.camera_pose) @ pose_proposals, obj_id)[...,:3]
 
@@ -96,8 +113,8 @@ for i in order[:NUM]:
     images.append(img)
 j.viz.multi_panel(images, labels=["{:0.2f}".format(p) for p in probabilities[order[:NUM]]]).save("posterior.png")
 
-for i in order[:NUM]:
-    j.show_pose(f"{i}", pose_proposals[i])
+# for i in order[:NUM]:
+#     j.show_pose(f"{i}", pose_proposals[i])
 
 
 

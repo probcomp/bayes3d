@@ -62,7 +62,7 @@ def clear():
 def capture_image():
     global VISUALIZER
     img_buf = VISUALIZER.capture_screen_float_buffer()
-    return img_buf
+    return np.array(img_buf) * 255.0
 
 def set_camera(intrinsics, pose):
     global VISUALIZER
