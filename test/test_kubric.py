@@ -3,12 +3,14 @@ import jax3dp3 as j
 import trimesh
 import os
 import numpy as np
-import pybullet_planning
+# import pybullet_planning
 
+# bop_ycb_dir = "/home/nishadgothoskar/data/bop/ycbv"
+bop_ycb_dir = "/home/probcomp/Documents/mcs/jax3dp3/assets/bop/ycbv"
+rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', bop_ycb_dir)
 
-rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv")
-
-model_dir = "/home/nishadgothoskar/models"
+# model_dir = "/home/nishadgothoskar/models"
+model_dir = "/home/probcomp/Documents/mcs/YCB_Video_Models/models"
 mesh_paths = []
 model_names = j.ycb_loader.MODEL_NAMES
 for name in model_names:
