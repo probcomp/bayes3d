@@ -3,26 +3,47 @@ import jax.numpy as jnp
 import numpy as np
 import os
 import trimesh
+import copy
+
+import open3d as o3d
+
+
 
 intrinsics = j.Intrinsics(
     height=1000,
     width=1000,
     fx=2000.0, fy=2000.0,
-    cx=500.0, cy=500.0,
+    cx=400.0, cy=300.0,
     near=0.001, far=50.0
 )
 
+viz = j.o3d_viz.O3DVis(intrinsics)
 
-j.o3d_viz.setup(intrinsics)
+viz.render.scene.clear_geometry()
 
 pose = j.t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.2]))
 box = jnp.array([0.05, 0.04, 0.03])
-j.o3d_viz.make_bounding_box(box, pose, None)
+viz.make_bounding_box(box, pose)
 
-
-cloud = np.random.rand(100,3)
+pose = j.t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.2]))
+cloud = np.random.rand(10000,3) / 20.0
 moved_cloud = j.t3d.apply_transform(cloud, pose)
-j.o3d_viz.make_cloud(moved_cloud, None)
+
+color = j.BLUE
+colors = np.tile(color, (cloud.shape[0],1))
+
+pcd = o3d.geometry.PointCloud()
+pcd.points = o3d.utility.Vector3dVector(moved_cloud)
+pcd.colors = o3d.utility.Vector3dVector(colors)
+
+
+material = o3d.visualization.rendering.MaterialRecord()
+material.shader = "defaultLit"
+
+viz.render.scene.add_geometry("pcd7", pcd, material)
+
+viz.set_camera(intrinsics, np.eye(4))
+j.get_rgb_image(viz.capture_image()).save("test_open3d_viz.png")
 
 
 model_dir = "/home/nishadgothoskar/models"
@@ -35,37 +56,18 @@ for name in model_names:
         mesh_path
     )
 
-idx = 19
-mesh_path  = mesh_paths[idx]
 
-j.o3d_viz.clear()
-pose = j.t3d.transform_from_rot_and_pos(
-    j.t3d.rotation_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), jnp.pi/2)
-    @
-    j.t3d.rotation_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), 0)
-    @
-    j.t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), 0)
-    ,
-    jnp.array([0.0, 0.0, 0.7]))
-j.o3d_viz.make_mesh_from_file(mesh_path, None, pose=pose)
+import trimesh
 
-cam_pose  = j.t3d.transform_from_rot_and_pos(
-    j.t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), -jnp.pi/10)
-    ,
-    jnp.array([0.0, -0.2, 0.0])
-)
-j.o3d_viz.set_camera(intrinsics, cam_pose)
+idx = 1
+mesh = trimesh.load(mesh_paths[idx])
+viz.render.scene.clear_geometry()
+pose = j.t3d.transform_from_pos(jnp.array([0.0, 0.0, 2.0]))
+viz.make_mesh(mesh_paths[idx], pose)
+viz.render.scene.set_lighting(viz.render.scene.LightingProfile.NO_SHADOWS, (0, 0, 0))
 
-rgb = np.array(j.o3d_viz.capture_image()) * 255.0
-rgba = j.viz.add_rgba_dimension(rgb)
-rgba = rgba.at[rgb[:,:,2] == 255,-1].set(0.0)
-j.get_rgb_image(rgba).save(f"{idx}.png")
-
-j.get_rgb_image(rgb).save("test_open3d_viz.png")
-
-
-
-
+viz.set_camera(intrinsics, np.eye(4))
+j.get_rgb_image(viz.capture_image()).save("test_open3d_viz.png")
 
 
 
