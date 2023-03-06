@@ -91,6 +91,19 @@ def aabb(object_points):
     center = (maxs + mins) / 2
     return dims, t3d.transform_from_pos(center)
 
+def bounding_box_corners(dim):
+    corners = np.array([
+        [-dim[0]/2, -dim[1]/2, -dim[2]/2],
+        [dim[0]/2, -dim[1]/2, -dim[2]/2],
+        [-dim[0]/2, dim[1]/2, -dim[2]/2],
+        [dim[0]/2, dim[1]/2, -dim[2]/2],
+        [-dim[0]/2, -dim[1]/2, dim[2]/2],
+        [dim[0]/2, -dim[1]/2, dim[2]/2],
+        [-dim[0]/2, dim[1]/2, dim[2]/2],
+        [dim[0]/2, dim[1]/2, dim[2]/2]
+    ])
+    return corners
+
 def bounding_box_lower_upper(dims, pose):
     lower_upper = jnp.array([-dims / 2.0, dims /2.0])
     lower_upper_moved = t3d.apply_transform(lower_upper, pose)

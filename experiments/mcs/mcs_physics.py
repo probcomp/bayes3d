@@ -56,14 +56,28 @@ def is_non_object(entities):
             j.utils.aabb(e)
         )
 
-    occluders = []
-    for (ent_id, (bb, p)) in enumerate(bounding_boxes):
+    min_z = np.minimum([e[1][:,3][2] for e in bounding_boxes])
 
-    if (
-        jnp.max(dims) > side_length_threshold or 
-        jnp.min(dims) > min_side_length_threshold
-    ):
-        return True
+    occluder = []
+    for (ent_id, (dims, p)) in enumerate(bounding_boxes):
+
+        if (p.pos[2] - min_z) < distance_threshold:
+            if (
+                jnp.max(dims) > side_length_threshold or 
+                jnp.min(dims) > min_side_length_threshold
+            ):
+                occluder.append(ent_id)
+
+    bb_dist_threshold = 0.5
+    for (ent_id, (dims, p)) in enumerate(bounding_boxes):
+        for occluder_id in occluder
+            if ent_id in occluder:
+                continue
+
+            if (p[:3,3][2] - min_z) < distance_threshold:
+                corners = j.utils.bounding_box_corners(dims)
+                corners = j.t3d.apply_transform(corners, p)
+                
 
     if (jnp.max(dims) > side_length_threshold or jnp.min(dims) > min_side_length_threshold):
         return True
