@@ -13,6 +13,7 @@ import jax.numpy as jnp
 RED = np.array([1.0, 0.0, 0.0])
 GREEN = np.array([0.0, 1.0, 0.0])
 BLUE = np.array([0.0, 0.0, 1.0])
+BLACK = np.array([0.0, 0.0, 0.0])
 
 def make_gif(images, filename):
     images[0].save(

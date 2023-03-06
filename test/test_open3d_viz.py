@@ -8,18 +8,49 @@ import copy
 import open3d as o3d
 
 
+rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv")
 
-intrinsics = j.Intrinsics(
-    height=1000,
-    width=1000,
-    fx=2000.0, fy=2000.0,
-    cx=400.0, cy=300.0,
-    near=0.001, far=50.0
+viz_intrinsics = j.Intrinsics(
+    1000,1000,
+    1000.0,
+    1000.0,
+    500.0,
+    500.0,
+    0.01,
+    20.0
 )
 
-viz = j.o3d_viz.O3DVis(intrinsics)
+viz = j.o3d_viz.O3DVis(viz_intrinsics)
+
+full_mask = jnp.array(masks).sum(0) > 0
 
 viz.render.scene.clear_geometry()
+cloud = j.t3d.apply_transform(j.t3d.unproject_depth(rgbd.depth, rgbd.intrinsics), rgbd.camera_pose)[full_mask].reshape(-1,3)
+rgb_cloud = rgbd.rgb[full_mask,:3].reshape(-1,3)
+viz.make_cloud(cloud, color=rgb_cloud / 255.0)
+
+viz.make_camera(rgbd.intrinsics, rgbd.camera_pose, 0.1)
+
+pos, target, up =(
+    jnp.array([4.0, 0.0, 2.0]),
+    jnp.array([0.0, 0.0, 0.0]),
+    jnp.array([0.0, 0.0, 1.0]),
+)
+bystander_pose = j.t3d.transform_from_pos_target_up(pos, target, up)
+
+
+viz.set_camera(rgbd.intrinsics, bystander_pose)
+j.get_rgb_image(viz.capture_image()).save("test_open3d_viz.png")
+
+
+
+j.get_rgb_image(rgbd.rgb).save("rgb.png")
+j.get_depth_image(rgbd.depth).save("depth.png")
+
+viz.render.scene.clear_geometry()
+
+viz.set_camera(rgbd.intrinsics, rgbd.camera_pose)
+j.get_rgb_image(viz.capture_image()).save("test_open3d_viz.png")
 
 pose = j.t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.2]))
 box = jnp.array([0.05, 0.04, 0.03])

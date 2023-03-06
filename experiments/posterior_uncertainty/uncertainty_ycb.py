@@ -25,6 +25,7 @@ gt_poses = data["gt_poses"]
 seg_ids = jnp.unique(image.segmentation)
 seg_ids = seg_ids[seg_ids != 0]
 masks = [image.segmentation == i for i in seg_ids]
+i = 4
 
 rgb_viz = j.viz.get_rgb_image(image.rgb, 255.0)
 rgb_viz.save("rgb.png")
@@ -33,26 +34,33 @@ intrinsics = j.camera.scale_camera_parameters(image.intrinsics, 0.3)
 renderer = j.Renderer(intrinsics)
 
 model_dir = "/home/nishadgothoskar/data/bop/ycbv/models"
+mesh_paths = []
 for idx in range(1,22):
+    mesh_path = os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply") 
+    mesh_paths.append(mesh_path)
     renderer.add_mesh_from_file(
-        os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply"),
+        mesh_path,
         scaling_factor=1.0/1000.0
     )
 model_names = j.ycb_loader.MODEL_NAMES
 
-i = 4
 obj_id = gt_ids[i]
 segmentation_image = j.utils.resize(np.array(masks[i])*1.0, intrinsics.height, intrinsics.width)
 segmentation_id = 1.0
 
 mask = j.utils.resize((segmentation_image == segmentation_id)* 1.0, image.intrinsics.height, image.intrinsics.width)[...,None]
-rgb_masked_viz = j.viz.get_rgb_image(
-    image.rgb * mask
-)
 
-alpha=0.3
-overlay_image = image.rgb * alpha + (1-alpha)* image.rgb * mask
+rgba = np.array(j.add_rgba_dimension(image.rgb))
+rgba[mask[...,0] == 0,:] = 0.0
+rgb_masked_viz = j.viz.get_rgb_image(rgba)
+rgb_masked_viz.save("isolated.png")
+
+rgb_masked_viz = np.array(rgb_masked_viz)
+
+alpha=0.4
+overlay_image = np.array(j.add_rgba_dimension(image.rgb) * alpha + (1-alpha)* rgb_masked_viz)
 overlay_image[:,:,-1] = 255.0
+overlay_image[overlay_image[:,:,0] <1.0, :] = 0.0
 overlay = j.get_rgb_image(overlay_image)
 overlay.save("masked_rgb.png")
 
@@ -103,7 +111,7 @@ print(probabilities.sort())
 
 
 order = jnp.argsort(-probabilities)
-NUM = (probabilities > 0.005).sum()
+NUM = (probabilities > 0.00001).sum()
 
 rendered_object_images = renderer.render_parallel(t3d.inverse_pose(image.camera_pose) @ pose_proposals, obj_id)[...,:3]
 
@@ -116,14 +124,10 @@ j.viz.multi_panel(images, labels=["{:0.2f}".format(p) for p in probabilities[ord
 # for i in order[:NUM]:
 #     j.show_pose(f"{i}", pose_proposals[i])
 
-
-
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import numpy as np
 from itertools import product, combinations
-
-
 
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')
@@ -142,12 +146,12 @@ ax.axes.set_xlim3d(-1.1, 1.1)
 ax.axes.set_ylim3d(-1.1, 1.1) 
 ax.axes.set_zlim3d(-1.1, 1.1) 
 ax.set_aspect("equal")
-ax.plot_wireframe(x, y, z, color=(0.0, 0.0, 0.0, 0.3), linewidths=0.3)
-
+ax.plot_wireframe(x, y, z, color=(0.0, 0.0, 0.0, 0.3), linewidths=0.7)
 
 ax.axes.set_zticks([])
 ax.axes.set_xticks([])
 ax.axes.set_yticks([])
+ax.axes.set_axis_off()
 
 points = []
 for i in order[:NUM]:
@@ -159,4 +163,52 @@ for i in np.arange(.1,1.01,.1):
     ax.scatter(points[:,0], points[:,1], points[:,2], s=(50*i*(z*.9+.1))**2, color=(1,0,0,.5/i/10))
 
 plt.tight_layout()
-plt.savefig("sphere.png")
+plt.savefig("sphere.png",transparent=True)
+
+
+obj_pose_modified = np.array(j.t3d.inverse_pose(image.camera_pose) @ obj_pose)
+obj_pose_modified[:3,3] *= 1000.0
+
+intrinsics_modified = j.Intrinsics(
+    image.intrinsics.height, image.intrinsics.width,
+    image.intrinsics.fx, image.intrinsics.fy,
+    image.intrinsics.cx, image.intrinsics.cy,
+    1.0, 10000.0
+)
+viz = j.o3d_viz.O3DVis(intrinsics_modified)
+
+viz.render.scene.clear_geometry()
+viz.make_mesh(
+    mesh_paths[obj_id], obj_pose_modified
+)
+light_dir = np.array([0.0, 0.0, 1.0])
+viz.render.scene.scene.remove_light("light")
+viz.render.scene.scene.add_directional_light('light',[1,1,1],light_dir,500000.0,True)
+
+viz.render.scene.set_background(np.array([0.0, 0.0, 0.0, 0.0]))
+img = viz.capture_image(image.intrinsics, np.eye(4))
+transparent = img.at[img[:,:,0]<2.0, -1].set(0.0)
+j.get_rgb_image(transparent).save("transparent.png")
+
+
+# model_dir = "/home/nishadgothoskar/models"
+# mesh_paths = []
+# model_names = j.ycb_loader.MODEL_NAMES
+# offset_poses = []
+# for name in model_names:
+#     mesh_path = os.path.join(model_dir,name,"textured.obj")
+#     _, pose = j.mesh.center_mesh(trimesh.load(mesh_path), return_pose=True)
+#     offset_poses.append(pose)
+#     mesh_paths.append(
+#         mesh_path
+#     )
+
+# import jax3dp3.kubric_interface
+# rgb, seg, depth = jax3dp3.kubric_interface.render_kubric([mesh_paths[obj_id]], 
+#     [
+#         jnp.array([obj_pose @offset_poses[obj_id]])
+#     ], jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
+
+
+
+from IPython import embed; embed()

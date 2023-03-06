@@ -38,18 +38,19 @@ class RGBD(object):
         observation = RGBD(rgb, depth, camera_pose, j.Intrinsics(h,w,fx,fy,cx,cy,near,far))
         return observation
 
-    def construct_from_step_metadata(step_metadata):
-        width, height = step_metadata.camera_aspect_ratio
-        aspect_ratio = width / height
-        cx, cy = width / 2.0, height / 2.0
-        fov_y = np.deg2rad(step_metadata.camera_field_of_view)
-        fov_x = 2 * np.arctan(aspect_ratio * np.tan(fov_y / 2.0))
-        fx = cx / np.tan(fov_x / 2.0)
-        fy = cy / np.tan(fov_y / 2.0)
-        clipping_near, clipping_far = step_metadata.camera_clipping_planes
-        intrinsics = j.Intrinsics(
-            height,width, fx,fy,cx,cy,clipping_near,clipping_far
-        )
+    def construct_from_step_metadata(step_metadata, intrinsics=None):
+        if intrinsics is None:
+            width, height = step_metadata.camera_aspect_ratio
+            aspect_ratio = width / height
+            cx, cy = width / 2.0, height / 2.0
+            fov_y = np.deg2rad(step_metadata.camera_field_of_view)
+            fov_x = 2 * np.arctan(aspect_ratio * np.tan(fov_y / 2.0))
+            fx = cx / np.tan(fov_x / 2.0)
+            fy = cy / np.tan(fov_y / 2.0)
+            clipping_near, clipping_far = step_metadata.camera_clipping_planes
+            intrinsics = j.Intrinsics(
+                height,width, fx,fy,cx,cy,clipping_near,clipping_far
+            )
 
         rgb = np.array(list(step_metadata.image_list)[-1])
         depth = np.array(list(step_metadata.depth_map_list)[-1])

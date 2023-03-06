@@ -230,13 +230,13 @@ def transform_from_pos_target_up(pos, target, up):
     z = target- pos
     z = z / jnp.linalg.norm(z)
 
-    x = jnp.cross(up,z)
+    x = jnp.cross(z, up)
     x = x / jnp.linalg.norm(x)
 
     y = jnp.cross(z,x)
     y = y / jnp.linalg.norm(y)
 
     R = jnp.hstack([
-        x.T,y.T,z.T
+        x.reshape(-1,1),y.reshape(-1,1),z.reshape(-1,1)
     ])
     return transform_from_rot_and_pos(R, pos)
