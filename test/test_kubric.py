@@ -3,15 +3,20 @@ import jax3dp3 as j
 import trimesh
 import os
 import numpy as np
-import pybullet_planning
 import trimesh
 
+# --- creating the ycb dir from the working directory
+bop_ycb_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv")
+print(f"{bop_ycb_dir} exists: {os.path.exists(bop_ycb_dir)}")
+
+
 # bop_ycb_dir = "/home/nishadgothoskar/data/bop/ycbv"
-bop_ycb_dir = "/home/probcomp/Documents/mcs/jax3dp3/assets/bop/ycbv"
+# bop_ycb_dir = "/home/probcomp/Documents/mcs/jax3dp3/assets/bop/ycbv"
 rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', bop_ycb_dir)
 
-# model_dir = "/home/nishadgothoskar/models"
-model_dir = "/home/probcomp/Documents/mcs/YCB_Video_Models/models"
+# --- creating the model dir from the working directory
+model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")
+print(f"{model_dir} exists: {os.path.exists(model_dir)}")
 mesh_paths = []
 model_names = j.ycb_loader.MODEL_NAMES
 offset_poses = []
@@ -28,7 +33,7 @@ for name in model_names:
 rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
     # '48', '1', "/home/nishadgothoskar/data/bop/ycbv"
     # '52', '1', "/home/nishadgothoskar/data/bop/ycbv"
-    '55', '22', "/home/nishadgothoskar/data/bop/ycbv"
+    '55', '22', bop_ycb_dir
 )
 
 paths = []
@@ -96,4 +101,3 @@ j.show_cloud("1", j.t3d.unproject_depth(depth, intrinsics).reshape(-1,3),color=j
 j.show_cloud("2", j.t3d.unproject_depth(img[:,:,2], intrinsics).reshape(-1,3), color=j.BLUE)
 
 from IPython import embed; embed()
-

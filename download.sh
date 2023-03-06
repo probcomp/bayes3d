@@ -14,6 +14,11 @@ unzip assets/bop/ycbv_base.zip -d assets/bop
 unzip assets/bop/ycbv_models.zip -d assets/bop/ycbv
 unzip assets/bop/ycbv_test_bop19.zip -d assets/bop/ycbv
 
+echo "Removing zip files"
+rm assets/bop/ycbv_base.zip
+rm assets/bop/ycbv_models.zip
+rm assets/bop/ycbv_test_bop19.zip
+
 echo "Downloading ycb video models"
 file_id="1gmcDD-5bkJfcMKLZb3zGgH_HUFbulQWu"
 file_name="ycb_video_models.zip"

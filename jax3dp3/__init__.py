@@ -11,6 +11,7 @@ from . import ycb_loader
 from . import occlusion
 from . import meshcat
 from . import o3d_viz
+from . import kubric_interface
 
 from .enumerations import *
 from .renderer import *
