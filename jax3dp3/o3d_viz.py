@@ -9,18 +9,6 @@ class O3DVis(object):
 
         self.counter = 0
 
-    def set_camera(self, intrinsics, camera_pose):
-        intr = o3d.camera.PinholeCameraIntrinsic(
-            intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy
-        )
-        self.render.setup_camera(intr, np.linalg.inv(np.eye(4)))
-
-        # Look at the origin from the front (along the -Z direction, into the screen), with Y as Up.
-        center = np.array(camera_pose[:3,3]) + np.array(camera_pose[:3,2])  # look_at target
-        eye = np.array(camera_pose[:3,3])  # camera position
-        up = -np.array(camera_pose[:3,1])
-        self.render.scene.camera.look_at(center, eye, up)
-
     def make_bounding_box(self, dims, pose, color=None, update=True):
         line_set = o3d.geometry.LineSet()
 
@@ -69,7 +57,10 @@ class O3DVis(object):
         if color is None:
             color = j.BLUE
         
-        colors = np.tile(color, (cloud.shape[0],1))
+        if color.shape[0] != cloud.shape[0]:
+            colors = np.tile(color, (cloud.shape[0],1))
+        else:
+            colors = color
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(cloud)
@@ -89,6 +80,58 @@ class O3DVis(object):
         self.counter+=1
 
 
-    def capture_image(self):
+    def capture_image(self, intrinsics, camera_pose):
+        intr = o3d.camera.PinholeCameraIntrinsic(
+            intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy
+        )
+        self.render.setup_camera(intr, np.linalg.inv(np.eye(4)))
+
+        # Look at the origin from the front (along the -Z direction, into the screen), with Y as Up.
+        center = np.array(camera_pose[:3,3]) + np.array(camera_pose[:3,2])  # look_at target
+        eye = np.array(camera_pose[:3,3])  # camera position
+        up = -np.array(camera_pose[:3,1])
+        self.render.scene.camera.look_at(center, eye, up)
         img = np.array(self.render.render_to_image())
+        img = j.add_rgba_dimension(img)
         return img
+
+    def make_camera(self, intrinsics, pose, size):
+        cx = intrinsics.cx
+        cy = intrinsics.cy
+        fx = intrinsics.fx
+        fy = intrinsics.fy
+        width = intrinsics.width
+        height = intrinsics.height
+
+        color = j.BLUE
+        dist=size
+        vertices = np.zeros((5, 3))
+        vertices[0, :] = [0, 0, 0]
+        vertices[1, :] = [(0-cx)*dist/fx, (0-cy)*dist/fy, dist]
+        vertices[2, :] = [(width-cx)*dist/fx, (0-cy)*dist/fy, dist]
+        vertices[3, :] = [(width-cx)*dist/fx, (height-cy)*dist/fy, dist]
+        vertices[4, :] = [(0-cx)*dist/fx, (height-cy)*dist/fy, dist]
+        new_points = j.t3d.apply_transform(vertices, pose)
+        lines = np.array([ 
+            [0,1],
+            [0,2],
+            [0,3],
+            [0,4],
+            [1,2],
+            [2,3],
+            [3,4],
+            [4,1],
+        ])
+
+        line_set = o3d.geometry.LineSet()
+        line_set.points =  o3d.utility.Vector3dVector(new_points)
+        line_set.lines = o3d.utility.Vector2iVector(lines)
+        line_set.paint_uniform_color(color)
+
+        mtl = o3d.visualization.rendering.MaterialRecord()  # or MaterialRecord(), for later versions of Open3D
+        mtl.base_color = [0.0, 0.0, 1.0, 1.0]  # RGBA
+        mtl.shader = "defaultUnlit"
+
+        self.render.scene.add_geometry(f"{self.counter}", line_set, mtl)
+        self.counter+=1
+

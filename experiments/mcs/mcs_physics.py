@@ -2,6 +2,7 @@ import machine_common_sense as mcs
 import jax3dp3 as j
 import numpy as np
 import jax.numpy as jnp
+from tqdm import tqdm
 
 controller = mcs.create_controller(
     "config_level2.ini"
@@ -9,26 +10,24 @@ controller = mcs.create_controller(
 
 scene_data = mcs.load_scene_json_file("charlie_0002_04_B1_debug.json")
 
-
 step_metadata = controller.start_scene(scene_data)
 image = j.RGBD.construct_from_step_metadata(step_metadata)
 
-
 step_metadatas = [step_metadata]
-for _ in range(200):
+for _ in tqdm(range(200)):
     step_metadata = controller.step("Pass")
     if step_metadata is None:
         break
     step_metadatas.append(step_metadata)
 
-step_metadatas = [i for i in step_metadatas if i is not None]
+images = []
+for i in tqdm(range(len(step_metadatas))):
+    images.append(j.RGBD.construct_from_step_metadata(step_metadatas[i]))
 
-images = [
-     j.RGBD.construct_from_step_metadata(s) for s in step_metadatas
-]
-image = images[0]
 
-j.setup_visualizer()
+j.meshcat.setup_visualizer()
+
+image = images[1]
 point_cloud_image = j.t3d.unproject_depth(image.depth, image.intrinsics)
 objects = []
 for i in jnp.unique(image.segmentation):
@@ -36,7 +35,54 @@ for i in jnp.unique(image.segmentation):
 
 colors = j.distinct_colors(len(objects))
 for i in range(len(objects)):
-    j.show_cloud(f"{i}", objects[i],color=np.array(colors[i]))
+    j.meshcat.show_cloud(f"{i}", objects[i],color=np.array(colors[i]))
+
+idx = 2
+cloud = objects[idx]
+j.meshcat.clear()
+j.meshcat.show_cloud(f"1", objects[idx],color=np.array(colors[idx]))
+
+def is_non_object(entities):
+    distance_threshold = 0.07
+    pole_distance_threshold = 0.05
+    two_sides_threshold = 2.5
+    side_length_threshold = 1.7
+    min_side_length_threshold =  0.48
+
+
+    bounding_boxes = []
+    for e in entities:
+        bounding_boxes.append(
+            j.utils.aabb(e)
+        )
+
+    occluders = []
+    for (ent_id, (bb, p)) in enumerate(bounding_boxes):
+
+    if (
+        jnp.max(dims) > side_length_threshold or 
+        jnp.min(dims) > min_side_length_threshold
+    ):
+        return True
+
+    if (jnp.max(dims) > side_length_threshold or jnp.min(dims) > min_side_length_threshold):
+        return True
+
+    bb_dist_threshold = 0.5
+
+    if dims[1] < 0.1 or dims[1] > 0.1:
+        return True
+    
+    pos = pose[:3,3]
+    if pos[2] > 14.4:
+        return True
+
+    
+
+    
+
+    return False
+
 
 import trimesh
 

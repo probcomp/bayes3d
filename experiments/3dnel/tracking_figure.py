@@ -34,7 +34,6 @@ all_particles = jnp.array(results["particles_list"])
 
 j.viz.get_depth_image(renderer.render_multiobject(all_particles[0, :, 0, :, :], gt_ids)[:,:,2], max=intrinsics.far).save("img.png")
 
-
 orig_h = intrinsics.height
 orig_w = intrinsics.width
 viz_images = []
