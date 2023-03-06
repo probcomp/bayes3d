@@ -6,10 +6,12 @@ import jax.numpy as jnp
 from itertools import product
 import open3d as o3d
 
-def center_mesh(mesh):
+def center_mesh(mesh, return_pose=False):
     _, pose = jax3dp3.utils.aabb(mesh.vertices)
     shift = np.array(pose[:3,3])
     mesh.vertices = mesh.vertices - shift
+    if return_pose:
+        return mesh, pose
     return mesh
 
 def scale_mesh(mesh, scaling=1.0):
@@ -20,7 +22,7 @@ def export_mesh(mesh, filename):
     normals = mesh.face_normals
     normals = mesh.vertex_normals
     with open(filename,"w") as f:
-        f.write(trimesh.exchange.obj.export_obj(mesh, include_normals=True))
+        f.write(trimesh.exchange.obj.export_obj(mesh, include_normals=True, include_texture=True))
 
 def make_cuboid_mesh(dimensions):
     mesh = trimesh.creation.box(

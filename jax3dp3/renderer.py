@@ -75,6 +75,7 @@ class Renderer(object):
 
         self.meshes =[]
         self.mesh_names =[]
+        self.model_box_dims = jnp.zeros((0,3))
 
     def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0):
         mesh = trimesh.load(mesh_filename)
@@ -88,6 +89,13 @@ class Renderer(object):
         mesh.vertices = mesh.vertices * scaling_factor
         self.meshes.append(mesh)
         self.mesh_names.append(mesh_name)
+
+        self.model_box_dims = jnp.vstack(
+            [
+                self.model_box_dims,
+                jax3dp3.utils.aabb(mesh.vertices)[0]
+            ]
+        )
 
         vertices = np.array(mesh.vertices)
         vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)

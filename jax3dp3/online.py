@@ -32,7 +32,6 @@ def run_occlusion_search(image, renderer, obj_idx, timestep=1):
         *(20,20,4),
         jnp.arange(6)
     )
-    model_box_dims = jnp.array([j.utils.aabb(m.vertices)[0] for m in renderer.meshes])
     pose_proposals, weights, fully_occluded_weight = j.c2f.score_contact_parameters(
         renderer,
         obj_idx,
@@ -40,10 +39,10 @@ def run_occlusion_search(image, renderer, obj_idx, timestep=1):
         obs_point_cloud_image,
         occlusion_sweep,
         t3d.inverse_pose(image.camera_pose) @  table_plane,
-        r_sweep,
-        outlier_prob,
-        outlier_volume,
-        model_box_dims
+        R_SWEEP,
+        OUTLIER_PROB,
+        OUTLIER_VOLUME,
+        renderer.model_box_dims
     )
 
     good_poses = pose_proposals[weights[0,:] >= (fully_occluded_weight - 0.0001)]
@@ -85,7 +84,6 @@ def run_classification(image, renderer, timestep=1, segmentation_image=None):
         obs_point_cloud_image_masked = t3d.unproject_depth(depth_masked, intrinsics)
         obs_point_cloud_image_complement = t3d.unproject_depth(depth_complement, intrinsics)
 
-        model_box_dims = jnp.array([j.utils.aabb(m.vertices)[0] for m in renderer.meshes])
         hypotheses_over_time = j.c2f.c2f_contact_parameters(
             renderer,
             obs_point_cloud_image,
@@ -96,7 +94,7 @@ def run_classification(image, renderer, timestep=1, segmentation_image=None):
             R_SWEEP,
             OUTLIER_PROB,
             OUTLIER_VOLUME,
-            model_box_dims
+            renderer.model_box_dims
         )
 
         scores = jnp.array([i[0] for i in hypotheses_over_time[-1]])
@@ -143,3 +141,4 @@ def run_classification(image, renderer, timestep=1, segmentation_image=None):
             [top, *viz_images], border= 20
         )
         final_viz.save(f"classify_{timestep}_seg_id_{segmentation_id}.png")
+    return all_hypotheses_over_time, obs_point_cloud_image, table_plane

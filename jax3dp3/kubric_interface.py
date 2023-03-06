@@ -11,7 +11,7 @@ import os
 # 3. Then adapt the subprocess call below to make the docker call and instead of calling examples/helloworld.py, it should be calling photorealistric_renderers/kubric_exec.py
 # 4. In the final part of this function load the rgb and depth data that Kubric generated, and return it
 
-def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0):
+def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0, lighting=5.0):
     #asset intrinsics are compatible with Blender camera parameters
     assert intrinsics.fx == intrinsics.fy, "fx and fy must be equal"
     assert intrinsics.cx == intrinsics.width/2, "cx must be width/2"
@@ -41,7 +41,8 @@ def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0
         cx = intrinsics.cx,
         cy = intrinsics.cy,
         near = intrinsics.near,
-        far = intrinsics.far
+        far = intrinsics.far,
+        intensity=lighting
     )
 
     path = os.path.dirname(os.path.dirname(__file__))
@@ -56,6 +57,6 @@ def render_kubric(mesh_paths, poses, camera_pose, intrinsics, scaling_factor=1.0
     print(command_string + command_strings + command_string2)
     subprocess.run([command_string + command_strings + command_string2], shell=True)
     data = np.load("/tmp/output.npz")
-    return data["rgba"], data["segmentation"], data["depth"][:,:,0]
+    return data["rgba"], data["segmentation"][...,0], data["depth"][:,:,0]
 
     #Load RGB and depth images from file

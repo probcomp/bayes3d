@@ -13,6 +13,7 @@ from . import ycb_loader
 from . import occlusion
 from . import blenderproc
 from . import kubric_interface
+from . import o3d_viz
 
 from .enumerations import *
 from .renderer import *
