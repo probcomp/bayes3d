@@ -1,4 +1,3 @@
-# import jax3dp3 as j
 import zmq
 import pickle5
 import zlib
@@ -19,4 +18,5 @@ while True:
     # compute something
     response = spatial_elimination(message)
     #  Send reply back to client
-    socket.send(zlib.compress(pickle5.dumps(message)))
+    print(type(response))
+    socket.send(zlib.compress(pickle5.dumps(response)))
