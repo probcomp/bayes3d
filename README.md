@@ -29,7 +29,7 @@ To test successful setup run:
 ```
 python test/test.py
 ```
-and view `out.gif`
+and view `test.gif`
 
 ## Assets
 
