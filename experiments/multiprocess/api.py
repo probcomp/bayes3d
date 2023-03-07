@@ -1,9 +1,9 @@
-import pickle as pkl
 import jax3dp3 as j
 import jax3dp3.transforms_3d as t3d
 import os
 import trimesh
 import jax.numpy as jnp
+import numpy as np
 
 
 def spatial_elimination(d):
@@ -51,20 +51,21 @@ def spatial_elimination(d):
     outlier_volume = 1.0
     model_box_dims = jnp.array([j.utils.aabb(m.vertices)[0] for m in renderer.meshes])
 
-    pose_proposals, weights, perfect_score = j.c2f.c2f_score_contact_parameters(
+    pose_proposals, weights, perfect_score = j.c2f.score_contact_parameters(
         renderer,
         0,
         obs_point_cloud_image,
         obs_point_cloud_image,
-        contact_param_sweep,
-        face_param_sweep,
-        r_sweep,
+        (contact_param_sweep,
+         face_param_sweep),
         contact_plane_pose_in_cam_frame,
+        r_sweep,
         outlier_prob,
         outlier_volume,
         model_box_dims,
     )
 
     good_poses = pose_proposals[weights[0, :] >= (perfect_score - 0.0001)]
+    good_poses = np.array(good_poses[:, :3, 4])
 
     return good_poses
