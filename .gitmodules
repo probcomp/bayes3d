@@ -1,3 +1,0 @@
-[submodule "posecnn-pytorch/PoseCNN-PyTorch"]
-	path = jax3dp3/posecnn-pytorch/posecnn-pytorch/PoseCNN-PyTorch
-	url = ./posecnn-pytorch/PoseCNN-PyTorch/
