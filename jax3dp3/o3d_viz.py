@@ -2,12 +2,23 @@ import open3d as o3d
 import numpy as np
 import jax3dp3 as j
 
+def trimesh_to_o3d_triangle_mesh(trimesh_mesh):
+    mesh = o3d.geometry.TriangleMesh()
+    mesh.vertices =  o3d.utility.Vector3dVector(trimesh_mesh.vertices)
+    mesh.triangles = o3d.utility.Vector3iVector(trimesh_mesh.faces)
+    mesh.triangle_normals = o3d.utility.Vector3dVector(np.array(trimesh_mesh.face_normals))
+    return mesh
+
 class O3DVis(object):
     def __init__(self, intrinsics):
         self.render = o3d.visualization.rendering.OffscreenRenderer(intrinsics.width, intrinsics.height)
         self.render.scene.set_background(np.array([1.0, 1.0, 1.0, 1.0]))
 
         self.counter = 0
+
+    def set_background(self, background):
+        self.render.scene.set_background(background)
+
 
     def make_bounding_box(self, dims, pose, color=None, update=True):
         line_set = o3d.geometry.LineSet()
@@ -73,12 +84,24 @@ class O3DVis(object):
         self.counter+=1
         return pcd
 
-    def make_mesh(self, filename, pose):
+    def make_mesh_from_file(self, filename, pose):
         mesh = o3d.io.read_triangle_model(filename)
         mesh.meshes[0].mesh.transform(pose)
         self.render.scene.add_model(f"{self.counter}", mesh)
         self.counter+=1
+    
+    def clear(self):
+        self.render.scene.clear_geometry()
 
+    def make_trimesh(self, trimesh_mesh, pose, color):
+        mesh = trimesh_to_o3d_triangle_mesh(trimesh_mesh)
+        mesh.transform(pose)
+        mtl = o3d.visualization.rendering.MaterialRecord()
+        mtl.shader = 'defaultLitTransparency'
+        mtl.base_color = color
+
+        self.render.scene.add_geometry(f"{self.counter}", mesh, mtl)
+        self.counter+=1
 
     def capture_image(self, intrinsics, camera_pose):
         intr = o3d.camera.PinholeCameraIntrinsic(
