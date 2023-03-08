@@ -40,11 +40,12 @@ def spatial_elimination(d):
 
     table_dims = jnp.array([20.0, 20.0])
     grid_params = (50, 50, 1)
-    contact_param_sweep, face_param_sweep = j.scene_graph.enumerate_contact_and_face_parameters(
-        -table_dims[0] / 2.0, -table_dims[1] / 2.0, 0.0, table_dims[0] / 2.0, table_dims[1] / 2.0, jnp.pi * 2,
+    sweep = j.scene_graph.enumerate_contact_and_face_parameters(
+        -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
         *grid_params,
         jnp.arange(1)
     )
+
 
     r_sweep = jnp.array([0.02])
     outlier_prob = 0.1
@@ -56,8 +57,7 @@ def spatial_elimination(d):
         0,
         obs_point_cloud_image,
         obs_point_cloud_image,
-        (contact_param_sweep,
-         face_param_sweep),
+        sweep,
         contact_plane_pose_in_cam_frame,
         r_sweep,
         outlier_prob,
@@ -65,7 +65,22 @@ def spatial_elimination(d):
         model_box_dims,
     )
 
-    good_poses = pose_proposals[weights[0, :] >= (perfect_score - 0.0001)]
-    good_poses = np.array(good_poses[:, :3, 4])
+    good_poses = pose_proposals[weights[0,:] >= (perfect_score - 0.0001)]
+
+    good_poses_image = renderer.render_multiobject(good_poses, [0 for _ in range(good_poses.shape[0])])
+    posterior = j.viz.get_depth_image(good_poses_image[:,:,2], max=far)
+
+    depth_viz = j.get_depth_image(depth_scaled,max=intrinsics.far)
+    j.viz.multi_panel(
+        [
+            depth_viz,
+            posterior,
+            j.viz.overlay_image(depth_viz, posterior, alpha=0.6)
+        ],
+        labels=["Observed Depth", "Posterior", "Overlay"],
+        label_fontsize=15
+    ).save("overlay.png")
+
+    good_poses = np.array(good_poses[:, :3, -1])
 
     return good_poses
