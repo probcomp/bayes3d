@@ -18,6 +18,11 @@ def scale_mesh(mesh, scaling=1.0):
     mesh.vertices = mesh.vertices * scaling
     return mesh
 
+def load_mesh(mesh_filename, scaling=1.0):
+    mesh = trimesh.load(mesh_filename)
+    mesh.vertices = mesh.vertices * scaling
+    return mesh
+
 def export_mesh(mesh, filename):
     normals = mesh.face_normals
     normals = mesh.vertex_normals
