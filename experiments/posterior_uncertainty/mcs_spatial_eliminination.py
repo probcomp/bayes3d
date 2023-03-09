@@ -1,3 +1,4 @@
+
 import pickle as pkl
 import jax3dp3 as j
 import jax3dp3.transforms_3d as t3d
@@ -35,7 +36,6 @@ segmentation_image  = 1.0 * (depth_scaled > intrinsics.near) * (depth_scaled < i
 depth_masked, depth_complement = j.get_masked_and_complement_image(depth_scaled, segmentation_image, 1.0, intrinsics)
 obs_point_cloud_image = j.t3d.unproject_depth(depth_scaled, intrinsics)
 
-from IPython import embed; embed()
 
 contact_plane_pose_in_cam_frame = t3d.transform_from_rot_and_pos(
     t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi/2),
@@ -45,7 +45,7 @@ contact_plane_pose_in_cam_frame = t3d.transform_from_rot_and_pos(
 
 table_dims = jnp.array([20.0, 20.0])
 grid_params = (50,50,1)
-contact_param_sweep, face_param_sweep = j.scene_graph.enumerate_contact_and_face_parameters(
+sweep = j.scene_graph.enumerate_contact_and_face_parameters(
     -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
     *grid_params,
     jnp.arange(1)
@@ -56,15 +56,14 @@ outlier_prob=0.1
 outlier_volume=1.0
 model_box_dims = jnp.array([j.utils.aabb(m.vertices)[0] for m in renderer.meshes])
 
-pose_proposals, weights, perfect_score = j.c2f.c2f_score_contact_parameters(
+pose_proposals, weights, perfect_score = j.c2f.score_contact_parameters(
     renderer,
     0,
     obs_point_cloud_image,
     obs_point_cloud_image,
-    contact_param_sweep,
-    face_param_sweep,
-    r_sweep,
+    sweep,
     contact_plane_pose_in_cam_frame,
+    r_sweep,
     outlier_prob,
     outlier_volume,
     model_box_dims,
