@@ -5,16 +5,10 @@ import trimesh
 import jax.numpy as jnp
 import numpy as np
 
-renderer = j.Renderer(intrinsics)
-
-
-def initial_setup():
-    mesh = trimesh.load(os.path.join(j.utils.get_assets_dir(), "sample_objs/sphere.obj"))
-    mesh.vertices = mesh.vertices * 0.35
-    renderer.add_mesh(mesh)
-
+renderer = None
 
 def spatial_elimination(d):
+    global renderer
     depth = d["depth_image"]
     floor_plane = d["floor_plane"]
     h, w, fx, fy, cx, cy, near, far = (
@@ -31,8 +25,12 @@ def spatial_elimination(d):
     # far = 10.0
     original_intrinsics = j.Intrinsics(h, w, fx, fy, cx, cy, near, far)
     intrinsics = j.camera.scale_camera_parameters(original_intrinsics, 0.3)
-
-
+    # Initial setup
+    if renderer is None:
+        renderer = j.Renderer(intrinsics)
+        mesh = trimesh.load(os.path.join(j.utils.get_assets_dir(), "sample_objs/sphere.obj"))
+        mesh.vertices = mesh.vertices * 0.35
+        renderer.add_mesh(mesh)
 
     depth_scaled = j.utils.resize(depth, intrinsics.height, intrinsics.width)
 
@@ -45,12 +43,11 @@ def spatial_elimination(d):
 
     table_dims = jnp.array([20.0, 20.0])
     grid_params = (50, 50, 1)
-    sweep = j.scene_graph.enumerate_contact_and_face_parameters(
-        -table_dims[0]/2.0, -table_dims[1]/2.0, 0.0, table_dims[0]/2.0, table_dims[1]/2.0, jnp.pi*2, 
+    contact_param_sweep, face_param_sweep = j.scene_graph.enumerate_contact_and_face_parameters(
+        -table_dims[0] / 2.0, -table_dims[1] / 2.0, 0.0, table_dims[0] / 2.0, table_dims[1] / 2.0, jnp.pi * 2,
         *grid_params,
         jnp.arange(1)
     )
-
 
     r_sweep = jnp.array([0.02])
     outlier_prob = 0.1
@@ -62,7 +59,8 @@ def spatial_elimination(d):
         0,
         obs_point_cloud_image,
         obs_point_cloud_image,
-        sweep,
+        (contact_param_sweep,
+         face_param_sweep),
         contact_plane_pose_in_cam_frame,
         r_sweep,
         outlier_prob,
@@ -70,22 +68,7 @@ def spatial_elimination(d):
         model_box_dims,
     )
 
-    good_poses = pose_proposals[weights[0,:] >= (perfect_score - 0.0001)]
-
-    good_poses_image = renderer.render_multiobject(good_poses, [0 for _ in range(good_poses.shape[0])])
-    posterior = j.viz.get_depth_image(good_poses_image[:,:,2], max=far)
-
-    depth_viz = j.get_depth_image(depth_scaled,max=intrinsics.far)
-    j.viz.multi_panel(
-        [
-            depth_viz,
-            posterior,
-            j.viz.overlay_image(depth_viz, posterior, alpha=0.6)
-        ],
-        labels=["Observed Depth", "Posterior", "Overlay"],
-        label_fontsize=15
-    ).save("overlay.png")
-
-    good_poses = np.array(good_poses[:, :3, -1])
+    good_poses = pose_proposals[weights[0, :] >= (perfect_score - 0.0001)]
+    good_poses = np.array(good_poses[:, :3, 4])
 
     return good_poses
