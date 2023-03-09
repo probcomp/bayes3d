@@ -6,8 +6,7 @@ context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5554")
 
-names = ["query1", "query2"]
-
+initial_setup()
 while True:
     #  Wait for next request from client
     print("Waiting for request...")

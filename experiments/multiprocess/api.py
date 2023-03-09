@@ -5,6 +5,14 @@ import trimesh
 import jax.numpy as jnp
 import numpy as np
 
+renderer = j.Renderer(intrinsics)
+
+
+def initial_setup():
+    mesh = trimesh.load(os.path.join(j.utils.get_assets_dir(), "sample_objs/sphere.obj"))
+    mesh.vertices = mesh.vertices * 0.35
+    renderer.add_mesh(mesh)
+
 
 def spatial_elimination(d):
     depth = d["depth_image"]
@@ -20,14 +28,11 @@ def spatial_elimination(d):
         d["camera_intrinsics"]["far"],
     )
 
-    far = 10.0
+    # far = 10.0
     original_intrinsics = j.Intrinsics(h, w, fx, fy, cx, cy, near, far)
     intrinsics = j.camera.scale_camera_parameters(original_intrinsics, 0.3)
-    renderer = j.Renderer(intrinsics)
 
-    mesh = trimesh.load(os.path.join(j.utils.get_assets_dir(), "sample_objs/sphere.obj"))
-    mesh.vertices = mesh.vertices * 0.35
-    renderer.add_mesh(mesh)
+
 
     depth_scaled = j.utils.resize(depth, intrinsics.height, intrinsics.width)
 
