@@ -65,10 +65,8 @@ grid = j.make_translation_grid_enumeration_3d(
 
 from IPython import embed; embed()
 
-
-
-
-t=0
+`
+t=1
 threshold = 0.005
 depth_images_modified = depth_images.at[depth_images <intrinsics.near].set(intrinsics.far)
 
@@ -87,7 +85,7 @@ shape_distrib = (counts_positive + pseudocounts)/(counts_negative + counts_posit
 j.meshcat.clear()
 j.meshcat.show_cloud("occupied", grid[shape_distrib > 0.5])
 j.meshcat.show_cloud("occl", grid[shape_distrib == 0.5], color=j.RED)
-
+`
 translation_deltas = j.make_translation_grid_enumeration(
     -0.05, -0.05, -0.05, 0.05, 0.05, 0.05, 5,5,5
 )

@@ -15,12 +15,63 @@ viz_intrinsics = j.Intrinsics(
     500.0,
     500.0,
     0.01,
-    20.0
+    2000.0
 )
 
 viz = j.o3d_viz.O3DVis(viz_intrinsics)
 
+model_dir = "/home/nishadgothoskar/data/bop/ycbv/models"
+mesh_paths = []
+for idx in range(1,22):
+    mesh_paths.append(os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply"))
+
 viz.clear()
+
+idx = 4
+pose = j.t3d.transform_from_pos(jnp.array([0.0, 0.0, 0.0]))
+pose2 = j.t3d.transform_from_pos(jnp.array([0.0, -200.0, 0.0]))
+path = mesh_paths[idx]
+
+mesh = o3d.io.read_triangle_model(path)
+mesh.meshes[0].mesh.transform(pose)
+mesh.materials[0].base_color = [1.0, 1.0, 1.0, 1.0]
+# mesh.materials[0].shader =  'defaultLitTransparency'
+viz.render.scene.add_model(f"1", mesh)
+
+mesh = o3d.io.read_triangle_model(path)
+mesh.meshes[0].mesh.transform(pose2)
+# mesh.materials[0].shader =  'defaultLitTransparency'
+mesh.materials[0].base_color = [1.0, 1.0, 1.0, 1.0]
+viz.render.scene.add_model(f"2", mesh)
+
+
+camera_pose = j.t3d.transform_from_pos_target_up(
+    jnp.array([0.0, 300.0, 0.0]),
+    jnp.array([0.0, 0.0, 0.0]),
+    jnp.array([0.0, 0.0, 1.0]),
+)
+rgb = viz.capture_image(viz_intrinsics, camera_pose)
+j.get_rgb_image(rgb).save("test_open3d_viz.png")
+
+
+model_dir = "/home/nishadgothoskar/models"
+mesh_paths = []
+model_names = j.ycb_loader.MODEL_NAMES
+offset_poses = []
+for name in model_names:
+    mesh_path = os.path.join(model_dir,name,"textured.obj")
+    mesh_paths.append(
+        mesh_path
+    )
+
+
+
+
+
+viz.clear()
+
+
+
 
 trimesh_mesh = trimesh.voxel.ops.points_to_marching_cubes(np.random.rand(100,3), pitch=0.5)
 pose1 = j.t3d.transform_from_pos(jnp.array([-1.0, 0.0, 5.0]))

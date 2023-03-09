@@ -18,6 +18,12 @@ pip install "jax[cuda11_cudnn805]" -f https://storage.googleapis.com/jax-release
 python setup.py develop
 ```
 
+Use these commands to identify Cuda and CuDNN versions:
+```
+nvcc --version
+cat /usr/local/cuda/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
+```
+
 Add the following to `~/.bashrc`
 ```
 export XLA_PYTHON_CLIENT_PREALLOCATE=false

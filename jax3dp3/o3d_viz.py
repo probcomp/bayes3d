@@ -12,7 +12,9 @@ def trimesh_to_o3d_triangle_mesh(trimesh_mesh):
 class O3DVis(object):
     def __init__(self, intrinsics):
         self.render = o3d.visualization.rendering.OffscreenRenderer(intrinsics.width, intrinsics.height)
+        # self.set_background(np.array([0.0, 0.0, 0.0, 0.0]))
         self.render.scene.set_background(np.array([1.0, 1.0, 1.0, 1.0]))
+        self.render.scene.set_lighting(self.render.scene.LightingProfile.NO_SHADOWS, (0, 0, 0))
 
         self.counter = 0
 
@@ -84,7 +86,7 @@ class O3DVis(object):
         self.counter+=1
         return pcd
 
-    def make_mesh_from_file(self, filename, pose):
+    def make_mesh_from_file(self, filename, pose, scaling_factor=1.0):
         mesh = o3d.io.read_triangle_model(filename)
         mesh.meshes[0].mesh.transform(pose)
         self.render.scene.add_model(f"{self.counter}", mesh)
@@ -116,6 +118,8 @@ class O3DVis(object):
         self.render.scene.camera.look_at(center, eye, up)
         img = np.array(self.render.render_to_image())
         img = j.add_rgba_dimension(img)
+
+        # img = img.at[(img[:,:,:3].sum(-1)) > 255, -1].set(0.0)
         return img
 
     def make_camera(self, intrinsics, pose, size):
