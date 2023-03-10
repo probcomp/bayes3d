@@ -4,7 +4,7 @@ from sklearn.cluster import DBSCAN
 from scipy.spatial.transform import Rotation as R
 
 import json
-import jax3dp3
+from jax3dp3 import Renderer
 
 
 def get_object_transforms(obj_name, init_transform):
@@ -55,21 +55,21 @@ def cluster_camera_coords(coords, eps=0.1, min_points_per_shape=5):
     return clustering
 
 
-def check_occlusion(pose_estimates, indices, obj_idx, occlusion_threshold=10):
-    depth_wi = jax3dp3.render_multiobject(pose_estimates, indices)
+def check_occlusion(renderer: Renderer, pose_estimates, indices, obj_idx, occlusion_threshold=10):
+    depth_wi = renderer.render_multiobject(pose_estimates, indices)
     no_obj_mask = jnp.where(jnp.arange(pose_estimates.shape[0]) != obj_idx)
-    depth_woi = jax3dp3.render_multiobject(
+    depth_woi = renderer.render_multiobject(
         pose_estimates[no_obj_mask], jnp.array(indices)[no_obj_mask]
     )
     return jnp.sum(depth_wi[:, :, 2] != depth_woi[:, :, 2]) < occlusion_threshold
 
 
-def check_containment(pose_estimates, indices, obj_idx, containment_threshold=0.03):
+def check_containment(renderer: Renderer, pose_estimates, indices, obj_idx, containment_threshold=0.03):
     positions = pose_estimates[:, :-1, -1]
     diff = jnp.square(positions - positions[obj_idx]).sum(-1)
     closest_idx = jnp.argsort(diff)[1]
 
-    depth_closest = jax3dp3.render_single_object(
+    depth_closest = renderer.render_single_object(
         pose_estimates[closest_idx], indices[closest_idx]
     )
     closest_mask = depth_closest[:, :, 2] != 0
@@ -77,9 +77,11 @@ def check_containment(pose_estimates, indices, obj_idx, containment_threshold=0.
     closest_maxs = np.max(closest_points, axis=0)
     closest_mins = np.min(closest_points, axis=0)
 
-    depth_i = jax3dp3.render_single_object(pose_estimates[obj_idx], indices[obj_idx])
+    depth_i = renderer.render_single_object(pose_estimates[obj_idx], indices[obj_idx])
     i_mask = depth_i[:, :, 2] != 0
     i_points = depth_i[i_mask]
+    if not i_points.size:
+        return closest_idx.item()
     i_maxs = np.max(i_points, axis=0)
     i_mins = np.min(i_points, axis=0)
     
@@ -89,13 +91,13 @@ def check_containment(pose_estimates, indices, obj_idx, containment_threshold=0.
     return closest_idx.item() if contained else None
     # return 3 if contained else None
         
-def find_best_mesh(meshes, obj_transform, depth):
+def find_best_mesh(renderer: Renderer, meshes, obj_transform, depth):
     best = None
     k = np.inf
     for m in range(len(meshes)):
         obj_transforms = get_object_transforms(meshes[m], obj_transform)
         for i, transform in enumerate(obj_transforms):
-            rendered_image = jax3dp3.render_single_object(transform, m)
+            rendered_image = renderer.render_single_object(transform, m)
             keep_points = (
                 jnp.sum(
                     jnp.logical_or(

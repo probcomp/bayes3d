@@ -78,8 +78,8 @@ class Renderer(object):
         self.mesh_names =[]
         self.model_box_dims = jnp.zeros((0,3))
 
-    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0):
-        mesh = trimesh.load(mesh_filename)
+    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None):
+        mesh = trimesh.load(mesh_filename, force=force)
         self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor)
 
     def add_mesh(self, mesh, mesh_name=None, scaling_factor=1.0):
