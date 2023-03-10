@@ -17,3 +17,6 @@ pyransac3d
 meshcat
 h5py
 gdown
+torch
+torchvision
+torchaudio
