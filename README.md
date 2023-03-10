@@ -41,5 +41,6 @@ and view `test.gif`
 
 Get additional model and data assets by running
 ```
+pip install -r requirements.txt
 bash download.sh
 ```

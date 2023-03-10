@@ -58,7 +58,6 @@ for i in range(len(gt_ids)):
 poses = jnp.array(poses)
 
 
-
 rgb, seg, depth = j.kubric_interface.render_kubric(paths, poses, jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
 j.get_rgb_image(rgb).save("background_transparent.png")
 
@@ -96,8 +95,8 @@ j.multi_panel(
     ]
 ).save("test_kubric.png")
 
-j.setup_visualizer()
-j.show_cloud("1", j.t3d.unproject_depth(depth, intrinsics).reshape(-1,3),color=j.RED)
-j.show_cloud("2", j.t3d.unproject_depth(img[:,:,2], intrinsics).reshape(-1,3), color=j.BLUE)
+# j.setup_visualizer()
+# j.show_cloud("1", j.t3d.unproject_depth(depth, intrinsics).reshape(-1,3),color=j.RED)
+# j.show_cloud("2", j.t3d.unproject_depth(img[:,:,2], intrinsics).reshape(-1,3), color=j.BLUE)
 
 from IPython import embed; embed()

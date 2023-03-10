@@ -15,3 +15,5 @@ trimesh
 ninja
 pyransac3d
 meshcat
+h5py
+gdown
