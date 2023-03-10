@@ -44,3 +44,9 @@ Get additional model and data assets by running
 pip install -r requirements.txt
 bash download.sh
 ```
+
+
+
+```
+sudo apt install libeigen3-dev
+sudo ln -s /usr/include/eigen3/Eigen /usr/include/Eigen

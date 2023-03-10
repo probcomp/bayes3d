@@ -83,9 +83,9 @@ pseudocounts = 0.01
 shape_distrib = (counts_positive + pseudocounts)/(counts_negative + counts_positive + 2*pseudocounts)
 
 j.meshcat.clear()
-j.meshcat.show_cloud("occupied", grid[shape_distrib > 0.5])
-j.meshcat.show_cloud("occl", grid[shape_distrib == 0.5], color=j.RED)
-`
+j.meshcat.show_cloud("occupied", grid[shape_distrib > 0.5] * 5.0)
+j.meshcat.show_cloud("occl", grid[shape_distrib == 0.5] * 5.0, color=j.RED)
+
 translation_deltas = j.make_translation_grid_enumeration(
     -0.05, -0.05, -0.05, 0.05, 0.05, 0.05, 5,5,5
 )

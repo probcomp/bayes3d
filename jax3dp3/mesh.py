@@ -36,6 +36,13 @@ def make_cuboid_mesh(dimensions):
     )
     return mesh
 
+def make_marching_cubes_mesh_from_point_cloud(
+    point_cloud,
+    pitch
+):
+    mesh = trimesh.voxel.ops.points_to_marching_cubes(point_cloud, pitch=pitch)
+    return mesh
+
 def make_alpha_mesh_from_point_cloud(
     point_cloud,
     alpha

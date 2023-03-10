@@ -52,7 +52,7 @@ for i in range(len(gt_ids)):
 poses = jnp.array(poses)
 
 
-rgb, seg, depth = j.kubric_interface.render_kubric(paths, poses, jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
+rgb, seg, depth = j.kubric_interface.render_multiobject(paths, poses, jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
 j.get_rgb_image(rgb).save("background_transparent.png")
 
 
