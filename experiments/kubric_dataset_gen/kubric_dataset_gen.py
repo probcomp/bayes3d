@@ -11,25 +11,23 @@ model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")
 print(f"{model_dir} exists: {os.path.exists(model_dir)}")
 mesh_paths = []
 model_names = j.ycb_loader.MODEL_NAMES
-offset_poses = []
-for name in model_names:
-    mesh_path = os.path.join(model_dir,name,"textured.obj")
-    _, pose = j.mesh.center_mesh(trimesh.load(mesh_path), return_pose=True)
-    offset_poses.append(pose)
-    mesh_paths.append(
-        mesh_path
-    )
+IDX = 1
+name = model_names[IDX]
+mesh_path = os.path.join(model_dir,name,"textured.obj")
+_, offset_pose = j.mesh.center_mesh(trimesh.load(mesh_path), return_pose=True)
 
 camera_pose = j.t3d.transform_from_pos_target_up(
-    jnp.array([0.0, 1.0, 0.0]),
+    jnp.array([0.0, 0.4, 0.0]),
     jnp.array([0.0, 0.0, 0.0]),
     jnp.array([0.0, 0.0, 1.0]),
 )
 
 key = jax.random.PRNGKey(3)
-object_poses = jax.vmap(lambda key: j.distributions.gaussian_vmf(key, 0.00001, 800.0))(
+object_poses = jax.vmap(lambda key: j.distributions.gaussian_vmf(key, 0.00001, 0.001))(
     jax.random.split(key, 10)
 )
+object_poses = jnp.einsum("ij,ajk",j.t3d.inverse_pose(camera_pose),object_poses)
+
 
 intrinsics = j.Intrinsics(
     height=300,
@@ -39,7 +37,8 @@ intrinsics = j.Intrinsics(
     near=0.001, far=50.0
 )
 
-all_data = j.kubric_interface.render_parallel(mesh_paths[0], object_poses, camera_pose, intrinsics, scaling_factor=1.0, lighting=5.0)
+all_data = j.kubric_interface.render_parallel(mesh_path, object_poses, jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
+
 from IPython import embed; embed()
 rgb_viz = []
 for d in all_data:

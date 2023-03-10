@@ -43,37 +43,39 @@ logging.basicConfig(level="INFO")
 #convert intrinsics to focal_length, sensor_width
 focal_length = fx / width
 sensor_width = 1 
-print(f"POSES: {poses}")
-print(f"CAMERA POSE: {camera_pose}")
+# print(f"POSES: {poses}")
+# print(f"CAMERA POSE: {camera_pose}")
 
-# --- create scene and attach a renderer to it
-scene = kb.Scene(resolution=(width.item(), height.item()))
-# scene.ambient_illumination = get_color("red")
-renderer = KubricRenderer(scene)
-# --- create perspective camera 
-scene += kb.PerspectiveCamera(name="camera",
-    position =cam_pose_pos,quaternion=cam_pose_quat, focal_length=focal_length, sensor_width=sensor_width)
-scene += kb.DirectionalLight(
-    name="sun", position=(0, -0.0, 0),
-    look_at=(0, 0, 1), intensity=intensity
-)
 
-obj = kb.FileBasedObject(
-    asset_id=f"1", 
-    render_filename=mesh_path,
-    simulation_filename=None,
-    scale=scaling_factor,
-)
+
 for i in range(len(positions)):
-    obj.position=positions[i],
-    obj.quaternion=quaternions[i],
+    # --- create scene and attach a renderer to it
+    scene = kb.Scene(resolution=(width.item(), height.item()))
+    # scene.ambient_illumination = get_color("red")
+    renderer = KubricRenderer(scene)
+    # --- create perspective camera 
+    scene += kb.PerspectiveCamera(name="camera",
+        position =cam_pose_pos,quaternion=cam_pose_quat, focal_length=focal_length, sensor_width=sensor_width)
+    scene += kb.DirectionalLight(
+        name="sun", position=(0, -0.0, 0),
+        look_at=(0, 0, 1), intensity=intensity
+    )
+
+    obj = kb.FileBasedObject(
+        asset_id=f"1", 
+        render_filename=mesh_path,
+        simulation_filename=None,
+        scale=scaling_factor,
+        position=positions[i],
+        quaternion=quaternions[i],
+    )
     scene += obj
+    print(i)
 
     frame = renderer.render_still()
     print(f"RENDERED FRAME ")
     np.savez(f"/tmp/{i}.npz", rgba=frame["rgba"], segmentation=frame["segmentation"], depth=frame["depth"])
     print(f"SAVED FRAME USING NP")
 
-    scene -= obj
 
 

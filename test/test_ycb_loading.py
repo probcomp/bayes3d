@@ -3,7 +3,8 @@ import jax3dp3 as j
 import trimesh
 import os
 
-rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv")
+bop_ycb_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv")
+rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', bop_ycb_dir)
 
 rgb_viz = j.get_rgb_image(rgbd.rgb)
 depth_viz = j.get_depth_image(rgbd.depth, max=rgbd.intrinsics.far)
