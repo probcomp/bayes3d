@@ -22,11 +22,12 @@ for _ in tqdm(range(200)):
         break
     step_metadatas.append(step_metadata)
 
-images = []
+all_images = []
 for i in tqdm(range(len(step_metadatas))):
-    images.append(j.RGBD.construct_from_step_metadata(step_metadatas[i]))
-j.meshcat.setup_visualizer()
-images = images[94:]
+    all_images.append(j.RGBD.construct_from_step_metadata(step_metadatas[i]))
+
+images = all_images
+# images = images[94:]
 
 
 
@@ -76,16 +77,16 @@ for i in range(len(meshes)):
 
 
 
-
-
 plane = j.mesh.make_cuboid_mesh([100.0, 100.0, 0.001])
+WALL_Z = 14.5
 wall_pose = j.t3d.transform_from_pos_target_up(
-    jnp.array([0.0, 0.0, 14.5]),
+    jnp.array([0.0, 0.0, WALL_Z]),
     jnp.array([0.0, 0.0, 0.5]),
     jnp.array([0.0, -1.0, 0.0]),
 )
+FLOOR_Y = 1.45
 floor_pose = j.t3d.transform_from_pos_target_up(
-    jnp.array([0.0, 1.45, 0.0]),
+    jnp.array([0.0, FLOOR_Y, 0.0]),
     jnp.array([0.0, 0.0, 0.0]),
     jnp.array([0.0, 0.0, 1.0]),
 )
@@ -121,9 +122,17 @@ R_SWEEP = jnp.array([0.1])
 OUTLIER_PROB=0.01
 OUTLIER_VOLUME=5.0
 
+
+
+def prior(new_pose, prev_pose):
+    weight = jax.scipy.stats.norm.pdf(new_pose[:3,3] - (prev_pose[:3,3] + jnp.array([0.0, 0.2, 0.0])), loc=0, scale=0.1).sum()
+    weight *= (new_pose[:3,3][1] < 1.4)
+    return weight
+
+prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None)))
+
 pose_estimates = initial_poses
 pose_estimates_all = [pose_estimates]
-
 for t in range(1,len(images)):
     image = images[t]
     print(t)
@@ -148,7 +157,10 @@ for t in range(1,len(images)):
             )
             all_weights.append(weights[0,:])
         all_pose_proposals = jnp.concatenate(all_pose_proposals, axis=1)
+        
         all_weights = jnp.hstack(all_weights)
+        all_weights += prior_parallel(all_pose_proposals[i], pose_estimates[i])
+        
 
         pose_estimates = all_pose_proposals[:,all_weights.argmax(), :,:]
 
@@ -161,29 +173,30 @@ all_viz_images = []
 for i in range(len(pose_estimates_all)):
     image = images[i]
     rerendered = renderer.render_multiobject(pose_estimates_all[i], [*np.arange(NUM_OBJECTS)+1,0,0])[...,:3]
-    depth_reconstruction = j.get_depth_image(rerendered[:,:,2], max=image.intrinsics.far)
+    depth_reconstruction = j.resize_image(j.get_depth_image(rerendered[:,:,2], max=image.intrinsics.far), image.depth.shape[0], image.depth.shape[1])
     depth_real = j.get_depth_image(image.depth, max=image.intrinsics.far)
     all_viz_images.append(j.vstack_images([depth_reconstruction, depth_real]))
 j.make_gif(all_viz_images, "out.gif")
-from IPython import embed; embed()
 
 
-# j.meshcat.setup_visualizer()
+j.meshcat.setup_visualizer()
 
-# j.meshcat.clear()
-# colors = j.distinct_colors(len(objects))
-# for i in range(len(meshes)):
-#     j.meshcat.show_trimesh(f"{i}",meshes[i],color=colors[i])
+import time
 
-# t = 54
-# point_cloud_image = jnp.array(j.t3d.unproject_depth(j.utils.resize(images[t].depth, intrinsics.height, intrinsics.width), intrinsics))
-# j.meshcat.show_cloud("c", point_cloud_image.reshape(-1,3))
-# rerendered = renderer.render_multiobject(pose_estimates_all[t], [*np.arange(NUM_OBJECTS)+1,0,0])[...,:3]
-# j.meshcat.show_cloud("d", rerendered.reshape(-1,3), color=j.RED)
+j.meshcat.clear()
+colors = j.distinct_colors(len(objects))
+for i in range(len(meshes)):
+    j.meshcat.show_trimesh(f"{i}",meshes[i],color=colors[i])
 
-# for i in range(len(meshes)):
-#     j.meshcat.set_pose(f"{i}",pose_estimates_all[t][i])
-    
+for t in range(len(images)):
+    point_cloud_image = jnp.array(j.t3d.unproject_depth(j.utils.resize(images[t].depth, intrinsics.height, intrinsics.width), intrinsics))
+    j.meshcat.show_cloud("c", point_cloud_image.reshape(-1,3))
+    rerendered = renderer.render_multiobject(pose_estimates_all[t], [*np.arange(NUM_OBJECTS)+1,0,0])[...,:3]
+    j.meshcat.show_cloud("d", rerendered.reshape(-1,3), color=j.RED)
+
+    for i in range(len(meshes)):
+        j.meshcat.set_pose(f"{i}",pose_estimates_all[t][i])
+    time.sleep(0.05)
 
 # import open3d as o3d
 # def trimesh_to_o3d_triangle_mesh(trimesh_mesh):

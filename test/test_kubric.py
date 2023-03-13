@@ -29,6 +29,28 @@ rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
     # '52', '1', "/home/nishadgothoskar/data/bop/ycbv"
     '55', '22', bop_ycb_dir
 )
+intrinsics = j.Intrinsics(
+    rgbd.intrinsics.height, rgbd.intrinsics.width,
+    rgbd.intrinsics.fx, rgbd.intrinsics.fx,
+    rgbd.intrinsics.width/2, rgbd.intrinsics.height/2,
+    rgbd.intrinsics.near, rgbd.intrinsics.far
+)
+
+
+IDX = 0
+
+camera_pose = j.t3d.transform_from_pos_target_up(
+    jnp.array([0.0, 1.0, 1.0]),
+    jnp.array([0.0, 0.0, 0.0]),
+    jnp.array([0.0, 0.0, 1.0]),
+)
+poses = jnp.array([jnp.linalg.inv(camera_pose)])
+
+rgb, seg, depth = j.kubric_interface.render_multiobject([mesh_paths[0]], poses, jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
+j.get_rgb_image(rgb).save("single_object.png")
+
+
+
 
 paths = []
 for i in gt_ids:

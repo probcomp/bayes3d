@@ -117,6 +117,6 @@ def render_parallel(mesh_path, poses, camera_pose, intrinsics, scaling_factor=1.
     subprocess.run([command_string + command_strings + command_string2], shell=True)
     all_data = []
     for i in range(len(poses)):
-        data = np.load("/tmp/output.npz")
+        data = np.load(f"/tmp/{i}.npz")
         all_data.append((data["rgba"], data["segmentation"][...,0], data["depth"][:,:,0]))
     return all_data
