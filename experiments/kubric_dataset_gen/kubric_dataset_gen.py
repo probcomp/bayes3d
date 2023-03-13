@@ -11,8 +11,9 @@ model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")
 print(f"{model_dir} exists: {os.path.exists(model_dir)}")
 mesh_paths = []
 model_names = j.ycb_loader.MODEL_NAMES
-IDX = 1
+IDX = 13
 name = model_names[IDX]
+print(name)
 mesh_path = os.path.join(model_dir,name,"textured.obj")
 _, offset_pose = j.mesh.center_mesh(trimesh.load(mesh_path), return_pose=True)
 
