@@ -18,6 +18,8 @@ pip install "jax[cuda11_cudnn805]" -f https://storage.googleapis.com/jax-release
 python setup.py develop
 ```
 
+Using a *Deep Learning AMI GPU PyTorch 1.13.1 (Ubuntu 20.04) 20230309* instance of AWS comes with CUDA 11.7 and the proper CuDNN version. 
+
 Use these commands to identify Cuda and CuDNN versions:
 ```
 nvcc --version
@@ -27,6 +29,12 @@ cat /usr/local/cuda/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
 Add the following to `~/.bashrc`
 ```
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
+```
+
+Install additional libraries and restart to apply changes
+```
+sudo apt-get install libegl1-mesa-dev
+sudo apt-get install libglu1-mesa-dev
 ```
 
 ## Test
