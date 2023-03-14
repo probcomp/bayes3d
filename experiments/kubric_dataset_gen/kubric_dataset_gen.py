@@ -40,9 +40,10 @@ intrinsics = j.Intrinsics(
 
 all_data = j.kubric_interface.render_parallel(mesh_path, object_poses, jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
 
-from IPython import embed; embed()
 rgb_viz = []
 for d in all_data:
     rgb_viz.append(j.get_rgb_image(d[0]))
 
 j.hstack_images(rgb_viz).save("dataset.png")
+
+from IPython import embed; embed()
