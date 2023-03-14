@@ -202,9 +202,9 @@ def rotation_matrix_to_quaternion(matrix):
 
 
 def unproject_depth(
-    depth_in: np.ndarray,
+    depth_in,
     intrinsics,
-) -> np.ndarray:
+):
     depth = jnp.array(depth_in)
     depth.at[depth > intrinsics.far].set(intrinsics.far)
     depth.at[depth < intrinsics.near].set(intrinsics.far)
@@ -215,13 +215,13 @@ def unproject_depth(
             [0.0, 0.0, 1.0],
         ]
     )
-    vu = np.mgrid[: depth.shape[0], : depth.shape[1]]
+    vu = jnp.mgrid[: depth.shape[0], : depth.shape[1]]
     depth_for_uv = depth[vu[0], vu[1]]
-    full_vec = np.stack(
+    full_vec = jnp.stack(
         [vu[1] * depth_for_uv, vu[0] * depth_for_uv, depth_for_uv], axis=0
     )
-    coords_in_camera = np.moveaxis(
-        np.einsum('ij,j...->i...', np.linalg.inv(K), full_vec), 0, -1
+    coords_in_camera = jnp.moveaxis(
+        jnp.einsum('ij,j...->i...', jnp.linalg.inv(K), full_vec), 0, -1
     )
     return coords_in_camera
 

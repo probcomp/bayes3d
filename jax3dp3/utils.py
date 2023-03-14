@@ -165,10 +165,12 @@ def segment_point_cloud(point_cloud, threshold=0.01, min_points_in_cluster=0):
 def segment_point_cloud_image(point_cloud_image, threshold=0.01, min_points_in_cluster=0):
     point_cloud = point_cloud_image.reshape(-1,3)
     non_zero = point_cloud[:,2] > 0.0
+    segmentation_img = np.ones(point_cloud.shape[0]) * -1.0
+    if non_zero.sum() == 0:
+        return segmentation_img
     non_zero_indices = np.where(non_zero)[0]
     segmentation = segment_point_cloud(point_cloud[non_zero_indices,:], threshold=threshold, min_points_in_cluster=min_points_in_cluster)
     unique, counts =  np.unique(segmentation, return_counts=True)
-    segmentation_img = np.ones(point_cloud.shape[0]) * -1.0 
     for (i,val) in enumerate(unique[unique != -1]):
         segmentation_img[non_zero_indices[segmentation == val]] = i
     segmentation_img = segmentation_img.reshape(point_cloud_image.shape[:2])

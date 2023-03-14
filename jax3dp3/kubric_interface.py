@@ -2,7 +2,6 @@ import jax3dp3 as j
 import numpy as np
 import jax.numpy as jnp
 import subprocess
-import h5py
 import os
 
 

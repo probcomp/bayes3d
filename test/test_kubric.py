@@ -109,7 +109,7 @@ j.multi_panel(
         seg_viz,
         depth_viz2
     ]
-).save("test_renderer.png")
+).save("test_kubric.png")
 
 # j.setup_visualizer()
 # j.show_cloud("1", j.t3d.unproject_depth(depth, intrinsics).reshape(-1,3),color=j.RED)

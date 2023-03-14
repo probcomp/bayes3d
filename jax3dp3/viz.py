@@ -36,10 +36,11 @@ def make_gif_from_pil_images(images, filename):
         loop=0,
     )
 
-def get_depth_image(image, min=0.0, max=1.0):
-    cm = plt.get_cmap('turbo')
+def get_depth_image(image, min=0.0, max=1.0, cmap=None):
+    if cmap is None:
+        cmap = plt.get_cmap('turbo')
     img = Image.fromarray(
-        np.rint(cm((np.clip(np.array(image), min, max) - min) / (max - min)) * 255.0).astype(np.int8), mode="RGBA"
+        np.rint(cmap((np.clip(np.array(image), min, max) - min) / (max - min)) * 255.0).astype(np.int8), mode="RGBA"
     )
     return img
 
