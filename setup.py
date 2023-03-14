@@ -1,4 +1,5 @@
 import setuptools
+import subprocess
 import os
 
 setuptools.setup(
@@ -27,3 +28,20 @@ setuptools.setup(
     packages=setuptools.find_packages(),    
     python_requires='>=3.6',
 )
+
+# --- importing other libraries 
+
+# Add line to .bashrc
+subprocess.run('echo "export XLA_PYTHON_CLIENT_PREALLOCATE=false" >> ~/.bashrc', shell=True)
+
+# Install libeigen3-dev
+subprocess.run('sudo apt-get install -y libeigen3-dev', shell=True)
+
+# Install libglu1-mesa-dev
+subprocess.run('sudo apt-get install -y libglu1-mesa-dev', shell=True)
+
+# Install libegl1-mesa-dev
+subprocess.run('sudo apt-get install -y libegl1-mesa-dev', shell=True)
+
+# Create symbolic link
+subprocess.run('sudo ln -s /usr/include/eigen3/Eigen /usr/include/Eigen', shell=True)
