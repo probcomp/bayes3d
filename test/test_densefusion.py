@@ -105,4 +105,16 @@ prediction_results =  run_DenseFusion(image_color_rgb, image_depth, meta_data,
                                         scene_frame_name=scene_name, 
                                         posecnn_meta=posecnn_meta)
 
+
+# intrinsics = j.Intrinsics(
+#     height=300,
+#     width=300,
+#     fx=200.0, fy=200.0,
+#     cx=150.0, cy=150.0,
+#     near=0.001, far=50.0
+# )
+
+# input: rgb image, depth image, intrinsics (Intrinsics) (assume factor_depth is always 1)
+# output: [(id, pos, quat)]
+
 from IPython import embed; embed()
