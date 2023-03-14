@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import sys
 
 densefusion_path = "../jax3dp3/posecnn-pytorch/PoseCNN-PyTorch"
@@ -119,12 +118,3 @@ prediction_results =  run_DenseFusion(image_color_rgb, image_depth, meta_data,
 # output: [(id, pos, quat)]
 
 from IPython import embed; embed()
-=======
-import jax.numpy as jnp
-import jax3dp3 as j
-import trimesh
-import os
-
-bop_ycb_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv")
-rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', bop_ycb_dir)
->>>>>>> many things
