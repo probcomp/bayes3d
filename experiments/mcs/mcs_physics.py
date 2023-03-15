@@ -6,20 +6,21 @@ from tqdm import tqdm
 import os
 import jax
 import time
+from tqdm import tqdm
 
 # j.meshcat.setup_visualizer()
 
 
 
 # scene_name = "charlie_0002_04_B1_debug.json"
-scene_name = "passive_physics_object_permanence_0001_41"
+
+
+scene_name = "passive_physics_spatio_temporal_continuity_0001_21"
+scene_name = "passive_physics_gravity_support_0001_21"
+scene_name = "passive_physics_shape_constancy_0001_06"
 scene_name = "passive_physics_gravity_support_0001_24"
 scene_name = "passive_physics_object_permanence_0001_41"
-scene_name = "passive_physics_gravity_support_0001_21"
-scene_name = "passive_physics_spatio_temporal_continuity_0001_21"
-
-scene_name = "passive_physics_shape_constancy_0001_06"
-
+scene_name = "passive_physics_collision_0001_01"
 if os.path.exists(f"{scene_name}.npz"):
     images = np.load(f"{scene_name}.npz",allow_pickle=True)["arr_0"]
 else:
@@ -52,12 +53,11 @@ image = images[0]
 
 rgbs = []
 for i in range(len(images)):
-    rgbs.append(j.multi_panel([j.get_rgb_image(images[i].rgb)], [f"{i}"])) 
+    rgbs.append(j.multi_panel([j.get_rgb_image(images[i].rgb)], [f"{i} / {len(images)}"])) 
 j.make_gif(rgbs, "rgb.gif")
 
 
 intrinsics = j.camera.scale_camera_parameters(image.intrinsics, 0.25)
-renderer = j.Renderer(intrinsics)
 
 WALL_Z = 14.5
 FLOOR_Y = 1.45
@@ -100,6 +100,7 @@ floor_pose = j.t3d.transform_from_pos_target_up(
     jnp.array([0.0, 0.0, 0.0]),
     jnp.array([0.0, 0.0, 1.0]),
 )
+renderer = j.Renderer(intrinsics)
 renderer.add_mesh(plane)
 for m in meshes:
     renderer.add_mesh(m)
@@ -160,9 +161,6 @@ prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None)))
 pose_estimates = initial_poses
 pose_estimates_all = [pose_estimates]
 
-
-j.meshcat.setup_visualizer()
-
 for t in range(1,len(images)):
     image = images[t]
     print(t)
@@ -207,13 +205,13 @@ for t in range(1,len(images)):
     unexplained = (counts == 0) * (point_cloud_image[:,:,2] < WALL_Z-0.05) * (point_cloud_image[:,:,1] < FLOOR_Y - 0.05)
     j.get_depth_image(unexplained).save("unexplained.png")
 
-    seg = j.utils.segment_point_cloud_image(point_cloud_image * unexplained[...,None], threshold=0.2, min_points_in_cluster=5)
+    seg = j.utils.segment_point_cloud_image(point_cloud_image * unexplained[...,None], threshold=0.3, min_points_in_cluster=5)
     unique_segs = jnp.unique(seg)
     unique_segs = unique_segs[unique_segs != -1]
 
     if len(unique_segs) > 0:
         
-        BUFFER = 3
+        BUFFER = 6
         poses = jnp.zeros((0,4,4))
         new_meshes = []
         for id in unique_segs:
@@ -250,45 +248,85 @@ for t in range(1,len(images)):
 
     pose_estimates_all.append(pose_estimates)
 
-    j.meshcat.clear()
-    j.meshcat.show_cloud("c", point_cloud_image.reshape(-1,3))
-    
-    colors = j.distinct_colors(len(meshes))
-    for i in range(len(meshes)):
-        j.meshcat.show_trimesh(f"{i}",meshes[i],color=colors[i])
 
+
+
+# renderer = j.Renderer(intrinsics)
+# renderer.add_mesh(plane)
+# for m in meshes:
+#     renderer.add_mesh(m)
+
+
+viz_1 = []
+for t in tqdm(range(len(pose_estimates_all))):
+    image = images[t]
+    point_cloud_image = j.t3d.unproject_depth(j.utils.resize(image.depth, intrinsics.height, intrinsics.width), intrinsics)
+    rerendered = render_func(pose_estimates_all[t])[...,:3]
+    counts = j.threedp3_counts(point_cloud_image, rerendered, R_SWEEP[0]*4)
+    unexplained = (counts == 0) * (point_cloud_image[:,:,2] < WALL_Z-0.05) * (point_cloud_image[:,:,1] < FLOOR_Y - 0.05)
+    viz_1.append(
+        [
+            j.get_rgb_image(image.rgb),
+            j.resize_image(
+                j.get_depth_image(point_cloud_image[:,:,2], max=WALL_Z),
+                image.intrinsics.height,
+                image.intrinsics.width
+            ),
+            j.resize_image(
+                j.get_depth_image(unexplained),
+                image.intrinsics.height,
+                image.intrinsics.width
+            )
+        ]
+    )
+
+j.make_gif([j.hstack_images(i) for i in viz_1],"out.gif")
+
+
+viz = j.o3d_viz.O3DVis(image.intrinsics)
+
+# viz.render.scene.scene.remove_light("light")
+# viz.render.scene.scene.add_directional_light('light',[1,1,1],np.array([0.0, 0.0, 1.0]),50000.0,True)
+viz.render.scene.set_lighting(viz.render.scene.LightingProfile.NO_SHADOWS, (0, 0, 0))
+
+colors = np.array(j.distinct_colors(len(meshes), pastel_factor=0.1))
+viz_2 = []
+for t in tqdm(range(len(pose_estimates_all))):
+    # t = 105
+    viz.clear()
+    pose_estimates = pose_estimates_all[t]
     for i in range(2,len(pose_estimates)):
-        j.meshcat.set_pose(f"{i-2}",pose_estimates[i])
+        viz.make_trimesh(meshes[i-2], np.array(pose_estimates[i]), [*colors[i-2], 0.8])
+
+
+    viz.set_background(np.array([1.0, 1.0, 1.0, 1.0]))
+    rgb = viz.capture_image(image.intrinsics, np.eye(4))
+    
+    
+    viz_2.append(
+        [
+            j.get_rgb_image(rgb)
+        ]
+    )
+
+
+viz_final = [None for _  in range(len(pose_estimates_all))]
+for t in tqdm(range(len(pose_estimates_all))):
+    viz_final[t] = j.multi_panel(
+        [viz_1[t][0],viz_1[t][1],viz_2[t][0],viz_1[t][2]],
+        labels=["RGB", "Depth", "Inferred", "Unexplained"]
+    )
+
+j.make_gif(viz_final, f"{scene_name}.gif")
+
+
+
 
 
 from IPython import embed; embed()
-# assert len(images) == len(pose_estimates_all)
 
-colors = jnp.array(j.distinct_colors(10))
-all_viz_images = []
-for i in range(len(pose_estimates_all)):
-    image = images[i]
-    rerendered = render_func(pose_estimates_all[i])
-    depth_reconstruction = j.resize_image(j.get_depth_image(rerendered[:,:,2], max=WALL_Z), image.depth.shape[0], image.depth.shape[1])
-    segmentation = j.resize_image(
-        j.get_rgb_image(
-            colors[jnp.rint(rerendered[:,:,3]).astype(jnp.int32)], max=1.0
-        ), image.depth.shape[0], image.depth.shape[1])
-    depth_real = j.get_depth_image(image.depth, max=WALL_Z)
-    all_viz_images.append(j.hstack_images([depth_real, depth_reconstruction, segmentation]))
-j.make_gif(all_viz_images, "out.gif")
-
-
-from IPython import embed; embed()
+# Visualizations
 
 
 
-# for t in range(len(images)):
-#     point_cloud_image = jnp.array(j.t3d.unproject_depth(j.utils.resize(images[t].depth, intrinsics.height, intrinsics.width), intrinsics))
-#     j.meshcat.show_cloud("c", point_cloud_image.reshape(-1,3))
-#     rerendered = render_func(pose_estimates_all[t])
-#     j.meshcat.show_cloud("d", rerendered.reshape(-1,3), color=j.RED)
 
-#     for i in range(2,len(pose_estimates_all[t])):
-#         j.meshcat.set_pose(f"{i-2}",pose_estimates_all[t][i])
-#     time.sleep(0.05)

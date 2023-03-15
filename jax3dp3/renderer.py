@@ -136,7 +136,24 @@ def render_point_cloud(point_cloud, intrinsics, pixel_smudge=0):
     matches = matches * (intrinsics.far - point_cloud[:,-1][None, None, :])
     a = jnp.argmax(matches, axis=-1)    
     return point_cloud[a]
-    
+
+def render_point_cloud_batched(point_cloud, intrinsics, NUM_PER, pixel_smudge=0):
+    all_images = []
+    num_iters = jnp.ceil(point_cloud.shape[0] / NUM_PER).astype(jnp.int32)
+    for i in tqdm(range(num_iters)):
+        img = j.render_point_cloud(point_cloud[i*NUM_PER:i*NUM_PER+NUM_PER], intrinsics)
+        img = img.at[img[:,:,2] < intrinsics.near].set(intrinsics.far)
+        all_images.append(img)
+    all_images_stack = jnp.stack(all_images,axis=-2)
+    best = all_images_stack[:,:,:,2].argmin(-1)
+    img = all_images_stack[
+        np.arange(intrinsics.height)[:, None],
+        np.arange(intrinsics.width)[None, :],
+        best,
+        :
+    ]
+    return img
+
 def project_cloud_to_pixels(point_cloud, intrinsics):
     point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
     temp1 = point_cloud_normalized[:, :2] * jnp.array([intrinsics.fx,intrinsics.fy])

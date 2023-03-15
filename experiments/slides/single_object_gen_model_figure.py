@@ -64,26 +64,6 @@ point_cloud_noisy = noise + point_cloud
 
 from tqdm import tqdm
 
-all_images = []
-NUM_PER = 10000
-num_iters = jnp.ceil(point_cloud_noisy.shape[0] / NUM_PER).astype(jnp.int32)
-for i in tqdm(range(num_iters)):
-    img = j.render_point_cloud(point_cloud_noisy[i*NUM_PER:i*NUM_PER+NUM_PER], intrinsics)
-    img = img.at[img[:,:,2] < intrinsics.near].set(intrinsics.far)
-    all_images.append(img)
-all_images_stack = jnp.stack(all_images,axis=-2)
-print(all_images_stack.shape)
-j.get_depth_image(all_images_stack[:,:,1,2], max=intrinsics.far).save("reproject.png")
-
-best = all_images_stack[:,:,:,2].argmin(-1)
-img = all_images_stack[
-    np.arange(intrinsics.height)[:, None],
-    np.arange(intrinsics.width)[None, :],
-    best,
-    :
-]
-j.get_depth_image(img[:,:,2], max=intrinsics.far).save("reproject.png")
-
 import jax
 
 
@@ -130,7 +110,7 @@ noise = jax.vmap(
 )
 point_cloud_noisy = noise + point_cloud
 
-img_noisy = j.render_point_cloud(point_cloud_noisy, intrinsics)
+img_noisy = j.  (point_cloud_noisy, intrinsics)
 
 viz = j.o3d_viz.O3DVis(intrinsics)
 mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=np.array([0.0, 0.0, 0.0]))
