@@ -14,34 +14,16 @@ from fcn.config import cfg, cfg_from_file
 
 import jax3dp3 as j
 
-# Input here
-test_filename_pik = '/home/ubuntu/jax3dp3/jax3dp3/posecnn-pytorch/PoseCNN-PyTorch/datasets/pandas/data/new_panda/demo2_nolight-0.pkl'
-test_filename_pik = '/home/ubuntu/jax3dp3/jax3dp3/posecnn-pytorch/PoseCNN-PyTorch/datasets/pandas/data/new_panda/strawberry_error-0.pkl'
-test_filename_pik = '/home/ubuntu/jax3dp3/jax3dp3/posecnn-pytorch/PoseCNN-PyTorch/datasets/pandas/data/new_panda/knife_sim-0.pkl'
-scene_name = test_filename_pik.split('/')[-1].split('.')[0]
-print(scene_name)
 
+bop_ycb_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv")
+rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', bop_ycb_dir)
 
-# Load Test Image
-with open(test_filename_pik, 'rb') as file:
-    test_data = pickle.load(file)
-_, image_depth, meta_data = get_image_posecnn(test_data)  
-image_color_rgb, _, _ = get_image_densefusion(test_data)
-image_color_rgb = image_color_rgb[:,:,:3]
-
-
-K = test_data['intrinsics']
-intrinsics = j.Intrinsics(
-    height=300,
-    width=300,
-    fx=K[0][0], fy=K[1][1],
-    cx=K[0][-1], cy=K[1][-1],
-    near=0.001, far=50.0
-)
-
-results = j.posecnn_densefusion.get_densefusion_results(image_color_rgb, image_depth, intrinsics, scene_name=scene_name)
-
+densefusion = j.posecnn_densefusion.DenseFusion()
+results = densefusion.get_densefusion_results(rgbd.rgb, rgbd.depth, rgbd.intrinsics, scene_name="1")
 print(results)
 
+rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('55', '22', bop_ycb_dir)
+results = densefusion.get_densefusion_results(rgbd.rgb, rgbd.depth, rgbd.intrinsics, scene_name="1")
+print(results)
 
 from IPython import embed; embed()

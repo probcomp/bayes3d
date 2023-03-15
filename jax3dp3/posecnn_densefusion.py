@@ -66,38 +66,33 @@ def setup_baseline():
     return posecnn_args, posecnn_cfg, densefusion_args
 
 
-def get_densefusion_results(rgb_image, depth_image, intrinsics, scene_name="out", factor_depth=1):
-    rgb_image = rgb_image[:,:,:3]
-    K = j.camera.K_from_intrinsics(intrinsics)
-
-    posecnn_args, posecnn_cfg, densefusion_args = setup_baseline()
-    dataset_cfg, POSECNN_NETWORK = env_setup_posecnn(posecnn_args, posecnn_cfg)
-    DF_ESTIMATOR, DF_REFINER, class_names, cld = env_setup_densefusion(densefusion_args)
-
-    bgr_image = np.copy(rgb_image)
-    bgr_image[:,:,2] = bgr_image[:,:,0]
-    bgr_image[:,:,0] = rgb_image[:,:,2]
-
-    meta_data = dict({'factor_depth': factor_depth, 'intrinsic_matrix': K})
+class DenseFusion(object):
+    def __init__(self,):
+        self.posecnn_args, self.posecnn_cfg, self.densefusion_args = setup_baseline()
+        self.dataset_cfg, self.POSECNN_NETWORK = env_setup_posecnn(self.posecnn_args, self.posecnn_cfg)
+        self.DF_ESTIMATOR, self.DF_REFINER, self.class_names, self.cld = env_setup_densefusion(self.densefusion_args)
 
 
-    ###########
-    # Run PoseCNN + DenseFusion
-    ###########
-    print(f"\n Running models on {scene_name}..")
-    posecnn_meta = run_posecnn(bgr_image, depth_image, meta_data, POSECNN_NETWORK, dataset_cfg, posecnn_cfg)    
+    def get_densefusion_results(self, rgb_image, depth_image, intrinsics, scene_name="out", factor_depth=1):
+        rgb_image = rgb_image[:,:,:3]
+        K = j.camera.K_from_intrinsics(intrinsics)
+        bgr_image = np.copy(rgb_image)
+        bgr_image[:,:,2] = bgr_image[:,:,0]
+        bgr_image[:,:,0] = rgb_image[:,:,2]
 
-    # prediction_results is the final pose estimation result after refinement (class_name: {'class_id':int, 'rot_q': quaternion, 'tr': translation})
-    prediction_results =  run_DenseFusion(rgb_image, depth_image, meta_data,
-                                        DF_ESTIMATOR, DF_REFINER, 
-                                        class_names=class_names, 
-                                        cld=cld,
-                                        densefusion_args=densefusion_args,
-                                        scene_frame_name=scene_name, 
-                                        posecnn_meta=posecnn_meta)
-    # return [(k, v['class_id'], v['rot_q'], v['tr']) for k, v in prediction_results.items()]
-    
+        meta_data = dict({'factor_depth': factor_depth, 'intrinsic_matrix': K})
 
-    return prediction_results
+        print(f"\n Running models on {scene_name}..")
+        posecnn_meta = run_posecnn(bgr_image, depth_image, meta_data, self.POSECNN_NETWORK, self.dataset_cfg, self.posecnn_cfg)    
+
+        prediction_results =  run_DenseFusion(rgb_image, depth_image, meta_data,
+                                            self.DF_ESTIMATOR, self.DF_REFINER, 
+                                            class_names=self.class_names, 
+                                            cld=self.cld,
+                                            densefusion_args=self.densefusion_args,
+                                            scene_frame_name=scene_name, 
+                                            posecnn_meta=posecnn_meta)    
+
+        return prediction_results
 
  
