@@ -33,15 +33,20 @@ setuptools.setup(
 
 # Add line to .bashrc
 subprocess.run('echo "export XLA_PYTHON_CLIENT_PREALLOCATE=false" >> ~/.bashrc', shell=True)
+print('Added line to .bashrc')
 
 # Install libeigen3-dev
 subprocess.run('sudo apt-get install -y libeigen3-dev', shell=True)
+print('Installed libeigen3-dev')
 
 # Install libglu1-mesa-dev
 subprocess.run('sudo apt-get install -y libglu1-mesa-dev', shell=True)
+print('Installed libglu1-mesa-dev')
 
 # Install libegl1-mesa-dev
 subprocess.run('sudo apt-get install -y libegl1-mesa-dev', shell=True)
+print('Installed libegl1-mesa-dev')
 
 # Create symbolic link
 subprocess.run('sudo ln -s /usr/include/eigen3/Eigen /usr/include/Eigen', shell=True)
+print('Created symbolic link for Eigen')
