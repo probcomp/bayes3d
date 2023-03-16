@@ -21,11 +21,10 @@ from kubric.core.color import get_color
 #unpacking the data from the npz file
 data_file = "/tmp/blenderproc_kubric.npz"
 data = np.load(data_file, allow_pickle=True)
-mesh_path = data["mesh_path"].item()
-positions = data["positions"]
-quaternions = data["quaternions"]
-cam_pose_pos = data["cam_pose_pos"]
-cam_pose_quat = data["cam_pose_quat"]
+mesh_paths = data["mesh_paths"]
+print(mesh_paths)
+poses = data["poses"]
+camera_pose = data["camera_pose"]
 K = data["K"]
 height = data["height"]
 width = data["width"]
@@ -43,38 +42,38 @@ logging.basicConfig(level="INFO")
 #convert intrinsics to focal_length, sensor_width
 focal_length = fx / width
 sensor_width = 1 
-# print(f"POSES: {poses}")
-# print(f"CAMERA POSE: {camera_pose}")
+print(f"POSES: {poses}")
+print(f"CAMERA POSE: {camera_pose}")
 
 
 
-for i in range(len(positions)):
+for scene_number in range(len(poses)):
     # --- create scene and attach a renderer to it
     scene = kb.Scene(resolution=(width.item(), height.item()))
     # scene.ambient_illumination = get_color("red")
     renderer = KubricRenderer(scene)
     # --- create perspective camera 
     scene += kb.PerspectiveCamera(name="camera",
-        position =cam_pose_pos,quaternion=cam_pose_quat, focal_length=focal_length, sensor_width=sensor_width)
+        position =camera_pose[0],quaternion=camera_pose[1], focal_length=focal_length, sensor_width=sensor_width)
     scene += kb.DirectionalLight(
         name="sun", position=(0, -0.0, 0),
         look_at=(0, 0, 1), intensity=intensity
     )
 
-    obj = kb.FileBasedObject(
-        asset_id=f"1", 
-        render_filename=mesh_path,
-        simulation_filename=None,
-        scale=scaling_factor,
-        position=positions[i],
-        quaternion=quaternions[i],
-    )
-    scene += obj
-    print(i)
+    for obj_number in range(len(poses[scene_number])):
+        obj = kb.FileBasedObject(
+            asset_id=f"1", 
+            render_filename=mesh_paths[obj_number],
+            simulation_filename=None,
+            scale=scaling_factor,
+            position=poses[scene_number][obj_number][0],
+            quaternion=poses[scene_number][obj_number][1],
+        )
+        scene += obj
 
     frame = renderer.render_still()
     print(f"RENDERED FRAME ")
-    np.savez(f"/tmp/{i}.npz", rgba=frame["rgba"], segmentation=frame["segmentation"], depth=frame["depth"])
+    np.savez(f"/tmp/{scene_number}.npz", rgba=frame["rgba"], segmentation=frame["segmentation"], depth=frame["depth"])
     print(f"SAVED FRAME USING NP")
 
 

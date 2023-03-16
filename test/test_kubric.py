@@ -46,10 +46,10 @@ camera_pose = j.t3d.transform_from_pos_target_up(
 )
 poses = jnp.array([jnp.linalg.inv(camera_pose)])
 
-rgb, seg, depth = j.kubric_interface.render_multiobject([mesh_paths[0]], poses, jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
-j.get_rgb_image(rgb).save("single_object.png")
+from IPython import embed; embed()
 
-
+rgbds = j.kubric_interface.render_multiobject_parallel([mesh_paths[0]], poses[:,None,...], intrinsics, scaling_factor=1.0, lighting=5.0)
+single_object_viz = j.get_rgb_image(rgbds[0].rgb)
 
 
 paths = []
@@ -73,28 +73,20 @@ for i in range(len(gt_ids)):
     )
 poses = jnp.array(poses)
 
+mesh_paths = paths
 
-rgb, seg, depth = j.kubric_interface.render_multiobject(paths, poses, jnp.eye(4), intrinsics, scaling_factor=1.0, lighting=5.0)
-j.get_rgb_image(rgb).save("background_transparent.png")
-
+rgbds = j.kubric_interface.render_multiobject_parallel(paths, poses[:,None,...], intrinsics, scaling_factor=1.0, lighting=5.0)
+T = 0
+rgb = rgbds[T].rgb
+seg = rgbds[T].segmentation
+depth = rgbds[T].depth
 
 rgba = jnp.array(j.viz.add_rgba_dimension(rgb))
 rgba = rgba.at[seg ==0, 3].set(0.0)
 
-
 rgb_viz = j.get_rgb_image(rgba)
 depth_viz = j.get_depth_image(depth, max=intrinsics.far)
 seg_viz = j.get_depth_image(seg, max=seg.max())
-j.multi_panel(
-    [
-        rgb_viz,
-        depth_viz,
-        seg_viz
-    ]
-).save("test_kubric.png")
-
-rgbd = j.RGBD(rgb, depth, rgbd.camera_pose, intrinsics, segmentation=seg)
-np.savez(os.path.join(j.utils.get_assets_dir(), "3dnel.npz"), rgbd=rgbd, gt_poses=gt_poses_new, gt_ids=gt_ids)
 
 
 renderer = j.Renderer(intrinsics)
