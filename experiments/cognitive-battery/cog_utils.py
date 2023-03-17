@@ -1,14 +1,22 @@
-import numpy as np
+import json
+from typing import List, Tuple, Union
+
 import jax.numpy as jnp
-from sklearn.cluster import DBSCAN
+import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-import json
+import jax3dp3
 from jax3dp3 import Renderer
 
 
-def get_object_transforms(obj_name, init_transform):
-    with open("object_transforms.json") as f:
+def get_object_transforms(obj_name: str, init_transform: jnp.ndarray) -> jnp.ndarray:
+    """
+    Recovers the universal transforms for each mesh from an annotated file of transforms.
+    Transforms refer to positional translations, rotations, and scale factors used in the
+    renderer.
+    """
+
+    with open("resources/object_transforms.json") as f:
         object_transforms = json.load(f)
 
     if obj_name not in object_transforms:
@@ -34,28 +42,66 @@ def get_object_transforms(obj_name, init_transform):
     return transforms
 
 
-def get_camera_intrinsics(width, height, fov):
+def get_camera_intrinsics(
+    width: float, height: float, fov: float, near: float = 0.001, far: float = 50.0
+) -> jax3dp3.Intrinsics:
+    """
+    Recovers the camera intrinsics details given image and capture parameters.
+    """
+
     cx, cy = width / 2.0, height / 2.0
     aspect_ratio = width / height
     fov_y = np.deg2rad(fov)
     fov_x = 2 * np.arctan(aspect_ratio * np.tan(fov_y / 2.0))
     fx = cx / np.tan(fov_x / 2.0)
     fy = cy / np.tan(fov_y / 2.0)
-
-    return fx, fy, cx, cy
-
-
-def cluster_camera_coords(coords, eps=0.1, min_points_per_shape=5):
-    # Given an array of depth coordinates [w, h, 3], finds clusters of points that belong to the same shape
-
-    flat_coords = coords.reshape(-1, 3)
-    clustering = DBSCAN(eps=eps, min_samples=min_points_per_shape, n_jobs=-1).fit(
-        flat_coords
-    )
-    return clustering
+    return jax3dp3.Intrinsics(height, width, fx, fy, cx, cy, near, far)
 
 
-def check_occlusion(renderer: Renderer, pose_estimates, indices, obj_idx, occlusion_threshold=10):
+def find_best_mesh(
+    renderer: Renderer,
+    meshes: List[str],
+    obj_transform: jnp.ndarray,
+    depth: jnp.ndarray,
+) -> Union[None, Tuple[int, jnp.ndarray]]:
+    """
+    Finds the mesh that best explains a point cloud given a list of the available mesh names.
+    """
+
+    best = None
+    k = np.inf
+    for m in range(len(meshes)):
+        obj_transforms = get_object_transforms(meshes[m], obj_transform)
+        for i, transform in enumerate(obj_transforms):
+            rendered_image = renderer.render_single_object(transform, m)
+            keep_points = (
+                jnp.sum(
+                    jnp.logical_or(
+                        ((depth[:, :, 2] != 0.0) * (rendered_image[:, :, 2] == 0)),
+                        ((depth[:, :, 2] == 0.0) * (rendered_image[:, :, 2] != 0)),
+                    )
+                )
+                / (rendered_image[:, :, 2] != 0.0).sum()
+            )
+            if keep_points < k:
+                k = keep_points
+                best = (m, transform)
+    return best
+
+
+def check_occlusion(
+    renderer: Renderer,
+    pose_estimates: jnp.ndarray,
+    indices: List[int],
+    obj_idx: int,
+    occlusion_threshold: int = 10,
+) -> bool:
+    """
+    Checks whether an object is occluded by comparing the depth map rendered with
+    and without the object respectively. If there is more than occlusion_threshold
+    unexplained points, then the object is assumed to be non-occluded.
+    """
+
     depth_wi = renderer.render_multiobject(pose_estimates, indices)
     no_obj_mask = jnp.where(jnp.arange(pose_estimates.shape[0]) != obj_idx)
     depth_woi = renderer.render_multiobject(
@@ -64,7 +110,21 @@ def check_occlusion(renderer: Renderer, pose_estimates, indices, obj_idx, occlus
     return jnp.sum(depth_wi[:, :, 2] != depth_woi[:, :, 2]) < occlusion_threshold
 
 
-def check_containment(renderer: Renderer, pose_estimates, indices, obj_idx, containment_threshold=0.03):
+def check_containment(
+    renderer: Renderer,
+    pose_estimates: jnp.ndarray,
+    indices: List[int],
+    obj_idx: int,
+    containment_threshold: float = 0.03,
+) -> Union[None, int]:
+    """
+    Checks whether an object is contained by any other object, and if so returns the index
+    of the object containing it. Containment occurs when the bounding box of the object of
+    interest lies almost entirely within the bounding box of any other object, within some
+    threshold for error `containment_threshold`. Returns `None` if no containment is detected,
+    else returns the index of the containing object.
+    """
+
     positions = pose_estimates[:, :-1, -1]
     diff = jnp.square(positions - positions[obj_idx]).sum(-1)
     closest_idx = jnp.argsort(diff)[1]
@@ -84,35 +144,28 @@ def check_containment(renderer: Renderer, pose_estimates, indices, obj_idx, cont
         return closest_idx.item()
     i_maxs = np.max(i_points, axis=0)
     i_mins = np.min(i_points, axis=0)
-    
-    contained = jnp.all(closest_maxs > (i_maxs - containment_threshold)) \
-        and jnp.all(closest_mins < (i_mins + containment_threshold))
-    
+
+    contained = jnp.all(closest_maxs > (i_maxs - containment_threshold)) and jnp.all(
+        closest_mins < (i_mins + containment_threshold)
+    )
+
     return closest_idx.item() if contained else None
-        
-def find_best_mesh(renderer: Renderer, meshes, obj_transform, depth):
-    best = None
-    k = np.inf
-    for m in range(len(meshes)):
-        obj_transforms = get_object_transforms(meshes[m], obj_transform)
-        for i, transform in enumerate(obj_transforms):
-            rendered_image = renderer.render_single_object(transform, m)
-            keep_points = (
-                jnp.sum(
-                    jnp.logical_or(
-                        (
-                            (depth[:, :, 2] != 0.0)
-                            * (rendered_image[:, :, 2] == 0)
-                        ),
-                        (
-                            (depth[:, :, 2] == 0.0)
-                            * (rendered_image[:, :, 2] != 0)
-                        ),
-                    )
-                )
-                / (rendered_image[:, :, 2] != 0.0).sum()
-            )
-            if keep_points < k:
-                k = keep_points
-                best = (m, transform)
-    return best
+
+
+def full_translation_deltas_single(
+    poses: jnp.ndarray, translation_deltas: jnp.ndarray, index: int
+) -> jnp.ndarray:
+    """
+    Creates a list of multiobject translation proposals by applying translation deltas to the single
+    object at index `index` and keeping the poses for all other objects the same.
+    """
+
+    translation_deltas_full = jnp.tile(
+        jnp.eye(4)[None, :, :],
+        (translation_deltas.shape[0], poses.shape[0], 1, 1),
+    )
+    translation_deltas_full = translation_deltas_full.at[:, index, :, :].set(
+        translation_deltas
+    )
+    translation_proposals = jnp.einsum("bij,abjk->abik", poses, translation_deltas_full)
+    return translation_proposals
