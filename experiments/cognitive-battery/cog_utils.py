@@ -89,7 +89,6 @@ def check_containment(renderer: Renderer, pose_estimates, indices, obj_idx, cont
         and jnp.all(closest_mins < (i_mins + containment_threshold))
     
     return closest_idx.item() if contained else None
-    # return 3 if contained else None
         
 def find_best_mesh(renderer: Renderer, meshes, obj_transform, depth):
     best = None
