@@ -17,10 +17,10 @@ from tqdm import tqdm
 
 scene_name = "passive_physics_spatio_temporal_continuity_0001_21"
 scene_name = "passive_physics_gravity_support_0001_21"
-scene_name = "passive_physics_shape_constancy_0001_06"
 scene_name = "passive_physics_gravity_support_0001_24"
-scene_name = "passive_physics_object_permanence_0001_41"
 scene_name = "passive_physics_collision_0001_01"
+scene_name = "passive_physics_object_permanence_0001_41"
+scene_name = "passive_physics_shape_constancy_0001_06"
 if os.path.exists(f"{scene_name}.npz"):
     images = np.load(f"{scene_name}.npz",allow_pickle=True)["arr_0"]
 else:
@@ -57,7 +57,8 @@ for i in range(len(images)):
 j.make_gif(rgbs, "rgb.gif")
 
 
-intrinsics = j.camera.scale_camera_parameters(image.intrinsics, 0.25)
+intrinsics = j.camera.scale_camera_parameters(image.intrinsics, 0.33333)
+
 
 WALL_Z = 14.5
 FLOOR_Y = 1.45
@@ -161,6 +162,11 @@ prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None)))
 pose_estimates = initial_poses
 pose_estimates_all = [pose_estimates]
 
+
+
+
+
+data = []
 for t in range(1,len(images)):
     image = images[t]
     print(t)
@@ -196,16 +202,22 @@ for t in range(1,len(images)):
         pose_estimates = all_pose_proposals[:,all_weights.argmax(), :,:]
 
     image = images[t]
+    j.get_rgb_image(image.rgb).save("rgb.png")
     point_cloud_image = j.t3d.unproject_depth(j.utils.resize(image.depth, intrinsics.height, intrinsics.width), intrinsics)
+    j.get_depth_image(j.t3d.unproject_depth(image.depth, image.intrinsics)[:,:,2],max=WALL_Z).save("img.png")
+    j.get_depth_image(j.utils.resize(image.depth, intrinsics.height, intrinsics.width),max=WALL_Z).save("img.png")
     j.get_depth_image(point_cloud_image[:,:,2],max=WALL_Z).save("img.png")
     rerendered = render_func(pose_estimates)[...,:3]
     j.get_depth_image(rerendered[:,:,2],max=WALL_Z).save("rerendered.png")
     counts = j.threedp3_counts(point_cloud_image, rerendered, R_SWEEP[0]*4)
     j.get_depth_image(counts,max=counts.max()).save("counts.png")
-    unexplained = (counts == 0) * (point_cloud_image[:,:,2] < WALL_Z-0.05) * (point_cloud_image[:,:,1] < FLOOR_Y - 0.05)
+    unexplained =  (counts <= 0) * (point_cloud_image[:,:,2] < WALL_Z-0.04) * (point_cloud_image[:,:,1] < FLOOR_Y - 0.05)
     j.get_depth_image(unexplained).save("unexplained.png")
 
+    data.append((point_cloud_image, rerendered))
+
     seg = j.utils.segment_point_cloud_image(point_cloud_image * unexplained[...,None], threshold=0.3, min_points_in_cluster=5)
+    # j.get_depth_image(seg+1, max=seg.max()+1).save("seg.png")
     unique_segs = jnp.unique(seg)
     unique_segs = unique_segs[unique_segs != -1]
 
@@ -221,6 +233,7 @@ for t in range(1,len(images)):
 
             if (cols < 0 + BUFFER).any() or (cols > intrinsics.width - BUFFER).any():
                 continue
+            # from IPython import embed; embed()
 
             o = point_cloud_image[seg == id]
             dims, pose = j.utils.aabb(o)
@@ -251,10 +264,8 @@ for t in range(1,len(images)):
 
 
 
-# renderer = j.Renderer(intrinsics)
-# renderer.add_mesh(plane)
-# for m in meshes:
-#     renderer.add_mesh(m)
+
+
 
 
 viz_1 = []
