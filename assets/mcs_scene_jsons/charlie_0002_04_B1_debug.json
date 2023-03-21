@@ -1,0 +1,2191 @@
+{
+    "name": "delta_0017_09",
+    "version": 3,
+    "ceilingMaterial": "AI2-THOR/Materials/Walls/Drywall4Tiled",
+    "floorMaterial": "AI2-THOR/Materials/Wood/TexturesCom_WoodFine0050_1_seamless_S",
+    "wallMaterial": "AI2-THOR/Materials/Walls/DrywallOrange",
+    "performerStart": {
+        "position": {
+            "x": 0,
+            "y": 0,
+            "z": -4.5
+        },
+        "rotation": {
+            "y": 0
+        }
+    },
+    "objects": [
+        {
+            "id": "7e131cb0-d97b-4b3c-a257-8c8328613ddc",
+            "type": "truck_4",
+            "mass": 8.25,
+            "salientMaterials": [
+                "plastic"
+            ],
+            "debug": {
+                "dimensions": {
+                    "x": 0.66,
+                    "y": 0.429,
+                    "z": 0.4125
+                },
+                "info": [
+                    "small",
+                    "light",
+                    "yellow",
+                    "plastic",
+                    "truck",
+                    "small light",
+                    "small plastic",
+                    "small yellow",
+                    "small truck",
+                    "light plastic",
+                    "light yellow",
+                    "light truck",
+                    "plastic yellow",
+                    "plastic truck",
+                    "yellow truck",
+                    "small light yellow plastic truck",
+                    "untrained shape",
+                    "untrained small light yellow plastic truck",
+                    "target"
+                ],
+                "positionY": 0.0083,
+                "role": "target",
+                "shape": [
+                    "truck"
+                ],
+                "size": "small",
+                "untrainedCategory": false,
+                "untrainedColor": false,
+                "untrainedCombination": false,
+                "untrainedShape": true,
+                "untrainedSize": false,
+                "offset": {
+                    "x": 0.0,
+                    "y": 0.2145,
+                    "z": 0.0
+                },
+                "originalRotation": {
+                    "x": 0.0,
+                    "y": 90.0,
+                    "z": 0.0
+                },
+                "materialCategory": [
+                    "intuitive_physics_plastic"
+                ],
+                "color": [
+                    "yellow"
+                ],
+                "weight": "light",
+                "goalString": "small light yellow plastic truck",
+                "salientMaterials": [
+                    "plastic"
+                ],
+                "enclosedAreas": [],
+                "isTarget": true
+            },
+            "moveable": true,
+            "pickupable": true,
+            "shows": [
+                {
+                    "position": {
+                        "x": -0.75,
+                        "y": 6.3683,
+                        "z": 5.15
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 90.0,
+                        "z": 0.0
+                    },
+                    "stepBegin": 84,
+                    "scale": {
+                        "x": 1.65,
+                        "y": 1.65,
+                        "z": 1.65
+                    },
+                    "boundingBox": [
+                        {
+                            "x": -0.5437,
+                            "y": 6.36,
+                            "z": 4.82
+                        },
+                        {
+                            "x": -0.9563,
+                            "y": 6.36,
+                            "z": 4.82
+                        },
+                        {
+                            "x": -0.9563,
+                            "y": 6.36,
+                            "z": 5.48
+                        },
+                        {
+                            "x": -0.5437,
+                            "y": 6.36,
+                            "z": 5.48
+                        },
+                        {
+                            "x": -0.5437,
+                            "y": 6.789,
+                            "z": 4.82
+                        },
+                        {
+                            "x": -0.9563,
+                            "y": 6.789,
+                            "z": 4.82
+                        },
+                        {
+                            "x": -0.9563,
+                            "y": 6.789,
+                            "z": 5.48
+                        },
+                        {
+                            "x": -0.5437,
+                            "y": 6.789,
+                            "z": 5.48
+                        }
+                    ]
+                }
+            ],
+            "materials": [
+                "UnityAssetStore/Kindergarten_Interior/Models/Materials/color 4"
+            ],
+            "hides": [
+                {
+                    "stepBegin": 120
+                }
+            ]
+        },
+        {
+            "id": "d03ed8b7-b9ce-41b9-90a5-f007866080b2",
+            "type": "truck_3",
+            "mass": 6.1,
+            "salientMaterials": [
+                "wood"
+            ],
+            "debug": {
+                "dimensions": {
+                    "x": 0.7442,
+                    "y": 0.4209,
+                    "z": 0.4026
+                },
+                "info": [
+                    "medium",
+                    "light",
+                    "green",
+                    "wood",
+                    "truck",
+                    "medium light",
+                    "medium wood",
+                    "medium green",
+                    "medium truck",
+                    "light wood",
+                    "light green",
+                    "light truck",
+                    "wood green",
+                    "wood truck",
+                    "green truck",
+                    "medium light green wood truck",
+                    "untrained shape",
+                    "untrained medium light green wood truck",
+                    "target"
+                ],
+                "positionY": 0.0061,
+                "role": "target",
+                "shape": [
+                    "truck"
+                ],
+                "size": "medium",
+                "untrainedCategory": false,
+                "untrainedColor": false,
+                "untrainedCombination": false,
+                "untrainedShape": true,
+                "untrainedSize": false,
+                "offset": {
+                    "x": 0.0,
+                    "y": 0.2104,
+                    "z": 0.0
+                },
+                "originalRotation": {
+                    "x": 0.0,
+                    "y": 90.0,
+                    "z": 0.0
+                },
+                "materialCategory": [
+                    "intuitive_physics_block"
+                ],
+                "color": [
+                    "green"
+                ],
+                "weight": "light",
+                "goalString": "medium light green wood truck",
+                "salientMaterials": [
+                    "wood"
+                ],
+                "enclosedAreas": [],
+                "isTarget": true
+            },
+            "moveable": true,
+            "pickupable": true,
+            "shows": [
+                {
+                    "position": {
+                        "x": 1.9,
+                        "y": 5.0661,
+                        "z": 1.9
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 90.0,
+                        "z": 0.0
+                    },
+                    "stepBegin": 83,
+                    "scale": {
+                        "x": 1.22,
+                        "y": 1.22,
+                        "z": 1.22
+                    },
+                    "boundingBox": [
+                        {
+                            "x": 2.1013,
+                            "y": 5.06,
+                            "z": 1.5279
+                        },
+                        {
+                            "x": 1.6987,
+                            "y": 5.06,
+                            "z": 1.5279
+                        },
+                        {
+                            "x": 1.6987,
+                            "y": 5.06,
+                            "z": 2.2721
+                        },
+                        {
+                            "x": 2.1013,
+                            "y": 5.06,
+                            "z": 2.2721
+                        },
+                        {
+                            "x": 2.1013,
+                            "y": 5.4809,
+                            "z": 1.5279
+                        },
+                        {
+                            "x": 1.6987,
+                            "y": 5.4809,
+                            "z": 1.5279
+                        },
+                        {
+                            "x": 1.6987,
+                            "y": 5.4809,
+                            "z": 2.2721
+                        },
+                        {
+                            "x": 2.1013,
+                            "y": 5.4809,
+                            "z": 2.2721
+                        }
+                    ]
+                }
+            ],
+            "materials": [
+                "UnityAssetStore/Wooden_Toys_Bundle/ToyBlocks/meshes/Materials/green_1x1"
+            ],
+            "hides": [
+                {
+                    "stepBegin": 119
+                }
+            ]
+        },
+        {
+            "id": "occluder_wall_0df21bf0-6a29-422b-9871-5991b7e60545",
+            "type": "cube",
+            "debug": {
+                "shape": [
+                    "wall"
+                ],
+                "size": "huge",
+                "color": [
+                    "blue",
+                    "intuitive physics occluder"
+                ],
+                "dimensions": {
+                    "x": 1.2789,
+                    "y": 1.8,
+                    "z": 0.1
+                },
+                "info": [
+                    "blue",
+                    "intuitive physics occluder"
+                ],
+                "isAgent": false,
+                "isBlob": false,
+                "isConfusor": false,
+                "isContainer": false,
+                "isContext": false,
+                "isHome": false,
+                "isKey": false,
+                "isIntuitivePhysicsOccluder": true,
+                "isNonTarget": false,
+                "isObstacle": false,
+                "isOccluder": false,
+                "isStaticObject": false,
+                "isStructural": false,
+                "isTarget": false,
+                "isTool": false,
+                "isWall": false,
+                "isGuiderail": false,
+                "role": "intuitive physics occluder"
+            },
+            "kinematic": true,
+            "structure": true,
+            "mass": 100,
+            "materials": [
+                "AI2-THOR/Materials/Walls/EggshellDrywall"
+            ],
+            "shows": [
+                {
+                    "stepBegin": 0,
+                    "position": {
+                        "x": -0.4275,
+                        "y": 0.9,
+                        "z": 1
+                    },
+                    "rotation": {
+                        "x": 0,
+                        "y": 0,
+                        "z": 0
+                    },
+                    "scale": {
+                        "x": 1.2789,
+                        "y": 1.8,
+                        "z": 0.1
+                    },
+                    "boundingBox": [
+                        {
+                            "x": 0.212,
+                            "y": 0,
+                            "z": 1.05
+                        },
+                        {
+                            "x": 0.212,
+                            "y": 0,
+                            "z": 0.95
+                        },
+                        {
+                            "x": -1.0669,
+                            "y": 0,
+                            "z": 0.95
+                        },
+                        {
+                            "x": -1.0669,
+                            "y": 0,
+                            "z": 1.05
+                        },
+                        {
+                            "x": 0.212,
+                            "y": 1.8,
+                            "z": 1.05
+                        },
+                        {
+                            "x": 0.212,
+                            "y": 1.8,
+                            "z": 0.95
+                        },
+                        {
+                            "x": -1.0669,
+                            "y": 1.8,
+                            "z": 0.95
+                        },
+                        {
+                            "x": -1.0669,
+                            "y": 1.8,
+                            "z": 1.05
+                        }
+                    ]
+                }
+            ],
+            "moves": [
+                {
+                    "stepBegin": 1,
+                    "stepEnd": 6,
+                    "vector": {
+                        "x": 0,
+                        "y": 0.25,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 23,
+                    "stepEnd": 28,
+                    "vector": {
+                        "x": 0,
+                        "y": -0.25,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 145,
+                    "stepEnd": 150,
+                    "vector": {
+                        "x": 0,
+                        "y": 0.25,
+                        "z": 0
+                    }
+                }
+            ],
+            "rotates": [
+                {
+                    "stepBegin": 7,
+                    "stepEnd": 12,
+                    "vector": {
+                        "x": 15,
+                        "y": 0,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 17,
+                    "stepEnd": 22,
+                    "vector": {
+                        "x": -15,
+                        "y": 0,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 151,
+                    "stepEnd": 156,
+                    "vector": {
+                        "x": 15,
+                        "y": 0,
+                        "z": 0
+                    }
+                }
+            ]
+        },
+        {
+            "id": "occluder_pole_0df21bf0-6a29-422b-9871-5991b7e60545",
+            "type": "cylinder",
+            "debug": {
+                "shape": [
+                    "pole"
+                ],
+                "size": "medium",
+                "color": [
+                    "blue",
+                    "intuitive physics occluder"
+                ],
+                "dimensions": {
+                    "x": 0.095,
+                    "y": 3.217,
+                    "z": 0.095
+                },
+                "info": [
+                    "blue",
+                    "intuitive physics occluder"
+                ],
+                "isAgent": false,
+                "isBlob": false,
+                "isConfusor": false,
+                "isContainer": false,
+                "isContext": false,
+                "isHome": false,
+                "isKey": false,
+                "isIntuitivePhysicsOccluder": true,
+                "isNonTarget": false,
+                "isObstacle": false,
+                "isOccluder": false,
+                "isStaticObject": false,
+                "isStructural": false,
+                "isTarget": false,
+                "isTool": false,
+                "isWall": false,
+                "isGuiderail": false,
+                "role": "intuitive physics occluder"
+            },
+            "kinematic": true,
+            "structure": true,
+            "mass": 100,
+            "materials": [
+                "AI2-THOR/Materials/Metals/BrushedAluminum_Blue"
+            ],
+            "shows": [
+                {
+                    "stepBegin": 0,
+                    "position": {
+                        "x": -4.283,
+                        "y": 0.9,
+                        "z": 1
+                    },
+                    "rotation": {
+                        "x": 0,
+                        "y": 0,
+                        "z": 90
+                    },
+                    "scale": {
+                        "x": 0.095,
+                        "y": 3.217,
+                        "z": 0.095
+                    },
+                    "boundingBox": [
+                        {
+                            "x": -1.066,
+                            "y": 0,
+                            "z": 1.0475
+                        },
+                        {
+                            "x": -1.066,
+                            "y": 0,
+                            "z": 0.9525
+                        },
+                        {
+                            "x": -7.5,
+                            "y": 0,
+                            "z": 0.9525
+                        },
+                        {
+                            "x": -7.5,
+                            "y": 0,
+                            "z": 1.0475
+                        },
+                        {
+                            "x": -1.066,
+                            "y": 0.9475,
+                            "z": 1.0475
+                        },
+                        {
+                            "x": -1.066,
+                            "y": 0.9475,
+                            "z": 0.9525
+                        },
+                        {
+                            "x": -7.5,
+                            "y": 0.9475,
+                            "z": 0.9525
+                        },
+                        {
+                            "x": -7.5,
+                            "y": 0.9475,
+                            "z": 1.0475
+                        }
+                    ]
+                }
+            ],
+            "moves": [
+                {
+                    "stepBegin": 1,
+                    "stepEnd": 6,
+                    "vector": {
+                        "x": 0.25,
+                        "y": 0,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 23,
+                    "stepEnd": 28,
+                    "vector": {
+                        "x": -0.25,
+                        "y": 0,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 145,
+                    "stepEnd": 150,
+                    "vector": {
+                        "x": 0.25,
+                        "y": 0,
+                        "z": 0
+                    }
+                }
+            ]
+        },
+        {
+            "id": "occluder_wall_7e59fcb9-ff46-4ab2-99e2-4b64a6daca5b",
+            "type": "cube",
+            "debug": {
+                "shape": [
+                    "wall"
+                ],
+                "size": "huge",
+                "color": [
+                    "yellow",
+                    "intuitive physics occluder"
+                ],
+                "dimensions": {
+                    "x": 1.3991,
+                    "y": 1.8,
+                    "z": 0.1
+                },
+                "info": [
+                    "yellow",
+                    "intuitive physics occluder"
+                ],
+                "isAgent": false,
+                "isBlob": false,
+                "isConfusor": false,
+                "isContainer": false,
+                "isContext": false,
+                "isHome": false,
+                "isKey": false,
+                "isIntuitivePhysicsOccluder": true,
+                "isNonTarget": false,
+                "isObstacle": false,
+                "isOccluder": false,
+                "isStaticObject": false,
+                "isStructural": false,
+                "isTarget": false,
+                "isTool": false,
+                "isWall": false,
+                "isGuiderail": false,
+                "role": "intuitive physics occluder"
+            },
+            "kinematic": true,
+            "structure": true,
+            "mass": 100,
+            "materials": [
+                "UnityAssetStore/Kindergarten_Interior/Models/Materials/color wood 4"
+            ],
+            "shows": [
+                {
+                    "stepBegin": 0,
+                    "position": {
+                        "x": 1.6328,
+                        "y": 0.9,
+                        "z": 1
+                    },
+                    "rotation": {
+                        "x": 0,
+                        "y": 0,
+                        "z": 0
+                    },
+                    "scale": {
+                        "x": 1.3991,
+                        "y": 1.8,
+                        "z": 0.1
+                    },
+                    "boundingBox": [
+                        {
+                            "x": 2.3323,
+                            "y": 0,
+                            "z": 1.05
+                        },
+                        {
+                            "x": 2.3323,
+                            "y": 0,
+                            "z": 0.95
+                        },
+                        {
+                            "x": 0.9333,
+                            "y": 0,
+                            "z": 0.95
+                        },
+                        {
+                            "x": 0.9333,
+                            "y": 0,
+                            "z": 1.05
+                        },
+                        {
+                            "x": 2.3323,
+                            "y": 1.8,
+                            "z": 1.05
+                        },
+                        {
+                            "x": 2.3323,
+                            "y": 1.8,
+                            "z": 0.95
+                        },
+                        {
+                            "x": 0.9333,
+                            "y": 1.8,
+                            "z": 0.95
+                        },
+                        {
+                            "x": 0.9333,
+                            "y": 1.8,
+                            "z": 1.05
+                        }
+                    ]
+                }
+            ],
+            "moves": [
+                {
+                    "stepBegin": 1,
+                    "stepEnd": 6,
+                    "vector": {
+                        "x": 0,
+                        "y": 0.25,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 23,
+                    "stepEnd": 28,
+                    "vector": {
+                        "x": 0,
+                        "y": -0.25,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 145,
+                    "stepEnd": 150,
+                    "vector": {
+                        "x": 0,
+                        "y": 0.25,
+                        "z": 0
+                    }
+                }
+            ],
+            "rotates": [
+                {
+                    "stepBegin": 7,
+                    "stepEnd": 12,
+                    "vector": {
+                        "x": 15,
+                        "y": 0,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 17,
+                    "stepEnd": 22,
+                    "vector": {
+                        "x": -15,
+                        "y": 0,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 151,
+                    "stepEnd": 156,
+                    "vector": {
+                        "x": 15,
+                        "y": 0,
+                        "z": 0
+                    }
+                }
+            ]
+        },
+        {
+            "id": "occluder_pole_7e59fcb9-ff46-4ab2-99e2-4b64a6daca5b",
+            "type": "cylinder",
+            "debug": {
+                "shape": [
+                    "pole"
+                ],
+                "size": "medium",
+                "color": [
+                    "white",
+                    "intuitive physics occluder"
+                ],
+                "dimensions": {
+                    "x": 0.095,
+                    "y": 2.584,
+                    "z": 0.095
+                },
+                "info": [
+                    "white",
+                    "intuitive physics occluder"
+                ],
+                "isAgent": false,
+                "isBlob": false,
+                "isConfusor": false,
+                "isContainer": false,
+                "isContext": false,
+                "isHome": false,
+                "isKey": false,
+                "isIntuitivePhysicsOccluder": true,
+                "isNonTarget": false,
+                "isObstacle": false,
+                "isOccluder": false,
+                "isStaticObject": false,
+                "isStructural": false,
+                "isTarget": false,
+                "isTool": false,
+                "isWall": false,
+                "isGuiderail": false,
+                "role": "intuitive physics occluder"
+            },
+            "kinematic": true,
+            "structure": true,
+            "mass": 100,
+            "materials": [
+                "AI2-THOR/Materials/Metals/WhiteMetal"
+            ],
+            "shows": [
+                {
+                    "stepBegin": 0,
+                    "position": {
+                        "x": 4.916,
+                        "y": 0.9,
+                        "z": 1
+                    },
+                    "rotation": {
+                        "x": 0,
+                        "y": 0,
+                        "z": 90
+                    },
+                    "scale": {
+                        "x": 0.095,
+                        "y": 2.584,
+                        "z": 0.095
+                    },
+                    "boundingBox": [
+                        {
+                            "x": 7.5,
+                            "y": 0,
+                            "z": 1.0475
+                        },
+                        {
+                            "x": 7.5,
+                            "y": 0,
+                            "z": 0.9525
+                        },
+                        {
+                            "x": 2.332,
+                            "y": 0,
+                            "z": 0.9525
+                        },
+                        {
+                            "x": 2.332,
+                            "y": 0,
+                            "z": 1.0475
+                        },
+                        {
+                            "x": 7.5,
+                            "y": 0.9475,
+                            "z": 1.0475
+                        },
+                        {
+                            "x": 7.5,
+                            "y": 0.9475,
+                            "z": 0.9525
+                        },
+                        {
+                            "x": 2.332,
+                            "y": 0.9475,
+                            "z": 0.9525
+                        },
+                        {
+                            "x": 2.332,
+                            "y": 0.9475,
+                            "z": 1.0475
+                        }
+                    ]
+                }
+            ],
+            "moves": [
+                {
+                    "stepBegin": 1,
+                    "stepEnd": 6,
+                    "vector": {
+                        "x": 0.25,
+                        "y": 0,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 23,
+                    "stepEnd": 28,
+                    "vector": {
+                        "x": -0.25,
+                        "y": 0,
+                        "z": 0
+                    }
+                },
+                {
+                    "stepBegin": 145,
+                    "stepEnd": 150,
+                    "vector": {
+                        "x": 0.25,
+                        "y": 0,
+                        "z": 0
+                    }
+                }
+            ]
+        },
+        {
+            "id": "7e131cb0-d97b-4b3c-a257-8c8328613ddc",
+            "type": "train_2",
+            "mass": 40.1,
+            "salientMaterials": [
+                "plastic"
+            ],
+            "debug": {
+                "dimensions": {
+                    "x": 0.7218,
+                    "y": 0.5133,
+                    "z": 0.2887
+                },
+                "info": [
+                    "small",
+                    "light",
+                    "yellow",
+                    "plastic",
+                    "train",
+                    "small light",
+                    "small plastic",
+                    "small yellow",
+                    "small train",
+                    "light plastic",
+                    "light yellow",
+                    "light train",
+                    "plastic yellow",
+                    "plastic train",
+                    "yellow train",
+                    "small light yellow plastic train",
+                    "untrained shape",
+                    "untrained small light yellow plastic train",
+                    "target"
+                ],
+                "positionY": 0.0401,
+                "role": "target",
+                "shape": [
+                    "train"
+                ],
+                "size": "small",
+                "untrainedCategory": false,
+                "untrainedColor": false,
+                "untrainedCombination": false,
+                "untrainedShape": true,
+                "untrainedSize": false,
+                "offset": {
+                    "x": 0.0,
+                    "y": 0.2566,
+                    "z": 0.0
+                },
+                "originalRotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "materialCategory": [
+                    "intuitive_physics_plastic"
+                ],
+                "color": [
+                    "yellow"
+                ],
+                "weight": "light",
+                "goalString": "small light yellow plastic train",
+                "salientMaterials": [
+                    "plastic"
+                ],
+                "enclosedAreas": [],
+                "isTarget": true
+            },
+            "moveable": true,
+            "pickupable": true,
+            "shows": [
+                {
+                    "position": {
+                        "x": -0.75,
+                        "y": 0.0401,
+                        "z": 5.15
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "stepBegin": 120,
+                    "scale": {
+                        "x": 8.02,
+                        "y": 8.02,
+                        "z": 8.02
+                    },
+                    "boundingBox": [
+                        {
+                            "x": -0.3891,
+                            "y": 6.36,
+                            "z": 5.2944
+                        },
+                        {
+                            "x": -0.3891,
+                            "y": 6.36,
+                            "z": 5.0056
+                        },
+                        {
+                            "x": -1.1109,
+                            "y": 6.36,
+                            "z": 5.0056
+                        },
+                        {
+                            "x": -1.1109,
+                            "y": 6.36,
+                            "z": 5.2944
+                        },
+                        {
+                            "x": -0.3891,
+                            "y": 6.8733,
+                            "z": 5.2944
+                        },
+                        {
+                            "x": -0.3891,
+                            "y": 6.8733,
+                            "z": 5.0056
+                        },
+                        {
+                            "x": -1.1109,
+                            "y": 6.8733,
+                            "z": 5.0056
+                        },
+                        {
+                            "x": -1.1109,
+                            "y": 6.8733,
+                            "z": 5.2944
+                        }
+                    ]
+                }
+            ],
+            "materials": [
+                "UnityAssetStore/Kindergarten_Interior/Models/Materials/color 4"
+            ]
+        },
+        {
+            "id": "d03ed8b7-b9ce-41b9-90a5-f007866080b2",
+            "type": "truck_4",
+            "mass": 9.0,
+            "salientMaterials": [
+                "wood"
+            ],
+            "debug": {
+                "dimensions": {
+                    "x": 0.72,
+                    "y": 0.468,
+                    "z": 0.45
+                },
+                "info": [
+                    "medium",
+                    "light",
+                    "green",
+                    "wood",
+                    "truck",
+                    "medium light",
+                    "medium wood",
+                    "medium green",
+                    "medium truck",
+                    "light wood",
+                    "light green",
+                    "light truck",
+                    "wood green",
+                    "wood truck",
+                    "green truck",
+                    "medium light green wood truck",
+                    "untrained shape",
+                    "untrained medium light green wood truck",
+                    "target"
+                ],
+                "positionY": 0.009,
+                "role": "target",
+                "shape": [
+                    "truck"
+                ],
+                "size": "medium",
+                "untrainedCategory": false,
+                "untrainedColor": false,
+                "untrainedCombination": false,
+                "untrainedShape": true,
+                "untrainedSize": false,
+                "offset": {
+                    "x": 0.0,
+                    "y": 0.234,
+                    "z": 0.0
+                },
+                "originalRotation": {
+                    "x": 0.0,
+                    "y": 90.0,
+                    "z": 0.0
+                },
+                "materialCategory": [
+                    "intuitive_physics_block"
+                ],
+                "color": [
+                    "green"
+                ],
+                "weight": "light",
+                "goalString": "medium light green wood truck",
+                "salientMaterials": [
+                    "wood"
+                ],
+                "enclosedAreas": [],
+                "isTarget": true
+            },
+            "moveable": true,
+            "pickupable": true,
+            "shows": [
+                {
+                    "position": {
+                        "x": 1.9,
+                        "y": 0.009,
+                        "z": 1.9
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 90.0,
+                        "z": 0.0
+                    },
+                    "stepBegin": 119,
+                    "scale": {
+                        "x": 1.8,
+                        "y": 1.8,
+                        "z": 1.8
+                    },
+                    "boundingBox": [
+                        {
+                            "x": 2.125,
+                            "y": 5.06,
+                            "z": 1.54
+                        },
+                        {
+                            "x": 1.675,
+                            "y": 5.06,
+                            "z": 1.54
+                        },
+                        {
+                            "x": 1.675,
+                            "y": 5.06,
+                            "z": 2.26
+                        },
+                        {
+                            "x": 2.125,
+                            "y": 5.06,
+                            "z": 2.26
+                        },
+                        {
+                            "x": 2.125,
+                            "y": 5.528,
+                            "z": 1.54
+                        },
+                        {
+                            "x": 1.675,
+                            "y": 5.528,
+                            "z": 1.54
+                        },
+                        {
+                            "x": 1.675,
+                            "y": 5.528,
+                            "z": 2.26
+                        },
+                        {
+                            "x": 2.125,
+                            "y": 5.528,
+                            "z": 2.26
+                        }
+                    ]
+                }
+            ],
+            "materials": [
+                "UnityAssetStore/Wooden_Toys_Bundle/ToyBlocks/meshes/Materials/green_1x1"
+            ]
+        }
+    ],
+    "goal": {
+        "category": "intuitive physics",
+        "domainsInfo": {
+            "objects": [],
+            "places": [],
+            "agents": [],
+            "all": []
+        },
+        "sceneInfo": {
+            "primaryType": "passive",
+            "secondaryType": "intuitive physics",
+            "tertiaryType": "shape constancy",
+            "quaternaryType": "action none",
+            "ambiguous": null,
+            "angle": null,
+            "corner": null,
+            "correctDoor": null,
+            "direction": null,
+            "extensionSide": null,
+            "fallDown": true,
+            "moveAcross": false,
+            "numFloorFeatures": null,
+            "pathRatio": null,
+            "sceneSetup": "fall down",
+            "targetSide": null,
+            "wall": null,
+            "count": {
+                "all": 4,
+                "agent": 0,
+                "blob": 0,
+                "confusor": 0,
+                "container": 0,
+                "context": 0,
+                "home": 0,
+                "key": 0,
+                "intuitive_physics_occluder": 2,
+                "non_target": 0,
+                "obstacle": 0,
+                "occluder": 0,
+                "static_object": 0,
+                "structural": 0,
+                "target": 2,
+                "tool": 0,
+                "wall": 0,
+                "guiderail": 0
+            },
+            "present": {
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": true,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": true,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "trained": {
+                "any": true,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": true,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "trainedCategory": {
+                "any": true,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": true,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "trainedColor": {
+                "any": true,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": true,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "trainedCombination": {
+                "any": true,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": true,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "trainedShape": {
+                "any": true,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": false,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "trainedSize": {
+                "any": true,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": true,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "untrained": {
+                "any": true,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": true,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "untrainedCategory": {
+                "any": false,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": false,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "untrainedColor": {
+                "any": false,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": false,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "untrainedCombination": {
+                "any": false,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": false,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "untrainedShape": {
+                "any": true,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": true,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "untrainedSize": {
+                "any": false,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": false,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "contained": {
+                "any": false,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": false,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "uncontained": {
+                "any": false,
+                "agent": false,
+                "blob": false,
+                "confusor": false,
+                "container": false,
+                "context": false,
+                "home": false,
+                "key": false,
+                "intuitive_physics_occluder": false,
+                "non_target": false,
+                "obstacle": false,
+                "occluder": false,
+                "static_object": false,
+                "structural": false,
+                "target": true,
+                "tool": false,
+                "wall": false,
+                "guiderail": false
+            },
+            "all": [
+                "passive",
+                "intuitive physics",
+                "shape constancy",
+                "action none",
+                "fall down",
+                "intuitive physics occluder 2",
+                "target 2",
+                "intuitive physics occluder present",
+                "target present",
+                "target trained",
+                "target trained category",
+                "target trained color",
+                "target trained combination",
+                "target trained size",
+                "target untrained",
+                "target untrained shape",
+                "target uncontained",
+                "SHAP_L4",
+                "L4"
+            ],
+            "slices": [
+                "object one change into untrained shape",
+                "object two change into untrained shape",
+                "object one begins trained no",
+                "object two begins trained no"
+            ],
+            "objectOne": "change into untrained shape",
+            "objectTwo": "change into untrained shape",
+            "objectOneBeginsTrained": "no",
+            "objectTwoBeginsTrained": "no",
+            "id": [
+                "L4"
+            ],
+            "name": "SHAP_L4",
+            "hypercubeId": "SHAP_L4_F5C56A30-9FC0-4A68-AE5B-DB988CE99B19"
+        },
+        "objectsInfo": {
+            "all": [
+                "wood green",
+                "medium light green wood truck",
+                "untrained small light yellow plastic train",
+                "light wood",
+                "medium light",
+                "target",
+                "plastic",
+                "small light yellow plastic train",
+                "small",
+                "medium",
+                "small plastic",
+                "blue",
+                "train",
+                "medium truck",
+                "trained color",
+                "medium green",
+                "wood truck",
+                "medium wood",
+                "truck",
+                "light",
+                "white",
+                "light train",
+                "small truck",
+                "small train",
+                "plastic train",
+                "green",
+                "trained combination",
+                "plastic yellow",
+                "wood",
+                "trained category",
+                "small yellow",
+                "yellow truck",
+                "light green",
+                "intuitive physics occluder",
+                "untrained medium light green wood truck",
+                "untrained small light yellow plastic truck",
+                "yellow",
+                "yellow train",
+                "trained size",
+                "light truck",
+                "untrained shape",
+                "small light",
+                "light plastic",
+                "green truck",
+                "plastic truck",
+                "small light yellow plastic truck",
+                "light yellow",
+                "uncontained"
+            ],
+            "agent": [],
+            "blob": [],
+            "confusor": [],
+            "container": [],
+            "context": [],
+            "home": [],
+            "key": [],
+            "intuitive_physics_occluder": [
+                "blue",
+                "yellow",
+                "white"
+            ],
+            "non_target": [],
+            "obstacle": [],
+            "occluder": [],
+            "static_object": [],
+            "structural": [],
+            "target": [
+                "wood green",
+                "medium light green wood truck",
+                "untrained small light yellow plastic train",
+                "light wood",
+                "medium light",
+                "plastic",
+                "small light yellow plastic train",
+                "small",
+                "medium",
+                "small plastic",
+                "train",
+                "medium truck",
+                "trained color",
+                "medium green",
+                "wood truck",
+                "medium wood",
+                "truck",
+                "light",
+                "light train",
+                "small truck",
+                "small train",
+                "plastic train",
+                "green",
+                "trained combination",
+                "plastic yellow",
+                "wood",
+                "trained category",
+                "small yellow",
+                "yellow truck",
+                "light green",
+                "untrained medium light green wood truck",
+                "untrained small light yellow plastic truck",
+                "yellow",
+                "yellow train",
+                "trained size",
+                "light truck",
+                "untrained shape",
+                "small light",
+                "light plastic",
+                "green truck",
+                "plastic truck",
+                "small light yellow plastic truck",
+                "light yellow",
+                "uncontained"
+            ],
+            "tool": [],
+            "wall": [],
+            "guiderail": []
+        },
+        "answer": {
+            "choice": "implausible"
+        },
+        "last_step": 160,
+        "action_list": [
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ],
+            [
+                "Pass"
+            ]
+        ],
+        "description": "",
+        "metadata": {}
+    },
+    "debug": {
+        "floorColors": [
+            "brown"
+        ],
+        "wallColors": [
+            "orange"
+        ],
+        "evaluationOnly": true,
+        "hypercubeNumber": 17,
+        "sceneNumber": 9,
+        "evaluation": "Evaluation 5 Scenes",
+        "training": false,
+        "eval": null
+    },
+    "intuitivePhysics": true
+}
