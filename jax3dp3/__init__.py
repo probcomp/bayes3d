@@ -12,6 +12,7 @@ from . import occlusion
 from . import meshcat
 from . import o3d_viz
 from . import kubric_interface
+from . import physics
 # from . import posecnn_densefusion
 
 
