@@ -5,7 +5,8 @@ import multiprocessing
 
 def physics_main_loop(commands, results):
     import jax3dp3 as j
-    physics_state = j.physics.PhysicsState()
+    import jax3dp3.physics
+    physics_state = jax3dp3.physics.PhysicsState()
     results.put("initial")
 
     while True:

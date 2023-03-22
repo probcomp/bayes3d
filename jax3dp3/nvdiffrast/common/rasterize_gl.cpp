@@ -118,7 +118,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     glGetIntegerv(GL_MAJOR_VERSION, &vMajor);
     glGetIntegerv(GL_MINOR_VERSION, &vMinor);
     glGetError(); // Clear possible GL_INVALID_ENUM error in version query.
-    LOG(INFO) << "OpenGL version reported as " << vMajor << "." << vMinor;
+    LOG(ERROR) << "OpenGL version reported as " << vMajor << "." << vMinor;
     NVDR_CHECK((vMajor == 4 && vMinor >= 4) || vMajor > 4, "OpenGL 4.4 or later is required");
 
     // Enable depth modification workaround on A100 and later.

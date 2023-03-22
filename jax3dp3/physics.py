@@ -1,5 +1,24 @@
 import jax3dp3 as j
 
+class PhysicsState(object):
+    def __init__(self):
+        self.counter = 0
+        self.intrinsics = j.Intrinsics(
+            height=300,
+            width=300,
+            fx=200.0, fy=200.0,
+            cx=150.0, cy=150.0,
+            near=0.001, far=50.0
+        )
+        self.renderer = j.Renderer(self.intrinsics)
+    
+    def update(self, args):
+        self.counter += 2
+        return self.counter
+
+    def final_prediction(self, args):
+        self.counter += 1
+        return self.counter
 
 def load_mcs_scene_data(scene_path):
     cache_dir = os.path.join(j.utils.get_assets_dir(), "mcs_cache")
