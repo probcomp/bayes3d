@@ -21,6 +21,8 @@ scene_name = "passive_physics_gravity_support_0001_24"
 scene_name = "passive_physics_collision_0001_01"
 scene_name = "passive_physics_object_permanence_0001_41"
 scene_name = "passive_physics_shape_constancy_0001_06"
+scene_name = "passive_physics_object_permanence_0001_41"
+scene_name = "passive_physics_object_permanence_0001_41"
 if os.path.exists(f"{scene_name}.npz"):
     images = np.load(f"{scene_name}.npz",allow_pickle=True)["arr_0"]
 else:
@@ -337,7 +339,6 @@ j.make_gif(viz_final, f"{scene_name}.gif")
 from IPython import embed; embed()
 
 # Visualizations
-
 
 
 

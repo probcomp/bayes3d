@@ -46,8 +46,6 @@ camera_pose = j.t3d.transform_from_pos_target_up(
 )
 poses = jnp.array([jnp.linalg.inv(camera_pose)])
 
-from IPython import embed; embed()
-
 rgbds = j.kubric_interface.render_multiobject_parallel([mesh_paths[0]], poses[:,None,...], intrinsics, scaling_factor=1.0, lighting=5.0)
 single_object_viz = j.get_rgb_image(rgbds[0].rgb)
 

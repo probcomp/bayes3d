@@ -20,6 +20,5 @@ gdown
 torch
 torchvision
 torchaudio
-zlib
 pickle5
 zmq

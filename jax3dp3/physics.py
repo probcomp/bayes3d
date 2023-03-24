@@ -1,24 +1,8 @@
 import jax3dp3 as j
-
-class PhysicsState(object):
-    def __init__(self):
-        self.counter = 0
-        self.intrinsics = j.Intrinsics(
-            height=300,
-            width=300,
-            fx=200.0, fy=200.0,
-            cx=150.0, cy=150.0,
-            near=0.001, far=50.0
-        )
-        self.renderer = j.Renderer(self.intrinsics)
-    
-    def update(self, args):
-        self.counter += 2
-        return self.counter
-
-    def final_prediction(self, args):
-        self.counter += 1
-        return self.counter
+import os
+from tqdm import tqdm
+import machine_common_sense as mcs
+import numpy as np
 
 def load_mcs_scene_data(scene_path):
     cache_dir = os.path.join(j.utils.get_assets_dir(), "mcs_cache")
@@ -32,7 +16,7 @@ def load_mcs_scene_data(scene_path):
             os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons",  "config_level2.ini")
         )
 
-        scene_data = mcs.load_scene_json_file(os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", scene_name +".json"))
+        scene_data = mcs.load_scene_json_file(scene_path)
 
         step_metadata = controller.start_scene(scene_data)
         image = j.RGBD.construct_from_step_metadata(step_metadata)
@@ -52,3 +36,4 @@ def load_mcs_scene_data(scene_path):
         np.savez(cache_filename, images)
 
     return images
+
