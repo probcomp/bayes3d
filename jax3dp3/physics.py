@@ -37,3 +37,23 @@ def load_mcs_scene_data(scene_path):
 
     return images
 
+def update_pose_estimates(current_pose_estimates, image, renderer, all_enumerations, prior):
+    intrinsics = renderer.intrinsics
+    point_cloud_image = j.t3d.unproject_depth(j.utils.resize(image.depth, intrinsics.height, intrinsics.width), intrinsics)
+
+    for i in [*jnp.arange(pose_estimates.shape[0]), *jnp.arange(pose_estimates.shape[0])]:
+        if i == 0 or i==1:
+            continue
+
+        pose_estimates_tiled = jnp.tile(
+            pose_estimates[:,None,...], (1, all_enumerations.shape[0], 1, 1)
+        )
+        all_pose_proposals  = pose_estimates_tiled.at[i].set(
+            jnp.einsum("aij,ajk->aik", pose_estimates_tiled[i,...], all_enumerations)
+        )
+        all_weights = batched_scorer_parallel_func(all_pose_proposals, point_cloud_image, renderer, num_batches=2)
+        all_weights += prior_parallel(all_pose_proposals[i], pose_estimates[i], renderer.model_box_dims[i])
+        
+        pose_estimates = all_pose_proposals[:,all_weights.argmax(), :,:]
+
+    return pose_estimates
