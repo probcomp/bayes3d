@@ -17,10 +17,10 @@ import matplotlib.pyplot as plt
 
 
 scene_name = "passive_physics_gravity_support_0001_24"
-scene_name = "passive_physics_collision_0001_01"
-scene_name = "passive_physics_spatio_temporal_continuity_0001_21"
 scene_name = "passive_physics_gravity_support_0001_21"
 scene_name = "passive_physics_object_permanence_0001_41"
+scene_name = "passive_physics_spatio_temporal_continuity_0001_21"
+scene_name = "passive_physics_collision_0001_01"
 scene_path = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", scene_name +".json")
 
 images = j.physics.load_mcs_scene_data(scene_path)
@@ -51,7 +51,7 @@ OUTLIER_PROB=0.1
 OUTLIER_VOLUME=1.0
 
 
-d = 0.3
+d = 0.6
 n = 16
 translation_deltas_global = j.make_translation_grid_enumeration(
     -d, -d, -d, d, d, d, n, n, 3
@@ -62,25 +62,26 @@ translation_deltas_global = j.make_translation_grid_enumeration(
 # rotation_deltas_y = jax.vmap(
 #     lambda ang: j.t3d.transform_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), jnp.deg2rad(ang)))(jnp.linspace(-30.0, 30.0, 20))
 rotation_deltas_z = jax.vmap(
-    lambda ang: j.t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), jnp.deg2rad(ang)))(jnp.linspace(-30.0, 30.0, 40))
+    lambda ang: j.t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), jnp.deg2rad(ang)))(jnp.linspace(-0.0, 0.0, 40))
 rotation_deltas_global = jnp.vstack([rotation_deltas_z])
 all_enumerations = np.vstack([translation_deltas_global, rotation_deltas_global])
 
 
-
-
-def prior(new_pose, prev_pose, bbox_dims):
+def prior4(new_pose, prev_pose, prev_prev_pose, bbox_dims):
     pixel_x, pixel_y = j.project_cloud_to_pixels(prev_pose[:3,3].reshape(-1,3), intrinsics)[0]
-    offset_3d = jnp.array([0.0, 0.2, 0.0])
+    velocity = prev_pose[:3,3] - prev_prev_pose[:3, 3]
+    offset_3d = jnp.array([0.0, 0.2, 0.0]) + velocity * 0.9
     weight = jax.scipy.stats.norm.logpdf(new_pose[:3,3] - (prev_pose[:3,3] + offset_3d), loc=0, scale=0.1).sum()
     weight += -1000.0 * ((new_pose[:3,3][1] + bbox_dims[1]/2.0) > 1.4)
     return weight
 
-prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None, None)))
+prior_parallel = jax.jit(jax.vmap(prior4, in_axes=(0, None, None, None)))
+
+
 
 renderer = j.Renderer(intrinsics)
-pose_estimates_over_time = [jnp.zeros((0,4,4))]
-for t in range(1,len(images)):
+pose_estimates_over_time = [jnp.zeros((0,4,4)), jnp.zeros((0,4,4))]
+for t in range(2,len(images)):
     image = images[t]
     pose_estimates = jnp.array(pose_estimates_over_time[-1])
 
@@ -135,9 +136,11 @@ for t in range(1,len(images)):
             )
             all_weights.append(weights[0,:])
         all_weights = jnp.hstack(all_weights)
-        
 
-        all_weights += prior_parallel(all_pose_proposals[i], pose_estimates_over_time[-1][i], renderer.model_box_dims[i])
+        if pose_estimates_over_time[-2].shape[0] >= i+1:
+            all_weights += prior_parallel(all_pose_proposals[i], pose_estimates_over_time[-1][i], pose_estimates_over_time[-2][i],renderer.model_box_dims[i])
+        else:
+            all_weights += prior_parallel(all_pose_proposals[i], pose_estimates_over_time[-1][i], pose_estimates_over_time[-1][i],renderer.model_box_dims[i])
         pose_estimates = all_pose_proposals[:,all_weights.argmax(), :,:]
 
     if pose_estimates.shape[0] != 0:
@@ -155,14 +158,15 @@ for t in range(1,len(images)):
         distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
         distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width).min())
 
-        point_cloud_segment = point_cloud_image[segmentation == seg_id]
+        point_cloud_segment = point_cloud_image_original[segmentation_original == seg_id]
         dims, pose = j.utils.aabb(point_cloud_segment)
+
 
 
         if num_pixels < 30:
             continue
 
-        if average_probability > 300.0:
+        if average_probability > 200.0:
             continue
         BUFFER = 2
 
@@ -192,6 +196,7 @@ for t in range(1,len(images)):
             0.075
         )
         renderer.add_mesh(mesh)
+        j.get_depth_image(segmentation_original == seg_id).save(f"{t}_{seg_id}_new_object.png")
         print("Adding mesh!  Seg ID: ", seg_id, "Pixels: ",num_pixels, " Prob: ", average_probability, " dists: ", distance_to_edge_1, " ", distance_to_edge_2, " Pose: ", pose[:3, 3])
 
         pose_estimates = jnp.vstack(
@@ -212,17 +217,22 @@ for t in tqdm(range(len(pose_estimates_over_time))):
     pose_estimates = pose_estimates_over_time[t]
     seg_rendered = renderer.render_multiobject(pose_estimates, np.arange(pose_estimates.shape[0]))[...,3]
 
+    inferred = j.resize_image(
+        j.get_depth_image(seg_rendered,max=max_objects+1),
+        images[t].intrinsics.height,
+        images[t].intrinsics.width
+    )
+    rgb = j.get_rgb_image(images[t].rgb)
     viz_images.append(j.multi_panel(
         [
-            j.get_rgb_image(images[t].rgb),
-            j.resize_image(
-                j.get_depth_image(seg_rendered,max=max_objects+1),
-                images[t].intrinsics.height,
-                images[t].intrinsics.width
-            )
+            rgb,
+            inferred,
+            j.overlay_image(rgb, inferred)
         ],
         labels=["RGB", "Inferred"],
         title=f"{t} / {len(images)}"
     ))
 j.make_gif(viz_images, f"{scene_name}.gif")
 print(scene_name)
+
+from IPython import embed; embed()
