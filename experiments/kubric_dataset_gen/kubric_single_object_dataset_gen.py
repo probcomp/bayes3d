@@ -56,6 +56,7 @@ for d in all_data:
     seg = d.segmentation
     depth = d.depth
 
+    ## visualize rgba
     rgba = jnp.array(j.viz.add_rgba_dimension(rgb))
     rgba = rgba.at[seg == 0, 3].set(0.0)
 
@@ -64,6 +65,13 @@ for d in all_data:
 
     rgb_viz.append(j.get_rgb_image(rgba))
 
+    ## modify segmentation to reflect gt object id
+    unique_ids = np.unique(seg)
+    unique_ids = unique_ids[unique_ids != 0]  
+    assert len(unique_ids) == 1
+    seg[seg == unique_ids[0]] = IDX 
+    
+    d.segmentation = seg
 
 j.hstack_images(rgb_viz).save("dataset.png")
 
@@ -77,38 +85,5 @@ annotated_data = np.array([(rgbd_data, IDX, object_pose) for rgbd_data, object_p
 # np.savez("mug_images.npz", rgbs=rgbs, depths=depths)
 np.savez("rgbd_annotated.npz", rgbd_idx_pose=annotated_data)
 np.savez("rgbd.npz", rgbd=all_data, gt_idxs=gt_idxs, gt_poses=gt_poses)
-
-from IPython import embed; embed()
-
-
-###########
-# test densefusion on generated data
-###########
-
-import jax3dp3.posecnn_densefusion
-densefusion = j.posecnn_densefusion.DenseFusion()
-
-
-data = np.load("rgbd_annotated.npz", allow_pickle=True)
-t = 0
-rgbd, _, _ = data['rgbd_idx_pose'][t]
-rgb = rgbd.rgb
-seg = rgbd.segmentation
-depth = rgbd.depth
-rgb[seg == 0,:] = 255.0
-depth[seg ==0] = 10.0
-
-
-j.get_rgb_image(rgb[:,:,:3]).save("img3.png")
-
-results = densefusion.get_densefusion_results(rgb, depth, intrinsics, scene_name="1")
-# results = densefusion.get_densefusion_results(rgb, rgbd.depth, intrinsics, scene_name="1")
-# results = densefusion.get_densefusion_results(rgbd.rgb, rgbd.depth, intrinsics, scene_name="1")
-# results = densefusion.get_densefusion_results(rgbd.rgb, depth, intrinsics, scene_name="1")
-
-# j.meshcat.setup_visualizer()
-# j.meshcat.show_cloud("1", j.t3d.unproject_depth(rgbd.depth, intrinsics).reshape(-1,3))
-# j.meshcat.show_cloud("2", j.t3d.unproject_depth(depth, intrinsics).reshape(-1,3),color=j.RED)
-
 
 from IPython import embed; embed()

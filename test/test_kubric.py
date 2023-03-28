@@ -80,7 +80,7 @@ seg = rgbds[T].segmentation
 depth = rgbds[T].depth
 
 rgba = jnp.array(j.viz.add_rgba_dimension(rgb))
-rgba = rgba.at[seg ==0, 3].set(0.0)
+rgba = rgba.at[seg == 0, 3].set(0.0)
 
 rgb_viz = j.get_rgb_image(rgba)
 depth_viz = j.get_depth_image(depth, max=intrinsics.far)

@@ -8,7 +8,10 @@ import pickle
 import jax3dp3.transforms_3d as t3d
 import jax3dp3
 
+from c2f_test_utils import *
 
+
+from IPython import embed; embed()
 import argparse
 
 parser = argparse.ArgumentParser(description='Specify testing mode')
@@ -33,116 +36,6 @@ print("Test mode ", TEST_MODE)
 #########
 # TESTING FCNS (TODO move to file)
 #########
-
-def get_gridding_cfg_from_c2f_sched(c2f_grid_widths, c2f_sched):
-    # Getting gridding schedule from c2f schedule.
-    # Always grid over the biggest region (i.e. first region) in c2f
-
-    gridding_grid_region = c2f_grid_widths[0]
-    gridding_grid_widths = [gridding_grid_region] * len(c2f_sched)
-    gridding_sched = []
-
-
-    for i in range(len(c2f_sched)):
-        c2f_grid_region = c2f_grid_widths[i]
-        numx, numy, numang = c2f_sched[i]
-
-        deltax, deltay = c2f_grid_region/numx, c2f_grid_region/numy  # c2f grid stepsize
-
-        num_gridding_x, num_gridding_y, num_gridding_ang = gridding_grid_region//deltax, gridding_grid_region//deltay, numang  # get number of gridsteps s.t. stepsize = deltas from above
-
-        gridding_sched.append((round(num_gridding_x), round(num_gridding_y), num_gridding_ang))
-        
-    return gridding_grid_widths, gridding_sched
-
-def get_grid_results(seg_id, sched, r_overlap_check=0.06, r_final = 0.07, viz=True):
-    print("entering grid")
-
-    gt_image_masked = gt_image_above_table * (segmentation_img == seg_id)[:,:,None]
-    gt_img_complement = gt_image_above_table * (segmentation_img != seg_id)[:,:,None]
-
-    # jax3dp3.viz.save_depth_image(gt_image_masked[:,:,2],max=far, filename="gt_image_masked.png")
-    # jax3dp3.viz.save_depth_image(gt_img_complement[:,:,2],max=far, filename="gt_img_complement.png")
-
-    # from IPython import embed; embed()
-
-
-    points_in_table_ref_frame =  t3d.apply_transform(t3d.point_cloud_image_to_points(gt_image_masked), 
-        t3d.inverse_pose(table_surface_plane_pose).dot(cam_pose))
-    point_seg = jax3dp3.utils.segment_point_cloud(points_in_table_ref_frame, 0.1)
-    points_filtered = points_in_table_ref_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
-    center_x, center_y, _ = ( points_filtered.min(0) + points_filtered.max(0))/2
-    print(center_x, center_y)    
-
-
-    top_k = 5
-
-    contact_param, face_param, likelihood_r = sched
-    start = time.time()
-    results = jax3dp3.gridding.gridding_contact_parameters_no_occlusion(
-        jnp.array([center_x, center_y, 0.0]),
-        contact_param, face_param, 
-        likelihood_r,
-        contact_plane_pose=jnp.linalg.inv(cam_pose) @ table_surface_plane_pose,
-        gt_image_masked=gt_image_masked, 
-        # gt_img_complement=gt_img_complement,
-        model_box_dims=model_box_dims,
-        outlier_prob=outlier_prob,
-        outlier_volume=outlier_volume,
-        top_k=top_k, 
-        r_overlap_check=r_overlap_check,
-        r_final = r_final
-    )
-    end= time.time()
-    elapsed = end - start
-    print ("Time elapsed:", elapsed)
-
-    return results, gt_image_masked, elapsed
-
-
-def get_c2f_results(seg_id, scheds, r_overlap_check=0.06, r_final = 0.07, viz=True):
-    print("entering c2f")
-
-    gt_image_masked = gt_image_above_table * (segmentation_img == seg_id)[:,:,None]
-    gt_img_complement = gt_image_above_table * (segmentation_img != seg_id)[:,:,None]
-
-    # jax3dp3.viz.save_depth_image(gt_image_masked[:,:,2],max=far, filename="gt_image_masked.png")
-    # jax3dp3.viz.save_depth_image(gt_img_complement[:,:,2],max=far, filename="gt_img_complement.png")
-
-    # from IPython import embed; embed()
-
-
-    points_in_table_ref_frame =  t3d.apply_transform(t3d.point_cloud_image_to_points(gt_image_masked), 
-        t3d.inverse_pose(table_surface_plane_pose).dot(cam_pose))
-    point_seg = jax3dp3.utils.segment_point_cloud(points_in_table_ref_frame, 0.1)
-    points_filtered = points_in_table_ref_frame[point_seg == jax3dp3.utils.get_largest_cluster_id_from_segmentation(point_seg)]
-    center_x, center_y, _ = ( points_filtered.min(0) + points_filtered.max(0))/2
-    print(center_x, center_y)    
-
-
-    top_k = 5
-
-    contact_param_sched, face_param_sched, likelihood_r_sched = scheds
-    start = time.time()
-    results = jax3dp3.c2f.c2f_contact_parameters_no_occlusion(
-        jnp.array([center_x, center_y, 0.0]),
-        contact_param_sched, face_param_sched, likelihood_r_sched=likelihood_r_sched,
-        contact_plane_pose=jnp.linalg.inv(cam_pose) @ table_surface_plane_pose,
-        gt_image_masked=gt_image_masked, 
-        # gt_img_complement=gt_img_complement,
-        model_box_dims=model_box_dims,
-        outlier_prob=outlier_prob,
-        outlier_volume=outlier_volume,
-        top_k=top_k, 
-        r_overlap_check=r_overlap_check,
-        r_final = r_final
-    )
-    end= time.time()
-    elapsed = end - start
-    print ("Time elapsed:", elapsed)
-
-    return results, gt_image_masked, elapsed
-
 
 def viz_results(results, tested_likelihoods,gridding_idx=0):    
 
