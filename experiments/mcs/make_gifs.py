@@ -14,6 +14,7 @@ import glob
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_*.json")
 files = glob.glob(scene_regex)
 for scene_path in files:
+    print(scene_path)
     scene_name = scene_path.split("/")[-1]
     images = j.physics.load_mcs_scene_data(scene_path)
     j.make_gif(

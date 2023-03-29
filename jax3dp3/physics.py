@@ -22,7 +22,7 @@ def load_mcs_scene_data(scene_path):
         image = j.RGBD.construct_from_step_metadata(step_metadata)
 
         step_metadatas = [step_metadata]
-        for _ in tqdm(range(200)):
+        while True:
             step_metadata = controller.step("Pass")
             if step_metadata is None:
                 break

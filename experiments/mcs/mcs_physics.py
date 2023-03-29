@@ -16,11 +16,10 @@ import matplotlib.pyplot as plt
 # scene_name = "charlie_0002_04_B1_debug.json"
 
 
-scene_name = "passive_physics_gravity_support_0001_24"
-scene_name = "passive_physics_gravity_support_0001_21"
-scene_name = "passive_physics_collision_0001_01"
-scene_name = "passive_physics_object_permanence_0001_41"
 scene_name = "passive_physics_spatio_temporal_continuity_0001_21"
+scene_path = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation",
+  scene_name + "json"
+)
 scene_path = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", scene_name +".json")
 
 images = j.physics.load_mcs_scene_data(scene_path)
@@ -62,22 +61,31 @@ OUTLIER_PROB=0.1
 OUTLIER_VOLUME=1.0
 
 
-dx  = 0.5
-dy = 0.4
-dz = 0.1
+dx  = 0.3
+dy = 0.3
+dz = 0.3
 translation_deltas_global = j.make_translation_grid_enumeration(
-    -dx, -dy, -dz, dx, dy, dz, 50, 20, 10
+    -dx, -dy, -dz, dx, dy, dz, 51, 21, 11
 )
 
 
-# rotation_deltas_x = jax.vmap(
-#     lambda ang: j.t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.deg2rad(ang)))(jnp.linspace(-30.0, 30.0, 20))
-# rotation_deltas_y = jax.vmap(
-#     lambda ang: j.t3d.transform_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), jnp.deg2rad(ang)))(jnp.linspace(-30.0, 30.0, 20))
+rotation_deltas_x = jax.vmap(
+    lambda ang: j.t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.deg2rad(ang)))(jnp.linspace(-30.0, 30.0, 20))
+rotation_deltas_y = jax.vmap(
+    lambda ang: j.t3d.transform_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), jnp.deg2rad(ang)))(jnp.linspace(-30.0, 30.0, 20))
 rotation_deltas_z = jax.vmap(
-    lambda ang: j.t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), jnp.deg2rad(ang)))(jnp.linspace(-0.0, 0.0, 40))
-rotation_deltas_global = jnp.vstack([rotation_deltas_z])
-all_enumerations = np.vstack([translation_deltas_global])
+    lambda ang: j.t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), jnp.deg2rad(ang)))(jnp.linspace(-100.0, 100.0, 200))
+rotation_deltas_global = jnp.vstack([rotation_deltas_x, rotation_deltas_y,rotation_deltas_z])
+all_enumerations = np.vstack([translation_deltas_global, rotation_deltas_global])
+
+def prior(new_pose, prev_pose, bbox_dims):
+    pixel_x, pixel_y = j.project_cloud_to_pixels(prev_pose[:3,3].reshape(-1,3), intrinsics)[0]
+    offset_3d = jnp.array([0.0, 0.2, 0.0])
+    weight = jax.scipy.stats.norm.logpdf(new_pose[:3,3] - (prev_pose[:3,3] + offset_3d), loc=0, scale=0.1).sum()
+    weight += -1000.0 * ((new_pose[:3,3][1] + bbox_dims[1]/2.0) > 1.4)
+    return weight
+
+prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None, None)))
 
 
 renderer = j.Renderer(intrinsics)
@@ -144,6 +152,11 @@ for t in range(2,len(images)):
                     )
                     all_weights.append(weights[0,:])
                 all_weights = jnp.hstack(all_weights)
+                all_weights += prior_parallel(
+                    all_pose_proposals[0,...], 
+                    pose_estimates[known_object_idx],
+                    renderer.model_box_dims[known_object_idx]
+                )
 
                 j.get_depth_image(rendered_images_spliced[all_weights.argmax(),:,:,2],max=WALL_Z).save("img.png")
 
@@ -172,7 +185,7 @@ for t in range(2,len(images)):
             min_z = voxelized[:,2].min()
             depth = voxelized[:,2].max() - voxelized[:,2].min()
 
-            front_face = voxelized[voxelized[:,2] <= min_z+20, :]
+            front_face = voxelized[voxelized[:,2] <= min_z+5, :]
 
             slices = []
             for i in range(depth):
@@ -196,65 +209,6 @@ for t in range(2,len(images)):
                 ]
             )
 
-                
-
-    # if pose_estimates.shape[0] != 0:
-    #     rerendered = renderer.render_multiobject(pose_estimates, np.arange(pose_estimates.shape[0]))[...,:3]
-    # else:
-    #     rerendered = jnp.zeros((intrinsics.height, intrinsics.width, 3))
-    # rendered_images_spliced = j.splice_image_parallel(jnp.array([rerendered]), point_cloud_image_complement)[0]
-    # pixelwise_probs = j.gaussian_mixture_image_jit(point_cloud_image, rendered_images_spliced, 0.05)
-
-    for seg_id in object_ids:
-        if seg_id in matched_ids:
-            continue
-
-        # average_probability = jnp.mean(pixelwise_probs[segmentation == seg_id])
-        # if average_probability > 300.0:
-        #     continue
-
-        num_pixels = jnp.sum(segmentation == seg_id)
-        rows, cols = jnp.where(segmentation == seg_id)
-        distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
-        distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width).min())
-
-        point_cloud_segment = point_cloud_image_original[segmentation_original == seg_id]
-        dims, pose = j.utils.aabb(point_cloud_segment)
-
-        BUFFER = 2
-        if num_pixels < 30:
-            continue
-        if distance_to_edge_1 < BUFFER or distance_to_edge_2 < BUFFER:
-            continue
-
-        resolution = 0.01
-        voxelized = jnp.rint(point_cloud_segment / resolution).astype(jnp.int32)
-        min_z = voxelized[:,2].min()
-        depth = voxelized[:,2].max() - voxelized[:,2].min()
-
-        front_face = voxelized[voxelized[:,2] <= min_z+20, :]
-
-        slices = []
-        for i in range(depth):
-            slices.append(front_face + jnp.array([0.0, 0.0, i]))
-        full_shape = jnp.vstack(slices) * resolution
-
-
-        dims, pose = j.utils.aabb(full_shape)
-        mesh = j.mesh.make_marching_cubes_mesh_from_point_cloud(
-            j.t3d.apply_transform(full_shape, j.t3d.inverse_pose(pose)),
-            0.05
-        )
-        renderer.add_mesh(mesh)
-        j.get_depth_image(segmentation_original == seg_id).save(f"{t}_{seg_id}_new_object.png")
-        print("Adding mesh!  Seg ID: ", seg_id, "Pixels: ",num_pixels, " dists: ", distance_to_edge_1, " ", distance_to_edge_2, " Pose: ", pose[:3, 3])
-
-        pose_estimates = jnp.vstack(
-            [
-                pose_estimates,
-                jnp.array([pose])
-            ]
-        )
     pose_estimates_over_time.append(pose_estimates)
 
 viz_images = []
@@ -282,3 +236,19 @@ j.make_gif(viz_images, f"{scene_name}.gif")
 print(scene_name)
 
 from IPython import embed; embed()
+
+
+j.meshcat.setup_visualizer()
+
+
+colors = np.array(j.distinct_colors(len(pose_estimates), pastel_factor=0.3))
+
+j.meshcat.clear()
+j.meshcat.show_cloud("cloud1",point_cloud_image.reshape(-1,3))
+for (i,m) in enumerate(renderer.meshes):
+    j.meshcat.show_trimesh(f"{i}", m, color=colors[i])
+
+for t in tqdm(range(len(pose_estimates_over_time))):
+    for i in range(len(pose_estimates_over_time[t])):
+        j.meshcat.set_pose(f"{i}", pose_estimates_over_time[t][i])
+    time.sleep(0.1)
