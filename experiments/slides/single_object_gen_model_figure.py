@@ -15,10 +15,9 @@ model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")
 print(f"{model_dir} exists: {os.path.exists(model_dir)}")
 mesh_paths = []
 model_names = np.array(j.ycb_loader.MODEL_NAMES)
-mesh_paths = [
-     os.path.join(model_dir,name,"textured.obj")
-    for name in model_names
-]
+mesh_paths = []
+for name in model_names:
+    mesh_paths.append(os.path.join(model_dir,name,"textured.obj"))
 
 IDX = 2
 mesh_path = mesh_paths[IDX]
@@ -47,24 +46,18 @@ img = renderer.render_single_object(
     object_pose @ j.t3d.inverse_pose(offset_pose),
     0
 )
-img = img.at[img[:,:,2] < intrinsics.near].set(intrinsics.far)
-j.get_depth_image(img[:,:,2], max=intrinsics.far).save("rendered.png")
-
 point_cloud = img[img[:,:,2] > 0.0,:3].reshape(-1,3)
 
-r = 0.00001
 noise = jax.vmap(
     lambda key: jax.random.multivariate_normal(
-        key, jnp.zeros(3), jnp.eye(3)*r
+        key, jnp.zeros(3), jnp.eye(3)*0.0001
     )
 )(
     jax.random.split(jax.random.PRNGKey(3), point_cloud.shape[0])
 )
 point_cloud_noisy = noise + point_cloud
-
-from tqdm import tqdm
-
-import jax
+img_noisy = j.render_point_cloud(point_cloud_noisy, intrinsics)
+j.get_depth_image(img_noisy[:,:,2],max=intrinsics.far).save("noisy.png")
 
 
 
