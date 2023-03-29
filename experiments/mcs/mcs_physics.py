@@ -46,15 +46,15 @@ def is_non_object(bbox_dims):
 WALL_Z = 14.5
 FLOOR_Y = 1.45
 
-R_SWEEP = jnp.array([0.025])
+R_SWEEP = jnp.array([0.1])
 OUTLIER_PROB=0.1
 OUTLIER_VOLUME=1.0
 
 
-d = 0.4
-n = 7
+d = 2.0
+n = 800
 translation_deltas_global = j.make_translation_grid_enumeration(
-    -d, -d, -d, d, d, d, n, n, 3
+    -d, 0.0, 0.0, d, 0.0, 0.0, n, 1,1
 )
 
 
@@ -109,33 +109,54 @@ for t in range(2,len(images)):
 
     matched_ids = []
     for seg_id in object_ids:
-        for known_object_id in range(len(renderer.meshes)):
-            
-            pose_estimates_tiled = jnp.tile(
-                pose_estimates[known_object_id,None,...], (1, all_enumerations.shape[0], 1, 1)
-            )
-            all_pose_proposals  = pose_estimates_tiled.at[0].set(
-                jnp.einsum("aij,ajk->aik", pose_estimates_tiled[0,...], all_enumerations)
-            )
-            from IPython import embed; embed()
+        for known_object_idx in range(len(renderer.meshes)):
+            for _ in range(1):
+                center_pose = pose_estimates[known_object_idx]
+                center_pose = center_pose.at[0,3].set(point_cloud_image[segmentation == seg_id].mean(0)[0])
+                pose_estimates_tiled = jnp.tile(
+                    center_pose[None, None,...], (1, all_enumerations.shape[0], 1, 1)
+                )
 
-            all_weights = []
-            num_batches = 2
-            for batch in jnp.array_split(all_pose_proposals, num_batches, 1):
-                rendered_images = renderer.render_muleetiobject_parallel(batch, [known_object_id])[...,:3]
+                all_pose_proposals  = pose_estimates_tiled.at[0].set(
+                    jnp.einsum("aij,ajk->aik", pose_estimates_tiled[0,...], all_enumerations)
+                )
+
+                from IPython import embed; embed()  
+                all_weights = []
+                num_batches = 1
+                # for batch in jnp.array_split(all_pose_proposals, num_batches, 1):
+                batch = all_pose_proposals
+                rendered_images = renderer.render_multiobject_parallel(batch, [known_object_idx])[...,:3]
+                j.get_depth_image(rendered_images[-1,:,:,2],max=WALL_Z).save("img.png")
                 rendered_images_spliced = j.splice_image_parallel(rendered_images, point_cloud_image_complement)
-                j.get_depth_image(rendered_images[2,:,:,2], max=WALL_Z).save("img.png")
+                j.get_depth_image(rendered_images_spliced[420,:,:,2],max=WALL_Z).save("img.png")
                 weights = j.threedp3_likelihood_with_r_parallel_jit(
                     point_cloud_image, rendered_images_spliced, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
                 )
+                j.get_depth_image(point_cloud_image[:,:,2],max=WALL_Z).save("img.png")
                 all_weights.append(weights[0,:])
-            all_weights = jnp.hstack(all_weights)
+                all_weights = jnp.hstack(all_weights)
 
+                j.get_depth_image(rendered_images_spliced[all_weights.argmax(),:,:,2],max=WALL_Z).save("img.png")
+
+                pose_estimates = pose_estimates.at[known_object_idx,...].set(all_pose_proposals[0, all_weights.argmax(), :,:])
+            matched_ids.append(seg_id)
+
+    if pose_estimates.shape[0] != 0:
+        rerendered = renderer.render_multiobject(pose_estimates, np.arange(pose_estimates.shape[0]))[...,:3]
+    else:
+        rerendered = jnp.zeros((intrinsics.height, intrinsics.width, 3))
+    rendered_images_spliced = j.splice_image_parallel(jnp.array([rerendered]), point_cloud_image_complement)[0]
+    pixelwise_probs = j.gaussian_mixture_image_jit(point_cloud_image, rendered_images_spliced, 0.05)
 
     for seg_id in object_ids:
         if seg_id in matched_ids:
             continue
-        
+
+        # average_probability = jnp.mean(pixelwise_probs[segmentation == seg_id])
+        # if average_probability > 300.0:
+        #     continue
+
         num_pixels = jnp.sum(segmentation == seg_id)
         rows, cols = jnp.where(segmentation == seg_id)
         distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
@@ -168,7 +189,7 @@ for t in range(2,len(images)):
         dims, pose = j.utils.aabb(full_shape)
         mesh = j.mesh.make_marching_cubes_mesh_from_point_cloud(
             j.t3d.apply_transform(full_shape, j.t3d.inverse_pose(pose)),
-            0.075
+            0.05
         )
         renderer.add_mesh(mesh)
         j.get_depth_image(segmentation_original == seg_id).save(f"{t}_{seg_id}_new_object.png")
@@ -181,5 +202,29 @@ for t in range(2,len(images)):
             ]
         )
     pose_estimates_over_time.append(pose_estimates)
+
+viz_images = []
+max_objects = pose_estimates_over_time[-1].shape[0]
+for t in tqdm(range(len(pose_estimates_over_time))):
+    pose_estimates = pose_estimates_over_time[t]
+    seg_rendered = renderer.render_multiobject(pose_estimates, np.arange(pose_estimates.shape[0]))[...,3]
+
+    inferred = j.resize_image(
+        j.get_depth_image(seg_rendered,max=max_objects+1),
+        images[t].intrinsics.height,
+        images[t].intrinsics.width
+    )
+    rgb = j.get_rgb_image(images[t].rgb)
+    viz_images.append(j.multi_panel(
+        [
+            rgb,
+            inferred,
+            j.overlay_image(rgb, inferred)
+        ],
+        labels=["RGB", "Inferred"],
+        title=f"{t} / {len(images)}"
+    ))
+j.make_gif(viz_images, f"{scene_name}.gif")
+print(scene_name)
 
 from IPython import embed; embed()
