@@ -18,8 +18,8 @@ import matplotlib.pyplot as plt
 
 scene_name = "passive_physics_gravity_support_0001_26"
 
-scene_name = "passive_physics_spatio_temporal_continuity_0001_07"
 scene_name = "passive_physics_object_permanence_0001_02"
+scene_name = "passive_physics_spatio_temporal_continuity_0001_15"
 scene_name = "passive_physics_shape_constancy_0001_02"
 scene_path = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation",
   scene_name + ".json"
@@ -108,40 +108,59 @@ def get_new_shape_model(point_cloud_image, segmentation, seg_id):
 
     return mesh, pose
 
-R_SWEEP = jnp.array([0.1])
-OUTLIER_PROB=0.1
+R_SWEEP = jnp.array([0.05])
+OUTLIER_PROB=0.01
 OUTLIER_VOLUME=1.0
 
 
-covariance = jnp.diag(jnp.array([0.01, 0.01, 0.01]))
-def proposal(key, particle, particle_vel, bbox_dims):
-    noisy_particle_vel = jax.random.multivariate_normal(
-        key, particle_vel, covariance
-    )
-    rot = j.distributions.vmf(key, 500.0)
-    new_particle = j.t3d.transform_from_pos(noisy_particle_vel) @ particle @ rot
-    return new_particle, noisy_particle_vel
+dx  = 0.3
+dy = 0.4
+dz = 0.05
+translation_deltas_global = j.make_translation_grid_enumeration_3d(
+    -dx, -dy, -dz, dx, dy, dz, 31, 31, 21
+)
+
+# def proposal2(key, particle, particle_vel, bbox_dims):
+#     noisy_particle_vel = jax.random.multivariate_normal(
+#         key, particle_vel + jnp.array([0.0, 0.05, 0.0]), jnp.diag(jnp.array([0.1, 0.1, 0.01]))
+#     )
+#     # rot = j.distributions.vmf(key, 500.0)
+#     new_particle = j.t3d.transform_from_pos(noisy_particle_vel) @ particle
+#     return new_particle, noisy_particle_vel
 
 def prior(new_particle_vel, particle, particle_vel, bbox_dims):
     logscore = jax.scipy.stats.multivariate_normal.logpdf(
-        new_particle_vel, particle_vel, covariance
+        new_particle_vel, particle_vel + jnp.array([0.0, 0.05, 0.0]), jnp.diag(jnp.array([0.01, 0.01, 0.01]))
     )
+    new_position = new_particle_vel + particle[:3,3]
+    logscore += -1000.0 * ((new_position[1] + bbox_dims[1]/2.0) > 1.4)
     return logscore
 
-proposal_parallel = jax.jit(jax.vmap(proposal, in_axes=(0, 0, 0, None)))
-prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, 0, 0, None)))
+# proposal_parallel = jax.jit(jax.vmap(proposal2, in_axes=(0, 0, 0, None)))
+prior_parallels2 = jax.jit(jax.vmap(prior, in_axes=(0, 0, 0, None)))
 
 
-NUM_PARTICLES = 1000
+NUM_PARTICLES = translation_deltas_global.shape[0]
 keys = jax.random.split(jax.random.PRNGKey(3), NUM_PARTICLES)
 
 renderer = j.Renderer(intrinsics)
 PARTICLES = jnp.zeros((1, 0, NUM_PARTICLES, 4, 4))
 PARTICLES_VEL = jnp.zeros((1, 0, NUM_PARTICLES, 3))
 for t in range(1,len(images)):
-    image = images[t]
     print("Time: ", t, "  -  ")
 
+
+    PARTICLES = jnp.vstack([
+        PARTICLES,
+        PARTICLES[-1][None, ...]
+    ])
+    PARTICLES_VEL = jnp.vstack([
+        PARTICLES_VEL,
+        PARTICLES_VEL[-1][None, ...]
+    ])
+
+
+    image = images[t]
     depth = j.utils.resize(image.depth, intrinsics.height, intrinsics.width)
     point_cloud_image = j.t3d.unproject_depth(depth, intrinsics)
     
@@ -149,51 +168,86 @@ for t in range(1,len(images)):
     segmentation_ids = jnp.unique(segmentation)
 
     object_ids, object_mask = get_object_mask(point_cloud_image, segmentation, segmentation_ids)
-    
     depth_complement = depth * (1.0 - object_mask) + intrinsics.far * (object_mask)
     point_cloud_image_complement = j.t3d.unproject_depth(depth_complement, intrinsics)
 
-    if PARTICLES.shape[1] > 0:
-        obj_id = 0
 
-        NEW_PARTICLES, NEW_VELS = proposal_parallel(keys, PARTICLES[-1, obj_id], PARTICLES_VEL[-1, obj_id], renderer.model_box_dims[obj_id])
-        keys = jax.random.split(keys[0], NUM_PARTICLES)
+    for obj_id in range(PARTICLES.shape[1]):
+
+        prev_poses = PARTICLES[t-1, obj_id]
+        prev_vels = PARTICLES_VEL[t-1, obj_id]
+
+        NEW_VELS = prev_vels + translation_deltas_global
+        NEW_PARTICLES = jnp.einsum("aij,ajk->aik", 
+            jax.vmap(j.t3d.transform_from_pos)(NEW_VELS),
+            prev_poses,
+        )
 
         rendered_images = renderer.render_parallel(NEW_PARTICLES, obj_id)[...,:3]
         rendered_images_spliced = j.splice_image_parallel(rendered_images, point_cloud_image_complement)
         weights = j.threedp3_likelihood_with_r_parallel_jit(
             point_cloud_image, rendered_images_spliced, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
         ).reshape(-1)
+        j.get_depth_image(rendered_images[10000,...,2],max=WALL_Z).save("state.png")
 
-        prior_weights = prior(NEW_VELS, PARTICLES[-1, obj_id], PARTICLES_VEL[-1, obj_id], renderer.model_box_dims[obj_id])
-        weights += prior_weights
 
-        PARTICLES = jnp.concatenate([
-            PARTICLES,
-            NEW_PARTICLES[None, None, ...]
-        ], axis=0)
 
-        PARTICLES_VEL = jnp.concatenate([
-            PARTICLES_VEL,
-            NEW_VELS[None, None, ...]
-        ], axis=0)
 
-        parent_idxs = jax.random.categorical(keys[0], weights, shape=weights.shape)
+
+        PARTICLES = PARTICLES.at[t, obj_id, ...].set(NEW_PARTICLES)
+        PARTICLES_VEL = PARTICLES_VEL.at[t, obj_id, ...].set(NEW_VELS)
+
+
+
+
+        prior_weights = prior_parallels2(NEW_VELS, PARTICLES[t-1, obj_id], PARTICLES_VEL[t-1, obj_id], renderer.model_box_dims[obj_id])
+        final_weights = weights + prior_weights
+
+        parent_idxs = jax.random.categorical(keys[0], final_weights, shape=final_weights.shape)
         keys = jax.random.split(keys[0], weights.shape[0])
-        PARTICLES = PARTICLES[:,:,parent_idxs]
-        PARTICLES_VEL = PARTICLES_VEL[:,:,parent_idxs]
-    else:
-        PARTICLES = jnp.vstack([
-            PARTICLES,
-            PARTICLES[-1][None, ...]
-        ])
-        PARTICLES_VEL = jnp.vstack([
-            PARTICLES_VEL,
-            PARTICLES_VEL[-1][None, ...]
-        ])
+        PARTICLES = PARTICLES.at[:, obj_id, ...].set(PARTICLES[:, obj_id, parent_idxs])
+
+        plt.clf();plt.plot(j.utils.normalize_log_scores(weights));plt.savefig("1.png")
+        plt.clf();plt.plot(j.utils.normalize_log_scores(prior_weights));plt.savefig("2.png")
+        plt.clf();plt.plot(j.utils.normalize_log_scores(final_weights));plt.savefig("3.png")
+
+        # inferred_depth = renderer.render_single_object(PARTICLES[t, obj_id, 0],obj_id)[...,:3]
+        inferred_depth = renderer.render_single_object(NEW_PARTICLES[jnp.argmax(final_weights)],obj_id)[...,:3]
+        inferred_depth = renderer.render_single_object(NEW_PARTICLES[parent_idxs[0]],obj_id)[...,:3]
+        inferred = j.resize_image(
+            j.get_depth_image(inferred_depth[:,:,2],max=WALL_Z),
+            images[t].intrinsics.height,
+            images[t].intrinsics.width
+        )
+
+        rgb = j.get_rgb_image(images[t].rgb)
+        j.multi_panel(
+                [
+                    rgb,
+                    j.resize_image(
+                        j.get_depth_image(renderer.render_single_object(PARTICLES[t-1,0,-1],obj_id)[...,2],max=WALL_Z),
+                        images[t].intrinsics.height,
+                        images[t].intrinsics.width
+                    ),
+                    j.resize_image(
+                        j.get_depth_image(rendered_images_spliced[jnp.argmax(weights),...,2],max=WALL_Z),
+                        images[t].intrinsics.height,
+                        images[t].intrinsics.width
+                    ),
+                    j.resize_image(
+                        j.get_depth_image(point_cloud_image[...,2],max=WALL_Z),
+                        images[t].intrinsics.height,
+                        images[t].intrinsics.width
+                    ),
+                    inferred,
+                    j.overlay_image(rgb, inferred)
+                ],
+            labels=["RGB", "Inferred"],
+            title=f"{t} / {len(images)}"
+        ).save(f"{t}_state.png")
 
     for seg_id in object_ids:
-        if len(object_ids) > PARTICLES.shape[1]:
+        if PARTICLES.shape[1] == 0:
             data = get_new_shape_model(point_cloud_image, segmentation, seg_id)
             if data is None:
                 continue
@@ -214,62 +268,52 @@ for t in range(1,len(images)):
     print(PARTICLES.shape)
     print(PARTICLES_VEL.shape)
 
-viz_images = []
-max_objects = PARTICLES[-1].shape[0]
-for t in tqdm(range(len(PARTICLES))):
-    pose_estimates = PARTICLES[t][:,0,...]
-    seg_rendered = renderer.render_multiobject(pose_estimates, np.arange(pose_estimates.shape[0]))[...,3]
+# viz_images = []
+# max_objects = PARTICLES[-1].shape[0]
+# for t in tqdm(range(len(PARTICLES))):
+#     pose_estimates = PARTICLES[t][:,0,...]
+#     seg_rendered = renderer.render_multiobject(pose_estimates, np.arange(pose_estimates.shape[0]))[...,3]
 
-    inferred = j.resize_image(
-        j.get_depth_image(seg_rendered,max=max_objects+1),
-        images[t].intrinsics.height,
-        images[t].intrinsics.width
-    )
-    rgb = j.get_rgb_image(images[t].rgb)
-    viz_images.append(j.multi_panel(
+#     inferred = j.resize_image(
+#         j.get_depth_image(seg_rendered,max=max_objects+1),
+#         images[t].intrinsics.height,
+#         images[t].intrinsics.width
+#     )
+#     rgb = j.get_rgb_image(images[t].rgb)
+#     viz_images.append(j.multi_panel(
+#         [
+#             rgb,
+#             inferred,
+#             j.overlay_image(rgb, inferred)
+#         ],
+#         labels=["RGB", "Inferred"],
+#         title=f"{t} / {len(images)}"
+#     ))
+# j.make_gif(viz_images, f"{scene_name}.gif")
+# print(scene_name)
+
+from IPython import embed; embed()
+
+
+
+t = 94
+obj_id = 0
+image = images[t]
+poses = PARTICLES[t, obj_id]
+vels = PARTICLES_VEL[t, obj_id]
+inferred_depth = renderer.render_multiobject(poses,[obj_id])[...,:3]
+inferred = j.resize_image(
+    j.get_depth_image(inferred_depth[:,:,2],max=WALL_Z),
+    images[t].intrinsics.height,
+    images[t].intrinsics.width
+)
+rgb = j.get_rgb_image(images[t].rgb)
+j.multi_panel(
         [
             rgb,
             inferred,
             j.overlay_image(rgb, inferred)
         ],
-        labels=["RGB", "Inferred"],
-        title=f"{t} / {len(images)}"
-    ))
-j.make_gif(viz_images, f"{scene_name}.gif")
-print(scene_name)
-
-
-
-from IPython import embed; embed()
-
-
-j.meshcat.setup_visualizer()
-
-
-colors = np.array(j.distinct_colors(len(PARTICLES[-1]), pastel_factor=0.3))
-
-j.meshcat.clear()
-
-for (i,m) in enumerate(renderer.meshes):
-    j.meshcat.show_trimesh(f"{i}", m, color=colors[i])
-
-t = 110
-image = images[t]
-depth = j.utils.resize(image.depth, intrinsics.height, intrinsics.width)
-point_cloud_image = j.t3d.unproject_depth(depth, intrinsics)
-j.meshcat.show_cloud("cloud1", point_cloud_image.reshape(-1,3))
-
-pose_estimates = PARTICLES[t][:,0,...]
-cloud = renderer.render_multiobject(pose_estimates, np.arange(pose_estimates.shape[0]))[...,:3]
-j.meshcat.show_cloud("cloud2", cloud.reshape(-1,3), color=j.RED)
-
-
-for t in range(len(images)):
-    print("Time: ", t, "  -  ")
-    image = images[t]
-    point_cloud_image = j.t3d.unproject_depth(depth, intrinsics)
-    
-for t in tqdm(range(len(PARTICLES_OVER_TIME))):
-    for i in range(len(PARTICLES_OVER_TIME[t])):
-        j.meshcat.set_pose(f"{i}", PARTICLES_OVER_TIME[t][i, 0])
-    time.sleep(0.05)
+    labels=["RGB", "Inferred"],
+    title=f"{t} / {len(images)}"
+).save("state.png")
