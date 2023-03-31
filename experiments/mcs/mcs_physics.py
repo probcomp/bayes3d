@@ -18,9 +18,9 @@ import matplotlib.pyplot as plt
 
 scene_name = "passive_physics_gravity_support_0001_26"
 
-scene_name = "passive_physics_object_permanence_0001_02"
-scene_name = "passive_physics_spatio_temporal_continuity_0001_15"
 scene_name = "passive_physics_shape_constancy_0001_02"
+scene_name = "passive_physics_spatio_temporal_continuity_0001_15"
+scene_name = "passive_physics_object_permanence_0001_02"
 scene_path = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation",
   scene_name + ".json"
 )
@@ -114,10 +114,10 @@ OUTLIER_VOLUME=1.0
 
 
 dx  = 0.3
-dy = 0.4
+dy = 0.2
 dz = 0.05
 translation_deltas_global = j.make_translation_grid_enumeration_3d(
-    -dx, -dy, -dz, dx, dy, dz, 31, 31, 21
+    -dx, -dy, -dz, dx, dy, dz, 21, 21, 11
 )
 
 # def proposal2(key, particle, particle_vel, bbox_dims):
@@ -129,11 +129,18 @@ translation_deltas_global = j.make_translation_grid_enumeration_3d(
 #     return new_particle, noisy_particle_vel
 
 def prior(new_particle_vel, particle, particle_vel, bbox_dims):
-    logscore = jax.scipy.stats.multivariate_normal.logpdf(
-        new_particle_vel, particle_vel + jnp.array([0.0, 0.05, 0.0]), jnp.diag(jnp.array([0.01, 0.01, 0.01]))
-    )
     new_position = new_particle_vel + particle[:3,3]
-    logscore += -1000.0 * ((new_position[1] + bbox_dims[1]/2.0) > 1.4)
+    near_ground = jnp.abs( (new_position[1] + bbox_dims[1]/2.0) - 1.4) < 0.01
+
+    velocity_vec = (
+        (1.0 - near_ground) * (particle_vel + jnp.array([0.0, 0.1, 0.0])) +
+        near_ground * particle_vel * jnp.array([1.0, 0.0, 1.0])
+    )
+
+    logscore = jax.scipy.stats.multivariate_normal.logpdf(
+        new_particle_vel, velocity_vec, jnp.diag(jnp.array([0.01, 0.01, 0.01]))
+    )
+    logscore += -1000.0 * ((new_position[1] + bbox_dims[1]/2.0) > 1.45)
     return logscore
 
 # proposal_parallel = jax.jit(jax.vmap(proposal2, in_axes=(0, 0, 0, None)))
@@ -158,7 +165,6 @@ for t in range(1,len(images)):
         PARTICLES_VEL,
         PARTICLES_VEL[-1][None, ...]
     ])
-
 
     image = images[t]
     depth = j.utils.resize(image.depth, intrinsics.height, intrinsics.width)
@@ -202,18 +208,19 @@ for t in range(1,len(images)):
 
         prior_weights = prior_parallels2(NEW_VELS, PARTICLES[t-1, obj_id], PARTICLES_VEL[t-1, obj_id], renderer.model_box_dims[obj_id])
         final_weights = weights + prior_weights
+        
 
-        parent_idxs = jax.random.categorical(keys[0], final_weights, shape=final_weights.shape)
-        keys = jax.random.split(keys[0], weights.shape[0])
-        PARTICLES = PARTICLES.at[:, obj_id, ...].set(PARTICLES[:, obj_id, parent_idxs])
+        # parent_idxs = jax.random.categorical(keys[0], final_weights, shape=final_weights.shape)
+        # keys = jax.random.split(keys[0], weights.shape[0])
+        PARTICLES = PARTICLES.at[:, obj_id, ...].set(PARTICLES[:, obj_id, jnp.argmax(final_weights)][:, None, ...]  )\
 
         plt.clf();plt.plot(j.utils.normalize_log_scores(weights));plt.savefig("1.png")
         plt.clf();plt.plot(j.utils.normalize_log_scores(prior_weights));plt.savefig("2.png")
         plt.clf();plt.plot(j.utils.normalize_log_scores(final_weights));plt.savefig("3.png")
 
         # inferred_depth = renderer.render_single_object(PARTICLES[t, obj_id, 0],obj_id)[...,:3]
-        inferred_depth = renderer.render_single_object(NEW_PARTICLES[jnp.argmax(final_weights)],obj_id)[...,:3]
-        inferred_depth = renderer.render_single_object(NEW_PARTICLES[parent_idxs[0]],obj_id)[...,:3]
+        inferred_depth = renderer.render_single_object(PARTICLES[t, obj_id, 0], obj_id)[...,:3]
+        # inferred_depth = renderer.render_single_object(NEW_PARTICLES[parent_idxs[0]],obj_id)[...,:3]
         inferred = j.resize_image(
             j.get_depth_image(inferred_depth[:,:,2],max=WALL_Z),
             images[t].intrinsics.height,
