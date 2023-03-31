@@ -149,7 +149,7 @@ def prior(new_state, prev_poses, bbox_dims):
     pred_new_position = prev_poses[-1][:3,3] + velocity_vec
 
     score = score + jax.scipy.stats.multivariate_normal.logpdf(
-        new_position, pred_new_position, jnp.diag(jnp.array([0.15, 0.15, 0.15]))
+        new_position, pred_new_position, jnp.diag(jnp.array([0.01, 0.01, 0.01]))
     )
     score += -100.0 * ((new_position[1] + bbox_dims[1]/2.0) > 1.5)
     return score
