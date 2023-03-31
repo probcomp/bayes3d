@@ -19,12 +19,19 @@ import matplotlib.pyplot as plt
 scene_name = "passive_physics_gravity_support_0001_26"
 
 scene_name = "passive_physics_shape_constancy_0001_02"
+scene_name = "passive_physics_shape_constancy_0001_02"
+
 scene_name = "passive_physics_spatio_temporal_continuity_0001_15"
 scene_name = "passive_physics_spatio_temporal_continuity_0001_14"
 scene_name = "passive_physics_spatio_temporal_continuity_0001_01"
-scene_name = "passive_physics_spatio_temporal_continuity_0001_02"
 
-scene_name = "passive_physics_object_permanence_0001_02"
+
+scene_name = "passive_physics_spatio_temporal_continuity_0001_02"
+scene_name = "passive_physics_object_permanence_0001_29"
+scene_name = "passive_physics_spatio_temporal_continuity_0001_02"
+scene_name = "passive_physics_spatio_temporal_continuity_0001_15"
+scene_name = "passive_physics_spatio_temporal_continuity_0001_14"
+scene_name = "passive_physics_collision_0001_01"
 scene_path = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation",
   scene_name + ".json"
 )
@@ -118,9 +125,9 @@ def get_new_shape_model(point_cloud_image, pixelwise_probs, segmentation, seg_id
 
 
 
-dx  = 0.4
-dy = 0.4
-dz = 0.2
+dx  = 0.5
+dy = 0.5
+dz = 0.5
 gridding = j.make_translation_grid_enumeration(
     -dx, -dy, -dz, dx, dy, dz, 21, 11, 11
 )
@@ -131,22 +138,22 @@ OUTLIER_VOLUME=1.0
 
 
 
-# def prior(new_state, prev_state, bbox_dims):
-#     new_position = new_particle_vel + particle[:3,3]
-#     near_ground = jnp.abs( (new_position[1] + bbox_dims[1]/2.0) - 1.4) < 0.01
+def prior(new_state, prev_poses, bbox_dims):
+    score = 0.0
+    new_position = new_state[:3,3]
 
-#     velocity_vec = (
-#         (1.0 - near_ground) * (particle_vel + jnp.array([0.0, 0.1, 0.0])) +
-#         near_ground * particle_vel * jnp.array([1.0, 0.0, 1.0])
-#     )
+    velocity_vec = prev_poses[-1][:3,3] - prev_poses[-2][:3,3]
+    velocity_vec = velocity_vec * jnp.array([1.0, 1.0, 0.0])
+    velocity_vec +=  jnp.array([0.0, 0.1, 0.0])
+    pred_new_position = prev_poses[-1][:3,3] + velocity_vec
 
-#     logscore = jax.scipy.stats.multivariate_normal.logpdf(
-#         new_particle_vel, velocity_vec, jnp.diag(jnp.array([0.01, 0.01, 0.01]))
-#     )
-#     logscore += -1000.0 * ((new_position[1] + bbox_dims[1]/2.0) > 1.45)
-#     return logscore
+    score = score + jax.scipy.stats.multivariate_normal.logpdf(
+        new_position, pred_new_position, jnp.diag(jnp.array([0.15, 0.15, 0.15]))
+    )
+    score += -100.0 * ((new_position[1] + bbox_dims[1]/2.0) > 1.45)
+    return score
 
-# prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, 0, 0, None)))
+prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None, None)))
 
 
 OBJECT_POSES = jnp.zeros((1, 0, 4, 4))
@@ -166,6 +173,7 @@ for t in range(1,len(images)):
     point_cloud_image_complement = j.t3d.unproject_depth(depth_complement, intrinsics)
     OBJECT_POSES = jnp.vstack([OBJECT_POSES,OBJECT_POSES[-1][None, ...]])
     for known_id in range(OBJECT_POSES.shape[1]):
+
         current_pose_estimate = OBJECT_POSES[t-1, known_id, :, :]
         all_pose_proposals = [
             jnp.einsum("aij,jk->aik", 
@@ -189,12 +197,24 @@ for t in range(1,len(images)):
         weights = j.threedp3_likelihood_with_r_parallel_jit(
             point_cloud_image, rendered_images_spliced, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
         ).reshape(-1)
-        # j.get_depth_image(rendered_images[weights.argmax(),...,2],max=WALL_Z).save("state.png")
+
+        weights += prior_parallel(
+            all_pose_proposals, OBJECT_POSES[:t, known_id, :, :],  renderer.model_box_dims[known_id]
+        )
+
+        j.overlay_image(
+            j.resize_image(
+                j.get_depth_image(rendered_images[weights.argmax(),...,2],max=WALL_Z),
+                image.intrinsics.height,
+                image.intrinsics.width
+            ),
+            j.get_rgb_image(image.rgb)
+        ).save("state.png")
 
         best_pose = all_pose_proposals[weights.argmax()]
         OBJECT_POSES = OBJECT_POSES.at[t, known_id, ...].set(best_pose)
 
-    all_current_pose_estimates = OBJECT_POSES[-1]
+    all_current_pose_estimates = OBJECT_POSES[t]
     rerendered = renderer.render_multiobject(all_current_pose_estimates, jnp.arange(all_current_pose_estimates.shape[0]))[...,:3]
     rendered_images_spliced = j.splice_image_parallel(jnp.array([rerendered]), point_cloud_image_complement)[0]
     pixelwise_probs = j.gaussian_mixture_image_jit(point_cloud_image, rendered_images_spliced, 0.05)
@@ -229,7 +249,7 @@ for t in tqdm(range(len(images))):
                 rerendered_viz,
                 j.overlay_image(rgb_viz, rerendered_viz)
             ],
-        labels=["RGB", "Inferred", "Overaly"],
+        labels=["RGB", "Inferred", "Overlay"],
         title=f"{t} / {len(images)}"
     )
     viz_images.append(viz)
