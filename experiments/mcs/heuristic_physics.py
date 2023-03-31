@@ -30,10 +30,10 @@ scene_name = "passive_physics_gravity_support_0001_26"
 
 
 
-scene_name = "passive_physics_collision_0001_03"
 
 scene_name = "passive_physics_shape_constancy_0001_06"
 
+scene_name = "passive_physics_collision_0001_03"
 scene_path = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation",
   scene_name + ".json"
 )
@@ -173,6 +173,7 @@ for t in range(1,len(images)):
     depth_complement = depth * (1.0 - object_mask) + intrinsics.far * (object_mask)
     point_cloud_image_complement = j.t3d.unproject_depth(depth_complement, intrinsics)
     OBJECT_POSES = jnp.vstack([OBJECT_POSES,OBJECT_POSES[-1][None, ...]])
+
     for known_id in range(OBJECT_POSES.shape[1]):
         current_pose_estimate = OBJECT_POSES[t-1, known_id, :, :]
         all_pose_proposals = [
