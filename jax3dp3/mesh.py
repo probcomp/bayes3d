@@ -1,13 +1,14 @@
 import trimesh
 import numpy as np
 import jax3dp3.transforms_3d as t3d
-import jax3dp3
+import jax3dp3 as j
+import jax
 import jax.numpy as jnp
 from itertools import product
 import open3d as o3d
 
 def center_mesh(mesh, return_pose=False):
-    _, pose = jax3dp3.utils.aabb(mesh.vertices)
+    _, pose = j.utils.aabb(mesh.vertices)
     shift = np.array(pose[:3,3])
     mesh.vertices = mesh.vertices - shift
     if return_pose:
@@ -35,6 +36,14 @@ def make_cuboid_mesh(dimensions):
         np.eye(4)
     )
     return mesh
+
+def make_voxel_mesh_from_point_cloud(point_cloud, resolution):
+    poses = jax.vmap(j.t3d.transform_from_pos)(point_cloud)
+    all_voxels = [
+        trimesh.creation.box(np.array([resolution,resolution,resolution]), p) for p in poses
+    ]
+    final_mesh = trimesh.util.concatenate(all_voxels)
+    return final_mesh
 
 def make_marching_cubes_mesh_from_point_cloud(
     point_cloud,

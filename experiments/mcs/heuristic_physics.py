@@ -17,23 +17,25 @@ import matplotlib.pyplot as plt
 
 
 
-scene_name = "passive_physics_object_permanence_0001_29"
-
-
-scene_name = "passive_physics_spatio_temporal_continuity_0001_02"
-scene_name = "passive_physics_spatio_temporal_continuity_0001_02"
-scene_name = "passive_physics_spatio_temporal_continuity_0001_15"
-scene_name = "passive_physics_spatio_temporal_continuity_0001_14"
-
-
 scene_name = "passive_physics_gravity_support_0001_26"
 
 
 
+scene_name = "passive_physics_collision_0001_05"
+scene_name = "passive_physics_collision_0001_03"
+scene_name = "passive_physics_collision_0001_04"
+
+scene_name = "passive_physics_object_permanence_0001_29"
+
+
+scene_name = "passive_physics_spatio_temporal_continuity_0001_02"
+scene_name = "passive_physics_spatio_temporal_continuity_0001_15"
+scene_name = "passive_physics_spatio_temporal_continuity_0001_14"
+
+scene_name = "passive_physics_spatio_temporal_continuity_0001_02"
 
 scene_name = "passive_physics_shape_constancy_0001_06"
 
-scene_name = "passive_physics_collision_0001_03"
 scene_path = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation",
   scene_name + ".json"
 )
@@ -126,20 +128,20 @@ def get_new_shape_model(point_cloud_image, pixelwise_probs, segmentation, seg_id
 
 
 
-dx  = 0.5
-dy = 0.5
-dz = 0.5
+dx  = 0.6
+dy = 0.6
+dz = 0.6
 gridding = j.make_translation_grid_enumeration(
     -dx, -dy, -dz, dx, dy, dz, 21, 21, 21
 )
 
-R_SWEEP = jnp.array([0.01])
+R_SWEEP = jnp.array([0.05])
 OUTLIER_PROB=0.1
 OUTLIER_VOLUME=1.0
 
 
 
-def prior(new_state, prev_poses, bbox_dims):
+def prior2(new_state, prev_poses, bbox_dims):
     score = 0.0
     new_position = new_state[:3,3]
 
@@ -149,12 +151,12 @@ def prior(new_state, prev_poses, bbox_dims):
     pred_new_position = prev_poses[-1][:3,3] + velocity_vec
 
     score = score + jax.scipy.stats.multivariate_normal.logpdf(
-        new_position, pred_new_position, jnp.diag(jnp.array([0.01, 0.01, 0.01]))
+        new_position, pred_new_position, jnp.diag(jnp.array([0.03, 0.03, 0.03]))
     )
     score += -100.0 * ((new_position[1] + bbox_dims[1]/2.0) > 1.5)
     return score
 
-prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None, None)))
+prior_parallel = jax.jit(jax.vmap(prior2, in_axes=(0, None, None)))
 
 
 OBJECT_POSES = jnp.zeros((1, 0, 4, 4))
@@ -175,7 +177,7 @@ for t in range(1,len(images)):
     OBJECT_POSES = jnp.vstack([OBJECT_POSES,OBJECT_POSES[-1][None, ...]])
 
     for known_id in range(OBJECT_POSES.shape[1]):
-        current_pose_estimate = OBJECT_POSES[t-1, known_id, :, :]
+        current_pose_estimate = OBJECT_POSES[t, known_id, :, :]
         all_pose_proposals = [
             jnp.einsum("aij,jk->aik", 
                 gridding,
@@ -192,52 +194,48 @@ for t in range(1,len(images)):
             )
         all_pose_proposals = jnp.vstack(all_pose_proposals)
 
+        all_weights = []
+        for batch in jnp.array_split(all_pose_proposals,2):
+            rendered_images = renderer.render_parallel(batch, known_id)[...,:3]
+            rendered_images_spliced = j.splice_image_parallel(rendered_images, point_cloud_image_complement)
+            weights = j.threedp3_likelihood_with_r_parallel_jit(
+                point_cloud_image, rendered_images_spliced, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
+            ).reshape(-1)
 
-        rendered_images = renderer.render_parallel(all_pose_proposals, known_id)[...,:3]
-        rendered_images_spliced = j.splice_image_parallel(rendered_images, point_cloud_image_complement)
-        weights = j.threedp3_likelihood_with_r_parallel_jit(
-            point_cloud_image, rendered_images_spliced, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
-        ).reshape(-1)
+            weights += prior_parallel(
+                batch, OBJECT_POSES[:t, known_id, :, :],  renderer.model_box_dims[known_id]
+            ).reshape(-1)
+            all_weights.append(weights)
+        all_weights = jnp.hstack(all_weights)
 
-        weights += prior_parallel(
-            all_pose_proposals, OBJECT_POSES[:t, known_id, :, :],  renderer.model_box_dims[known_id]
-        )
-
-        # j.overlay_image(
-        #     j.resize_image(
-        #         j.get_depth_image(rendered_images[weights.argmax(),...,2],max=WALL_Z),
-        #         image.intrinsics.height,
-        #         image.intrinsics.width
-        #     ),
-        #     j.get_rgb_image(image.rgb)
-        # ).save("state.png")
-
-        best_pose = all_pose_proposals[weights.argmax()]
+        best_pose = all_pose_proposals[all_weights.argmax()]
         OBJECT_POSES = OBJECT_POSES.at[t, known_id, ...].set(best_pose)
 
     all_current_pose_estimates = OBJECT_POSES[t]
     rerendered = renderer.render_multiobject(all_current_pose_estimates, jnp.arange(all_current_pose_estimates.shape[0]))[...,:3]
     rerendered_spliced = j.splice_image_parallel(jnp.array([rerendered]), point_cloud_image_complement)[0]
-    # j.overlay_image(
-    #     j.resize_image(
-    #         j.get_depth_image(rerendered_spliced[...,2],max=WALL_Z),
-    #         image.intrinsics.height,
-    #         image.intrinsics.width
-    #     ),
-    #     j.get_rgb_image(image.rgb)
+
+    # rgb_viz = j.get_rgb_image(images[t].rgb)
+    # rerendered_viz = j.resize_image(j.get_depth_image(rerendered[:,:,2],max=WALL_Z), image.intrinsics.height, image.intrinsics.width)
+    # j.multi_panel(
+    #         [
+    #             rgb_viz,
+    #             rerendered_viz,
+    #             j.overlay_image(rgb_viz, rerendered_viz)
+    #         ],
+    #     labels=["RGB", "Inferred", "Overlay"],
+    #     title=f"{t} / {len(images)}"
     # ).save("state.png")
 
-    pixelwise_probs = j.gaussian_mixture_image_jit(point_cloud_image, rerendered_spliced, R_SWEEP)
-    # j.get_depth_image(pixelwise_probs, max=700.0).save("probs.png")
-
     # j.meshcat.setup_visualizer()
+    # j.meshcat.show_cloud("1", rerendered.reshape(-1,3),color=j.RED)
+    # j.meshcat.show_cloud("2", point_cloud_image.reshape(-1,3))
 
-    # j.meshcat.clear()
-    # j.meshcat.show_cloud("1",point_cloud_image.reshape(-1,3))
-    # j.meshcat.show_cloud("2",rerendered_spliced.reshape(-1,3),color=j.RED)
+    pixelwise_probs = j.gaussian_mixture_image_jit(point_cloud_image, rerendered_spliced, R_SWEEP)
 
     for seg_id in object_ids:
         average_probability = jnp.mean(pixelwise_probs[segmentation == seg_id])
+        print(seg_id, average_probability)
         data = get_new_shape_model(point_cloud_image, pixelwise_probs, segmentation, seg_id)
         if data is None:
             continue
