@@ -40,10 +40,14 @@ scene_name = "passive_physics_object_permanence_0001_03"
 
 # scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_collision_0001_05.json")
 # scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_shape_constancy_0001_06.json")
-scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_collision*.json")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_spatio_temporal_continuity*.json")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_object_permanence*.json")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_shape_constancy*.json")
 
 files = glob.glob(scene_regex)
 files = [i.split("/")[-1] for i in files]
+
+files = sorted(files)
 
 for scene_name in files:
     print(scene_name)
@@ -150,27 +154,27 @@ for scene_name in files:
     OUTLIER_PROB=0.1
     OUTLIER_VOLUME=1.0
 
-    def prior3(new_state, prev_poses, bbox_dims):
+    def prior3(new_state, prev_poses, bbox_dims, known_id):
         score = 0.0
         new_position = new_state[:3,3]
 
-        velocity_vec = prev_poses[-1][:3,3] - prev_poses[-2][:3,3]
-        velocity_vec = velocity_vec * jnp.array([0.95, 1.0, 0.0])
+        velocity_vec = prev_poses[-1, known_id][:3,3] - prev_poses[-2][known_id][:3,3]
+        velocity_vec = velocity_vec * jnp.array([0.9, 1.0, 0.0])
         velocity_vec +=  jnp.array([0.0, 0.025, 0.0])
-        pred_new_position = prev_poses[-1][:3,3] + velocity_vec
+        pred_new_position = prev_poses[-1][known_id][:3,3] + velocity_vec
 
         score = score + jax.scipy.stats.multivariate_normal.logpdf(
             new_position, pred_new_position, jnp.diag(jnp.array([0.01, 0.01, 0.01]))
         )
-        score += -100.0 * ((new_position[1] + bbox_dims[1]/2.0) > 1.5)
+        score += -100.0 * ((new_position[1] + bbox_dims[known_id][1]/2.0) > 1.5)
         return score
 
-    prior_parallel = jax.jit(jax.vmap(prior3, in_axes=(0, None, None)))
+    prior_parallel = jax.jit(jax.vmap(prior3, in_axes=(0, None, None, None)))
 
 
     OBJECT_POSES = jnp.zeros((1, 0, 4, 4))
     renderer = j.Renderer(intrinsics)
-    for t in range(1,len(images)):
+    for t in tqdm(range(1,len(images))):
         print("Time: ", t, "  -  ", OBJECT_POSES.shape[1])
 
         image = images[t]
@@ -183,7 +187,6 @@ for scene_name in files:
         object_ids, object_mask = get_object_mask(point_cloud_image, segmentation, segmentation_ids)
         depth_complement = depth * (1.0 - object_mask) + intrinsics.far * (object_mask)
         point_cloud_image_complement = j.t3d.unproject_depth(depth_complement, intrinsics)
-
 
         OBJECT_POSES = OBJECT_POSES[:t]
         OBJECT_POSES = jnp.vstack([OBJECT_POSES,OBJECT_POSES[-1][None, ...]])
@@ -215,8 +218,9 @@ for scene_name in files:
                 ).reshape(-1)
 
                 weights += prior_parallel(
-                    batch, OBJECT_POSES[:t, known_id, :, :],  renderer.model_box_dims[known_id]
+                    batch, OBJECT_POSES[:t, :, :, :],  renderer.model_box_dims, known_id
                 ).reshape(-1)
+
                 all_weights.append(weights)
             all_weights = jnp.hstack(all_weights)
 
