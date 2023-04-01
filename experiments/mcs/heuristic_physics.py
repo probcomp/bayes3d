@@ -19,7 +19,6 @@ import glob
 
 scene_name = "passive_physics_gravity_support_0001_26"
 
-
 scene_name = "passive_physics_collision_0001_05"
 scene_name = "passive_physics_collision_0001_03"
 scene_name = "passive_physics_collision_0001_04"
@@ -42,12 +41,117 @@ scene_name = "passive_physics_object_permanence_0001_03"
 # scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_shape_constancy_0001_06.json")
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_spatio_temporal_continuity*.json")
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_object_permanence*.json")
-scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_shape_constancy*.json")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_object_permanence_0001_28.json")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_spatio_temporal_continuity_0001_02.json")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_gravity_support*")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_collision*")
 
 files = glob.glob(scene_regex)
 files = [i.split("/")[-1] for i in files]
 
 files = sorted(files)
+
+
+
+def get_object_mask(point_cloud_image, segmentation, segmentation_ids):
+    object_mask = jnp.zeros(point_cloud_image.shape[:2])
+    object_ids = []
+    for id in segmentation_ids:
+        point_cloud_segment = point_cloud_image[segmentation == id]
+        bbox_dims, pose = j.utils.aabb(point_cloud_segment)
+        is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
+            (bbox_dims[0] < 0.1),
+            (bbox_dims[1] < 0.1)),
+            (bbox_dims[1] > 1.1)),
+            (bbox_dims[0] > 1.1)),
+            (bbox_dims[2] > 2.1)
+        )
+        if not is_occluder:
+            object_mask += (segmentation == id)
+            object_ids.append(id)
+
+    object_mask = jnp.array(object_mask) > 0
+    return object_ids, object_mask
+
+
+def get_new_shape_model(point_cloud_image, pixelwise_probs, segmentation, seg_id):
+    num_pixels = jnp.sum(segmentation == seg_id)
+    rows, cols = jnp.where(segmentation == seg_id)
+    distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
+    distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width).min())
+    average_probability = jnp.mean(pixelwise_probs[segmentation == seg_id])
+
+    point_cloud_segment = point_cloud_image[segmentation == seg_id]
+    dims, pose = j.utils.aabb(point_cloud_segment)
+
+
+
+    BUFFER = 3
+    if average_probability > 100.0:
+        return None
+    if num_pixels < 14:
+        return None
+    if distance_to_edge_1 < BUFFER or distance_to_edge_2 < BUFFER:
+        return None
+
+    resolution = 0.01
+    voxelized = jnp.rint(point_cloud_segment / resolution).astype(jnp.int32)
+    min_z = voxelized[:,2].min()
+    depth = voxelized[:,2].max() - voxelized[:,2].min()
+
+    front_face = voxelized[voxelized[:,2] <= min_z+20, :]
+    slices = [front_face]
+    for i in range(depth):
+        slices.append(front_face + jnp.array([0.0, 0.0, i]))
+    full_shape = jnp.vstack(slices) * resolution
+
+    print("Seg ID: ", seg_id, "Prob: ", average_probability, " Pixels: ",num_pixels, " dists: ", distance_to_edge_1, " ", distance_to_edge_2, " Pose: ", pose[:3, 3])
+
+    dims, pose = j.utils.aabb(full_shape)
+    mesh = j.mesh.make_marching_cubes_mesh_from_point_cloud(
+        j.t3d.apply_transform(full_shape, j.t3d.inverse_pose(pose)),
+        0.075
+    )
+    # j.meshcat.setup_visualizer()
+    # j.meshcat.show_cloud("1", point_cloud_segment)
+    # j.meshcat.show_cloud("1", full_shape)
+
+
+    return mesh, pose
+
+
+def prior4(new_state, prev_poses, bbox_dims, known_id):
+    score = 0.0
+    new_position = new_state[:3,3]
+
+    is_close_to_ground = (new_position[1] + bbox_dims[known_id][1]/2.0) > 1.4
+
+    velocity_vec = prev_poses[-1, known_id][:3,3] - prev_poses[-2][known_id][:3,3]
+    velocity_vec_slowed = velocity_vec * jnp.array([0.95, 1.0 * (1.0 - is_close_to_ground), 0.0])
+    velocity_vec_with_gravity = velocity_vec_slowed + jnp.array([0.0, 0.025, 0.0])
+    pred_new_position = prev_poses[-1][known_id][:3,3] + velocity_vec_with_gravity
+
+    score = score + jax.scipy.stats.multivariate_normal.logpdf(
+        new_position, pred_new_position, jnp.diag(jnp.array([0.02, 0.02, 0.02]))
+    )
+    score += -100.0 * ((new_position[1] + bbox_dims[known_id][1]/2.0) > 1.5)
+    return score
+
+prior_parallel = jax.jit(jax.vmap(prior4, in_axes=(0, None, None, None)))
+
+
+
+dx  = 0.7
+dy = 0.7
+dz = 0.7
+gridding = j.make_translation_grid_enumeration(
+    -dx, -dy, -dz, dx, dy, dz, 21,19,15
+)
+
+R_SWEEP = jnp.array([0.03])
+OUTLIER_PROB=0.05
+OUTLIER_VOLUME=1.0
+
 
 for scene_name in files:
     print(scene_name)
@@ -75,101 +179,7 @@ for scene_name in files:
         WALL_Z
     )
 
-    def get_object_mask(point_cloud_image, segmentation, segmentation_ids):
-        object_mask = jnp.zeros(point_cloud_image.shape[:2])
-        object_ids = []
-        for id in segmentation_ids:
-            point_cloud_segment = point_cloud_image[segmentation == id]
-            bbox_dims, pose = j.utils.aabb(point_cloud_segment)
-            is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
-                (bbox_dims[0] < 0.1),
-                (bbox_dims[1] < 0.1)),
-                (bbox_dims[1] > 1.1)),
-                (bbox_dims[0] > 1.1)),
-                (bbox_dims[2] > 2.1)
-            )
-            if not is_occluder:
-                object_mask += (segmentation == id)
-                object_ids.append(id)
 
-        object_mask = jnp.array(object_mask) > 0
-        return object_ids, object_mask
-
-
-    def get_new_shape_model(point_cloud_image, pixelwise_probs, segmentation, seg_id):
-        num_pixels = jnp.sum(segmentation == seg_id)
-        rows, cols = jnp.where(segmentation == seg_id)
-        distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
-        distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width).min())
-        average_probability = jnp.mean(pixelwise_probs[segmentation == seg_id])
-
-        point_cloud_segment = point_cloud_image[segmentation == seg_id]
-        dims, pose = j.utils.aabb(point_cloud_segment)
-
-
-
-        BUFFER = 3
-        if average_probability > 100.0:
-            return None
-        if num_pixels < 14:
-            return None
-        if distance_to_edge_1 < BUFFER or distance_to_edge_2 < BUFFER:
-            return None
-
-        resolution = 0.01
-        voxelized = jnp.rint(point_cloud_segment / resolution).astype(jnp.int32)
-        min_z = voxelized[:,2].min()
-        depth = voxelized[:,2].max() - voxelized[:,2].min()
-
-        front_face = voxelized[voxelized[:,2] <= min_z+20, :]
-        slices = [front_face]
-        for i in range(depth):
-            slices.append(front_face + jnp.array([0.0, 0.0, i]))
-        full_shape = jnp.vstack(slices) * resolution
-
-        print("Seg ID: ", seg_id, "Prob: ", average_probability, " Pixels: ",num_pixels, " dists: ", distance_to_edge_1, " ", distance_to_edge_2, " Pose: ", pose[:3, 3])
-
-        dims, pose = j.utils.aabb(full_shape)
-        mesh = j.mesh.make_marching_cubes_mesh_from_point_cloud(
-            j.t3d.apply_transform(full_shape, j.t3d.inverse_pose(pose)),
-            0.075
-        )
-        # j.meshcat.setup_visualizer()
-        # j.meshcat.show_cloud("1", point_cloud_segment)
-        # j.meshcat.show_cloud("1", full_shape)
-
-
-        return mesh, pose
-
-
-
-    dx  = 0.6
-    dy = 0.6
-    dz = 0.6
-    gridding = j.make_translation_grid_enumeration(
-        -dx, -dy, -dz, dx, dy, dz, 21,19,15
-    )
-
-    R_SWEEP = jnp.array([0.03])
-    OUTLIER_PROB=0.1
-    OUTLIER_VOLUME=1.0
-
-    def prior3(new_state, prev_poses, bbox_dims, known_id):
-        score = 0.0
-        new_position = new_state[:3,3]
-
-        velocity_vec = prev_poses[-1, known_id][:3,3] - prev_poses[-2][known_id][:3,3]
-        velocity_vec = velocity_vec * jnp.array([0.9, 1.0, 0.0])
-        velocity_vec +=  jnp.array([0.0, 0.025, 0.0])
-        pred_new_position = prev_poses[-1][known_id][:3,3] + velocity_vec
-
-        score = score + jax.scipy.stats.multivariate_normal.logpdf(
-            new_position, pred_new_position, jnp.diag(jnp.array([0.01, 0.01, 0.01]))
-        )
-        score += -100.0 * ((new_position[1] + bbox_dims[known_id][1]/2.0) > 1.5)
-        return score
-
-    prior_parallel = jax.jit(jax.vmap(prior3, in_axes=(0, None, None, None)))
 
 
     OBJECT_POSES = jnp.zeros((1, 0, 4, 4))
@@ -251,7 +261,7 @@ for scene_name in files:
 
         for seg_id in object_ids:
             average_probability = jnp.mean(pixelwise_probs[segmentation == seg_id])
-            # print(seg_id, average_probability)
+            print(seg_id, average_probability)
             data = get_new_shape_model(point_cloud_image, pixelwise_probs, segmentation, seg_id)
             if data is None:
                 continue
