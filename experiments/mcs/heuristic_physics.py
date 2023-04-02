@@ -36,89 +36,8 @@ def get_object_mask(point_cloud_image, segmentation, segmentation_ids):
     object_mask = jnp.array(object_mask) > 0
     return object_ids, object_mask
 
-# def get_object_mask_jit(segmentation_id, point_cloud_image, segmentation):
-#     object_mask = jnp.zeros(point_cloud_image.shape[:2])
-#     point_cloud_segment = point_cloud_image[segmentation == id]
-
-#     is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
-#         (bbox_dims[0] < 0.1),
-#         (bbox_dims[1] < 0.1)),
-#         (bbox_dims[1] > 1.1)),
-#         (bbox_dims[0] > 1.1)),
-#         (bbox_dims[2] > 2.1)
-#     )
-#         if not is_occluder:
-#             object_mask += (segmentation == id)
-#             object_ids.append(id)
-
-#     object_mask = jnp.array(object_mask) > 0
-#     return object_ids, object_mask
-
-
-
-def get_new_shape_model(point_cloud_image, pixelwise_probs, segmentation, seg_id):
-    num_pixels = jnp.sum(segmentation == seg_id)
-    rows, cols = jnp.where(segmentation == seg_id)
-    distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
-    distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width).min())
-    average_probability = jnp.mean(pixelwise_probs[segmentation == seg_id])
-
-    point_cloud_segment = point_cloud_image[segmentation == seg_id]
-    dims, pose = j.utils.aabb(point_cloud_segment)
-
-
-
-    BUFFER = 3
-    if average_probability > 100.0:
-        return None
-    if num_pixels < 14:
-        return None
-    if distance_to_edge_1 < BUFFER or distance_to_edge_2 < BUFFER:
-        return None
-
-    resolution = 0.01
-    voxelized = jnp.rint(point_cloud_segment / resolution).astype(jnp.int32)
-    min_z = voxelized[:,2].min()
-    depth = voxelized[:,2].max() - voxelized[:,2].min()
-
-    front_face = voxelized[voxelized[:,2] <= min_z+20, :]
-    slices = [front_face]
-    for i in range(depth):
-        slices.append(front_face + jnp.array([0.0, 0.0, i]))
-    full_shape = jnp.vstack(slices) * resolution
-
-    print("Seg ID: ", seg_id, "Prob: ", average_probability, " Pixels: ",num_pixels, " dists: ", distance_to_edge_1, " ", distance_to_edge_2, " Pose: ", pose[:3, 3])
-
-    dims, pose = j.utils.aabb(full_shape)
-    mesh = j.mesh.make_marching_cubes_mesh_from_point_cloud(
-        j.t3d.apply_transform(full_shape, j.t3d.inverse_pose(pose)),
-        0.075
-    )
-    # j.meshcat.setup_visualizer()
-    # j.meshcat.show_cloud("1", point_cloud_segment)
-    # j.meshcat.show_cloud("1", full_shape)
-
-
-    return mesh, pose
-
-
-# def get_velocity(prev_poses, prev_prev_poses, bbox_dims, known_id):
-
-
-#     prev_position = prev_poses[known_id][:3,3]
-#     prev_prev_position = prev_prev_poses[known_id][:3,3]
-
-#     velocity = (prev_position - prev_prev_position) * jnp.array([1.0, 1.0, 0.25])
-#     velocity_with_gravity = velocity + jnp.array([-jnp.sign(velocity[0])*0.01, 0.1, 0.0])
-
-#     velocity_with_gravity2 = velocity_with_gravity * jnp.array([1.0 * (jnp.abs(velocity_with_gravity[0]) > 0.025), 1.0, 1.0 ])
-#     return velocity_with_gravity2
-
-
-def prior14(new_state, prev_poses, prev_prev_poses, bbox_dims, known_id):    
+def prior(new_state, prev_poses, prev_prev_poses, bbox_dims, known_id):    
     score = 0.0
-
-
     new_position = new_state[:3,3]
     bottom_of_object_y = new_position[1] + bbox_dims[known_id][1]/2.0
 
@@ -139,16 +58,28 @@ def prior14(new_state, prev_poses, prev_prev_poses, bbox_dims, known_id):
     score += -100.0 * (bottom_of_object_y > 1.5)
     return score
 
-prior_parallel = jax.jit(jax.vmap(prior14, in_axes=(0, None,  None, None, None)))
+prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None,  None, None, None)))
 
 
 
 dx  = 0.7
 dy = 0.7
 dz = 0.7
-gridding = j.make_translation_grid_enumeration(
-    -dx, -dy, -dz, dx, dy, dz, 25,15,15
+gridding1 = j.make_translation_grid_enumeration(
+    -dx, -dy, -dz, dx, dy, dz, 21,15,15
 )
+
+# dx  = 0.2
+# dy = 0.2
+# dz = 0.2
+# gridding2 = j.make_translation_grid_enumeration(
+#     -dx, -dy, -dz, dx, dy, dz, 7,7,7
+# )
+gridding = [gridding1]
+
+
+
+
 
 R_SWEEP = jnp.array([0.03])
 OUTLIER_PROB=0.05
@@ -182,11 +113,10 @@ scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_object_permanence_0001_28.json")
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_gravity_support*")
 
-scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_object_permanence_0001_28.json")
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_spatio_temporal_*.json")
-
-scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_collision*")
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_gravity_support*")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_collision*")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_object_permanence*")
 
 files = glob.glob(scene_regex)
 files = [i.split("/")[-1] for i in files]
@@ -244,49 +174,53 @@ for scene_name in files:
         for known_id in range(OBJECT_POSES.shape[0]):
 
             current_pose_estimate = OBJECT_POSES[known_id, :, :]
-            all_pose_proposals = [
-                jnp.einsum("aij,jk->aik", 
-                    gridding,
-                    current_pose_estimate,
-                )
-            ]
-            for seg_id in object_ids:
-                _, center_pose = j.utils.aabb(point_cloud_image[segmentation==seg_id])
-                all_pose_proposals.append(
+
+            for gridding_iter in range(len(gridding)):
+                all_pose_proposals = [
                     jnp.einsum("aij,jk->aik", 
-                        gridding,
-                        center_pose,
+                        gridding[gridding_iter],
+                        current_pose_estimate,
                     )
-                )
-            all_pose_proposals = jnp.vstack(all_pose_proposals)
+                ]
+                if gridding_iter == 0:
+                    for seg_id in object_ids:
+                        _, center_pose = j.utils.aabb(point_cloud_image[segmentation==seg_id])
+                        all_pose_proposals.append(
+                            jnp.einsum("aij,jk->aik", 
+                                gridding[gridding_iter],
+                                center_pose,
+                            )
+                        )
+                all_pose_proposals = jnp.vstack(all_pose_proposals)
 
-            # velocity =  get_velocity(OBJECT_POSES[t-1, :, :, :],  OBJECT_POSES[t-2, :, :, :], renderer.model_box_dims, known_id)
-            # print("object_poses", OBJECT_POSES[t-1, :, :, :],  OBJECT_POSES[t-2, :, :, :])
-            # print("velocity", velocity)
+                # velocity =  get_velocity(OBJECT_POSES[t-1, :, :, :],  OBJECT_POSES[t-2, :, :, :], renderer.model_box_dims, known_id)
+                # print("object_poses", OBJECT_POSES[t-1, :, :, :],  OBJECT_POSES[t-2, :, :, :])
+                # print("velocity", velocity)
 
-            all_weights = []
-            for batch in jnp.array_split(all_pose_proposals,3):
-                rendered_images = renderer.render_parallel(batch, known_id)[...,:3]
-                rendered_images_spliced = j.splice_image_parallel(rendered_images, point_cloud_image_complement)
-                weights = j.threedp3_likelihood_with_r_parallel_jit(
-                    point_cloud_image, rendered_images_spliced, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
-                ).reshape(-1)
+                all_weights = []
+                for batch in jnp.array_split(all_pose_proposals,2):
+                    rendered_images = renderer.render_parallel(batch, known_id)[...,:3]
+                    rendered_images_spliced = j.splice_image_parallel(rendered_images, point_cloud_image_complement)
+                    weights = j.threedp3_likelihood_with_r_parallel_jit(
+                        point_cloud_image, rendered_images_spliced, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
+                    ).reshape(-1)
 
-                if ALL_OBJECT_POSES[t-1].shape[0] != ALL_OBJECT_POSES[t-2].shape[0]:
-                    prev_prev_poses =  ALL_OBJECT_POSES[t-1]
-                else:
-                    prev_prev_poses =  ALL_OBJECT_POSES[t-2]
+                    if ALL_OBJECT_POSES[t-1].shape[0] != ALL_OBJECT_POSES[t-2].shape[0]:
+                        prev_prev_poses =  ALL_OBJECT_POSES[t-1]
+                    else:
+                        prev_prev_poses =  ALL_OBJECT_POSES[t-2]
 
 
-                weights += prior_parallel(
-                    batch, ALL_OBJECT_POSES[t-1],  prev_prev_poses, renderer.model_box_dims, known_id
-                ).reshape(-1)
+                    weights += prior_parallel(
+                        batch, ALL_OBJECT_POSES[t-1],  prev_prev_poses, renderer.model_box_dims, known_id
+                    ).reshape(-1)
 
-                all_weights.append(weights)
-            all_weights = jnp.hstack(all_weights)
+                    all_weights.append(weights)
+                all_weights = jnp.hstack(all_weights)
 
-            best_pose = all_pose_proposals[all_weights.argmax()]
-            OBJECT_POSES = OBJECT_POSES.at[known_id].set(best_pose)
+                current_pose_estimate = all_pose_proposals[all_weights.argmax()]
+
+            OBJECT_POSES = OBJECT_POSES.at[known_id].set(current_pose_estimate)
 
         rerendered = renderer.render_multiobject(OBJECT_POSES, jnp.arange(OBJECT_POSES.shape[0]))[...,:3]
         rerendered_spliced = j.splice_image_parallel(jnp.array([rerendered]), point_cloud_image_complement)[0]
@@ -313,7 +247,7 @@ for scene_name in files:
             average_probability = jnp.mean(pixelwise_probs[segmentation == seg_id])
             print(seg_id, average_probability)
 
-            if average_probability > 100.0:
+            if average_probability > 50.0:
                 continue
 
             num_pixels = jnp.sum(segmentation == seg_id)
@@ -373,11 +307,15 @@ for scene_name in files:
                     j.overlay_image(rgb_viz, rerendered_viz)
                 ],
             labels=["RGB", "Inferred", "Overlay"],
-            title=f"{t} / {len(images)} - Num Objects : {all_current_pose_estimates.shape[0]}"
+            title=f"{t} / {len(images)} - Num Objects : {all_current_pose_estimates.shape[0]}/{ALL_OBJECT_POSES[-1].shape[0]}"
         )
         viz_images.append(viz)
     j.make_gif(viz_images, f"{scene_name}.gif")
     print(scene_name)
+
+
+
+def plausibility_calculation()
 
 from IPython import embed; embed()
 
