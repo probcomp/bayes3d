@@ -3,6 +3,8 @@ import os
 from tqdm import tqdm
 import machine_common_sense as mcs
 import numpy as np
+import jax
+import jax.numpy as jnp
 
 def load_mcs_scene_data(scene_path):
     cache_dir = os.path.join(j.utils.get_assets_dir(), "mcs_cache")
@@ -37,23 +39,48 @@ def load_mcs_scene_data(scene_path):
 
     return images
 
-def update_pose_estimates(current_pose_estimates, image, renderer, all_enumerations, prior):
-    intrinsics = renderer.intrinsics
-    point_cloud_image = j.t3d.unproject_depth(j.utils.resize(image.depth, intrinsics.height, intrinsics.width), intrinsics)
 
-    for i in [*jnp.arange(pose_estimates.shape[0]), *jnp.arange(pose_estimates.shape[0])]:
-        if i == 0 or i==1:
-            continue
-
-        pose_estimates_tiled = jnp.tile(
-            pose_estimates[:,None,...], (1, all_enumerations.shape[0], 1, 1)
+def get_object_mask(point_cloud_image, segmentation, segmentation_ids):
+    object_mask = jnp.zeros(point_cloud_image.shape[:2])
+    object_ids = []
+    for id in segmentation_ids:
+        point_cloud_segment = point_cloud_image[segmentation == id]
+        bbox_dims, pose = j.utils.aabb(point_cloud_segment)
+        is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
+            (bbox_dims[0] < 0.1),
+            (bbox_dims[1] < 0.1)),
+            (bbox_dims[1] > 1.1)),
+            (bbox_dims[0] > 1.1)),
+            (bbox_dims[2] > 2.1)
         )
-        all_pose_proposals  = pose_estimates_tiled.at[i].set(
-            jnp.einsum("aij,ajk->aik", pose_estimates_tiled[i,...], all_enumerations)
-        )
-        all_weights = batched_scorer_parallel_func(all_pose_proposals, point_cloud_image, renderer, num_batches=2)
-        all_weights += prior_parallel(all_pose_proposals[i], pose_estimates[i], renderer.model_box_dims[i])
-        
-        pose_estimates = all_pose_proposals[:,all_weights.argmax(), :,:]
+        if not is_occluder:
+            object_mask += (segmentation == id)
+            object_ids.append(id)
 
-    return pose_estimates
+    object_mask = jnp.array(object_mask) > 0
+    return object_ids, object_mask
+
+def prior(new_state, prev_poses, prev_prev_poses, bbox_dims, known_id):    
+    score = 0.0
+    new_position = new_state[:3,3]
+    bottom_of_object_y = new_position[1] + bbox_dims[known_id][1]/2.0
+
+    prev_position = prev_poses[known_id][:3,3]
+    prev_prev_position = prev_prev_poses[known_id][:3,3]
+
+    velocity_prev = (prev_position - prev_prev_position) * jnp.array([1.0, 1.0, 0.25])
+    velocity_with_gravity = velocity_prev + jnp.array([-jnp.sign(velocity_prev[0])*0.01, 0.1, 0.0])
+
+    velocity_with_gravity2 = velocity_with_gravity * jnp.array([1.0 * (jnp.abs(velocity_with_gravity[0]) > 0.1), 1.0, 1.0 ])
+    velocity = velocity_with_gravity2
+
+    pred_new_position = prev_position + velocity
+
+    score = score + jax.scipy.stats.multivariate_normal.logpdf(
+        new_position, pred_new_position, jnp.diag(jnp.array([0.02, 0.02, 0.02]))
+    )
+    score += -100.0 * (bottom_of_object_y > 1.5)
+    return score
+
+prior_jit = jax.jit(prior)
+prior_parallel_jit = jax.jit(jax.vmap(prior, in_axes=(0, None,  None, None, None)))

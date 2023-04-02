@@ -16,52 +16,6 @@ import glob
 # scene_name = "charlie_0002_04_B1_debug.json"
 
 
-def get_object_mask(point_cloud_image, segmentation, segmentation_ids):
-    object_mask = jnp.zeros(point_cloud_image.shape[:2])
-    object_ids = []
-    for id in segmentation_ids:
-        point_cloud_segment = point_cloud_image[segmentation == id]
-        bbox_dims, pose = j.utils.aabb(point_cloud_segment)
-        is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
-            (bbox_dims[0] < 0.1),
-            (bbox_dims[1] < 0.1)),
-            (bbox_dims[1] > 1.1)),
-            (bbox_dims[0] > 1.1)),
-            (bbox_dims[2] > 2.1)
-        )
-        if not is_occluder:
-            object_mask += (segmentation == id)
-            object_ids.append(id)
-
-    object_mask = jnp.array(object_mask) > 0
-    return object_ids, object_mask
-
-def prior(new_state, prev_poses, prev_prev_poses, bbox_dims, known_id):    
-    score = 0.0
-    new_position = new_state[:3,3]
-    bottom_of_object_y = new_position[1] + bbox_dims[known_id][1]/2.0
-
-    prev_position = prev_poses[known_id][:3,3]
-    prev_prev_position = prev_prev_poses[known_id][:3,3]
-
-    velocity_prev = (prev_position - prev_prev_position) * jnp.array([1.0, 1.0, 0.25])
-    velocity_with_gravity = velocity_prev + jnp.array([-jnp.sign(velocity_prev[0])*0.01, 0.1, 0.0])
-
-    velocity_with_gravity2 = velocity_with_gravity * jnp.array([1.0 * (jnp.abs(velocity_with_gravity[0]) > 0.025), 1.0, 1.0 ])
-    velocity = velocity_with_gravity2
-
-    pred_new_position = prev_position + velocity
-
-    score = score + jax.scipy.stats.multivariate_normal.logpdf(
-        new_position, pred_new_position, jnp.diag(jnp.array([0.02, 0.02, 0.02]))
-    )
-    score += -100.0 * (bottom_of_object_y > 1.5)
-    return score
-
-prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None,  None, None, None)))
-
-
-
 dx  = 0.7
 dy = 0.7
 dz = 0.7
@@ -107,28 +61,30 @@ scene_name = "passive_physics_object_permanence_0001_01"
 scene_name = "passive_physics_object_permanence_0001_02"
 scene_name = "passive_physics_object_permanence_0001_03"
 
-# scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_collision_0001_05.json")
-# scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_shape_constancy_0001_06.json")
-scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_spatio_temporal_continuity*.json")
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_object_permanence_0001_28.json")
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_gravity_support*")
 
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_spatio_temporal_*.json")
-scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_gravity_support*")
-scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_collision*")
 scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_object_permanence*")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_shape_constancy_*")
+
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_gravity_support*")
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_collision_0001_05.json")
+
+scene_regex = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation", "passive_physics_spatio_temporal_continuity*.json")
 
 files = glob.glob(scene_regex)
 files = [i.split("/")[-1] for i in files]
 
 files = sorted(files)
+files = files[12:]
 
 
 
 for scene_name in files:
     print(scene_name)
     scene_path = os.path.join(j.utils.get_assets_dir(), "mcs_scene_jsons", "eval_6_validation",
-    scene_name
+        scene_name
     )
 
     images = j.physics.load_mcs_scene_data(scene_path)
@@ -166,7 +122,7 @@ for scene_name in files:
         segmentation = j.utils.resize(image.segmentation, intrinsics.height, intrinsics.width)
         segmentation_ids = jnp.unique(segmentation)
 
-        object_ids, object_mask = get_object_mask(point_cloud_image, segmentation, segmentation_ids)
+        object_ids, object_mask = j.physics.get_object_mask(point_cloud_image, segmentation, segmentation_ids)
         depth_complement = depth * (1.0 - object_mask) + intrinsics.far * (object_mask)
         point_cloud_image_complement = j.t3d.unproject_depth(depth_complement, intrinsics)
 
@@ -211,7 +167,7 @@ for scene_name in files:
                         prev_prev_poses =  ALL_OBJECT_POSES[t-2]
 
 
-                    weights += prior_parallel(
+                    weights += j.physics.prior_parallel_jit(
                         batch, ALL_OBJECT_POSES[t-1],  prev_prev_poses, renderer.model_box_dims, known_id
                     ).reshape(-1)
 
@@ -291,13 +247,61 @@ for scene_name in files:
             OBJECT_POSES = jnp.concatenate([OBJECT_POSES, pose[None, ...]], axis=0)
         
         ALL_OBJECT_POSES.append(OBJECT_POSES)
+    np.savez(f"inferred_{scene_name}.npz", ALL_OBJECT_POSES)
 
-
+    from IPython import embed; embed()
 
     viz_images = []
-    for t in tqdm(range(len(images))):
-        all_current_pose_estimates = jnp.array(ALL_OBJECT_POSES[t])
-        rerendered = renderer.render_multiobject(all_current_pose_estimates, jnp.arange(all_current_pose_estimates.shape[0]))
+    plausibility = 0.0
+    first_appearance = []
+    for t in range(1, len(images)):
+        POSES = jnp.array(ALL_OBJECT_POSES[t])
+
+        num_objects_previous = ALL_OBJECT_POSES[t-1].shape[0]
+        num_objects_now = ALL_OBJECT_POSES[t].shape[0]
+        num_new_objects = num_objects_now - num_objects_previous
+        if num_new_objects > 0:
+            print(f"{num_new_objects} new objects!")
+        for new_object_index in range(num_objects_previous, num_objects_now):
+            first_appearance.append(t)
+            position = POSES[new_object_index,:3,3]
+            rerendered = renderer.render_multiobject(POSES[new_object_index:new_object_index+1], [new_object_index])
+            rows, cols = jnp.where(rerendered[:,:,2] > 0.0)
+            distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
+            distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width).min())     
+            if distance_to_edge_1 > 15 and  distance_to_edge_2 > 15:
+                pixx, pixy=j.project_cloud_to_pixels(jnp.array([ position]), intrinsics).astype(jnp.int32)[0]
+                for t_ in range(t-3):
+                    occluded = j.utils.resize(images[t_].depth, intrinsics.height, intrinsics.width)[pixy, pixx] < position[2]
+                    if not occluded:
+                        plausibility -= 0.1
+                        print("Object initialize not near edge! Implausible!")
+                        break
+
+        for id_1 in range(num_objects_now):
+            for id_2 in range(num_objects_now):
+                if id_1 != id_2:
+                    distance = jnp.linalg.norm(POSES[id_1,:3,3] - POSES[id_2,:3,3])
+                    if distance < 0.4:
+                        plausibility -= 0.1
+                        print("Objects too close together! Implausible!")
+
+
+        for id in range(num_objects_now):
+            z_delta = POSES[id,:3,3][1] - ALL_OBJECT_POSES[first_appearance[id]][id,:3,3][1]
+            if z_delta < -0.2:
+                plausibility -= 0.05
+                print("Objects is not obeying gravity! Implausible!")
+
+            if POSES[id,:3,3][1] > 1.5:
+                plausibility -= 0.01
+                print("Objects inside floor!")
+
+            if POSES[id,:3,3][2] > 13.0:
+                plausibility -= 0.01
+                print("Objects behind wall!")
+
+        rerendered = renderer.render_multiobject(POSES, jnp.arange(POSES.shape[0]))
         rerendered_viz = j.resize_image(j.get_depth_image(rerendered[:,:,3],max=OBJECT_POSES.shape[1]+1), image.intrinsics.height, image.intrinsics.width)
         rgb_viz = j.get_rgb_image(images[t].rgb)
         viz = j.multi_panel(
@@ -307,7 +311,7 @@ for scene_name in files:
                     j.overlay_image(rgb_viz, rerendered_viz)
                 ],
             labels=["RGB", "Inferred", "Overlay"],
-            title=f"{t} / {len(images)} - Num Objects : {all_current_pose_estimates.shape[0]}/{ALL_OBJECT_POSES[-1].shape[0]}"
+            title=f"{t} / {len(images)} - Num Objects : {POSES.shape[0]}/{ALL_OBJECT_POSES[-1].shape[0]} Plausibilty: {plausibility}"
         )
         viz_images.append(viz)
     j.make_gif(viz_images, f"{scene_name}.gif")
@@ -315,7 +319,7 @@ for scene_name in files:
 
 
 
-def plausibility_calculation()
+# def plausibility_calculation()
 
 from IPython import embed; embed()
 
