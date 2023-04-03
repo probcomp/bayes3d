@@ -77,9 +77,8 @@ files = glob.glob(scene_regex)
 files = [i.split("/")[-1] for i in files]
 
 files = sorted(files)
-files = files[12:]
 
-
+physics_server = j.physics.PhysicsServer()
 
 for scene_name in files:
     print(scene_name)
@@ -96,6 +95,8 @@ for scene_name in files:
     FLOOR_Y = 1.45
 
     image = images[0]
+    
+    
     intrinsics = j.camera.scale_camera_parameters(image.intrinsics, 0.25)
     intrinsics = j.Intrinsics(
         intrinsics.height, intrinsics.width,
@@ -106,203 +107,16 @@ for scene_name in files:
         intrinsics.near,
         WALL_Z
     )
+    physics_server.reset(intrinsics)
+    for image in images[1:]:
+        physics_server.update(image)
 
-
-
-
-    ALL_OBJECT_POSES = [jnp.zeros((0, 4, 4))]
-    renderer = j.Renderer(intrinsics)
-    for t in tqdm(range(1,len(images))):
-        print("Time: ", t, "  -  ", ALL_OBJECT_POSES[-1].shape[0])
-
-        image = images[t]
-        depth = j.utils.resize(image.depth, intrinsics.height, intrinsics.width)
-        point_cloud_image = j.t3d.unproject_depth(depth, intrinsics)
-        
-        segmentation = j.utils.resize(image.segmentation, intrinsics.height, intrinsics.width)
-        segmentation_ids = jnp.unique(segmentation)
-
-        object_ids, object_mask = j.physics.get_object_mask(point_cloud_image, segmentation, segmentation_ids)
-        depth_complement = depth * (1.0 - object_mask) + intrinsics.far * (object_mask)
-        point_cloud_image_complement = j.t3d.unproject_depth(depth_complement, intrinsics)
-
-        OBJECT_POSES = jnp.array(ALL_OBJECT_POSES[t-1])
-        for known_id in range(OBJECT_POSES.shape[0]):
-
-            current_pose_estimate = OBJECT_POSES[known_id, :, :]
-
-            for gridding_iter in range(len(gridding)):
-                all_pose_proposals = [
-                    jnp.einsum("aij,jk->aik", 
-                        gridding[gridding_iter],
-                        current_pose_estimate,
-                    )
-                ]
-                if gridding_iter == 0:
-                    for seg_id in object_ids:
-                        _, center_pose = j.utils.aabb(point_cloud_image[segmentation==seg_id])
-                        all_pose_proposals.append(
-                            jnp.einsum("aij,jk->aik", 
-                                gridding[gridding_iter],
-                                center_pose,
-                            )
-                        )
-                all_pose_proposals = jnp.vstack(all_pose_proposals)
-
-                # velocity =  get_velocity(OBJECT_POSES[t-1, :, :, :],  OBJECT_POSES[t-2, :, :, :], renderer.model_box_dims, known_id)
-                # print("object_poses", OBJECT_POSES[t-1, :, :, :],  OBJECT_POSES[t-2, :, :, :])
-                # print("velocity", velocity)
-
-                all_weights = []
-                for batch in jnp.array_split(all_pose_proposals,2):
-                    rendered_images = renderer.render_parallel(batch, known_id)[...,:3]
-                    rendered_images_spliced = j.splice_image_parallel(rendered_images, point_cloud_image_complement)
-                    weights = j.threedp3_likelihood_with_r_parallel_jit(
-                        point_cloud_image, rendered_images_spliced, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
-                    ).reshape(-1)
-
-                    if ALL_OBJECT_POSES[t-1].shape[0] != ALL_OBJECT_POSES[t-2].shape[0]:
-                        prev_prev_poses =  ALL_OBJECT_POSES[t-1]
-                    else:
-                        prev_prev_poses =  ALL_OBJECT_POSES[t-2]
-
-
-                    weights += j.physics.prior_parallel_jit(
-                        batch, ALL_OBJECT_POSES[t-1],  prev_prev_poses, renderer.model_box_dims, known_id
-                    ).reshape(-1)
-
-                    all_weights.append(weights)
-                all_weights = jnp.hstack(all_weights)
-
-                current_pose_estimate = all_pose_proposals[all_weights.argmax()]
-
-            OBJECT_POSES = OBJECT_POSES.at[known_id].set(current_pose_estimate)
-
-        rerendered = renderer.render_multiobject(OBJECT_POSES, jnp.arange(OBJECT_POSES.shape[0]))[...,:3]
-        rerendered_spliced = j.splice_image_parallel(jnp.array([rerendered]), point_cloud_image_complement)[0]
-
-        # rgb_viz = j.get_rgb_image(images[t].rgb)
-        # rerendered_viz = j.resize_image(j.get_depth_image(rerendered[:,:,2],max=WALL_Z), image.intrinsics.height, image.intrinsics.width)
-        # j.multi_panel(
-        #         [
-        #             rgb_viz,
-        #             rerendered_viz,
-        #             j.overlay_image(rgb_viz, rerendered_viz)
-        #         ],
-        #     labels=["RGB", "Inferred", "Overlay"],
-        #     title=f"{t} / {len(images)}"
-        # ).save("state.png")
-
-        # j.meshcat.setup_visualizer()
-        # j.meshcat.show_cloud("1", rerendered.reshape(-1,3),color=j.RED)
-        # j.meshcat.show_cloud("2", point_cloud_image.reshape(-1,3))
-
-        pixelwise_probs = j.gaussian_mixture_image_jit(point_cloud_image, rerendered_spliced, R_SWEEP)
-
-        for seg_id in object_ids:
-            average_probability = jnp.mean(pixelwise_probs[segmentation == seg_id])
-            print(seg_id, average_probability)
-
-            if average_probability > 50.0:
-                continue
-
-            num_pixels = jnp.sum(segmentation == seg_id)
-            if num_pixels < 14:
-                continue
-
-            rows, cols = jnp.where(segmentation == seg_id)
-            distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
-            distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width).min())
-
-            point_cloud_segment = point_cloud_image[segmentation == seg_id]
-            dims, pose = j.utils.aabb(point_cloud_segment)
-
-            BUFFER = 3
-
-            if distance_to_edge_1 < BUFFER or distance_to_edge_2 < BUFFER:
-                continue
-
-            resolution = 0.01
-            voxelized = jnp.rint(point_cloud_segment / resolution).astype(jnp.int32)
-            min_z = voxelized[:,2].min()
-            depth = voxelized[:,2].max() - voxelized[:,2].min()
-
-            front_face = voxelized[voxelized[:,2] <= min_z+20, :]
-            slices = [front_face]
-            for i in range(depth):
-                slices.append(front_face + jnp.array([0.0, 0.0, i]))
-            full_shape = jnp.vstack(slices) * resolution
-
-            print("Seg ID: ", seg_id, "Prob: ", average_probability, " Pixels: ",num_pixels, " dists: ", distance_to_edge_1, " ", distance_to_edge_2, " Pose: ", pose[:3, 3])
-
-            dims, pose = j.utils.aabb(full_shape)
-            mesh = j.mesh.make_marching_cubes_mesh_from_point_cloud(
-                j.t3d.apply_transform(full_shape, j.t3d.inverse_pose(pose)),
-                0.075
-            )
-            
-            renderer.add_mesh(mesh)
-            print("Adding new mesh")
-
-            OBJECT_POSES = jnp.concatenate([OBJECT_POSES, pose[None, ...]], axis=0)
-        
-        ALL_OBJECT_POSES.append(OBJECT_POSES)
-    np.savez(f"inferred_{scene_name}.npz", ALL_OBJECT_POSES)
-
-    from IPython import embed; embed()
-
+    ALL_OBJECT_POSES = physics_server.ALL_OBJECT_POSES
     viz_images = []
-    plausibility = 0.0
-    first_appearance = []
-    for t in range(1, len(images)):
+    for t in range(len(images)):
         POSES = jnp.array(ALL_OBJECT_POSES[t])
-
-        num_objects_previous = ALL_OBJECT_POSES[t-1].shape[0]
-        num_objects_now = ALL_OBJECT_POSES[t].shape[0]
-        num_new_objects = num_objects_now - num_objects_previous
-        if num_new_objects > 0:
-            print(f"{num_new_objects} new objects!")
-        for new_object_index in range(num_objects_previous, num_objects_now):
-            first_appearance.append(t)
-            position = POSES[new_object_index,:3,3]
-            rerendered = renderer.render_multiobject(POSES[new_object_index:new_object_index+1], [new_object_index])
-            rows, cols = jnp.where(rerendered[:,:,2] > 0.0)
-            distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
-            distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width).min())     
-            if distance_to_edge_1 > 15 and  distance_to_edge_2 > 15:
-                pixx, pixy=j.project_cloud_to_pixels(jnp.array([ position]), intrinsics).astype(jnp.int32)[0]
-                for t_ in range(t-3):
-                    occluded = j.utils.resize(images[t_].depth, intrinsics.height, intrinsics.width)[pixy, pixx] < position[2]
-                    if not occluded:
-                        plausibility -= 0.1
-                        print("Object initialize not near edge! Implausible!")
-                        break
-
-        for id_1 in range(num_objects_now):
-            for id_2 in range(num_objects_now):
-                if id_1 != id_2:
-                    distance = jnp.linalg.norm(POSES[id_1,:3,3] - POSES[id_2,:3,3])
-                    if distance < 0.4:
-                        plausibility -= 0.1
-                        print("Objects too close together! Implausible!")
-
-
-        for id in range(num_objects_now):
-            z_delta = POSES[id,:3,3][1] - ALL_OBJECT_POSES[first_appearance[id]][id,:3,3][1]
-            if z_delta < -0.2:
-                plausibility -= 0.05
-                print("Objects is not obeying gravity! Implausible!")
-
-            if POSES[id,:3,3][1] > 1.5:
-                plausibility -= 0.01
-                print("Objects inside floor!")
-
-            if POSES[id,:3,3][2] > 13.0:
-                plausibility -= 0.01
-                print("Objects behind wall!")
-
-        rerendered = renderer.render_multiobject(POSES, jnp.arange(POSES.shape[0]))
-        rerendered_viz = j.resize_image(j.get_depth_image(rerendered[:,:,3],max=OBJECT_POSES.shape[1]+1), image.intrinsics.height, image.intrinsics.width)
+        rerendered = physics_server.renderer.render_multiobject(POSES, jnp.arange(POSES.shape[0]))
+        rerendered_viz = j.resize_image(j.get_depth_image(rerendered[:,:,3],max=ALL_OBJECT_POSES[-1].shape[0]+1), image.intrinsics.height, image.intrinsics.width)
         rgb_viz = j.get_rgb_image(images[t].rgb)
         viz = j.multi_panel(
                 [
@@ -311,11 +125,13 @@ for scene_name in files:
                     j.overlay_image(rgb_viz, rerendered_viz)
                 ],
             labels=["RGB", "Inferred", "Overlay"],
-            title=f"{t} / {len(images)} - Num Objects : {POSES.shape[0]}/{ALL_OBJECT_POSES[-1].shape[0]} Plausibilty: {plausibility}"
+            title=f"{t} / {len(images)} - Num Objects : {POSES.shape[0]}/{ALL_OBJECT_POSES[-1].shape[0]} Plausibilty: {physics_server.plausibility[t]}"
         )
         viz_images.append(viz)
     j.make_gif(viz_images, f"{scene_name}.gif")
     print(scene_name)
+
+    from IPython import embed; embed()
 
 
 
