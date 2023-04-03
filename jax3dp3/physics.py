@@ -119,7 +119,7 @@ class PhysicsServer():
         )
         self.gridding = [gridding1]
         self.plausibility = [0.0]
-        self.violation_locations = []
+        self.violation_locations = [[]]
         self.images = []
 
     def update(self, image):
@@ -253,6 +253,8 @@ class PhysicsServer():
 
         self.ALL_OBJECT_POSES = ALL_OBJECT_POSES
 
+        violations = []
+
         POSES = jnp.array(ALL_OBJECT_POSES[t])
 
         num_objects_previous = ALL_OBJECT_POSES[t-1].shape[0]
@@ -268,12 +270,14 @@ class PhysicsServer():
             distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height).min())
             distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width).min())     
             if distance_to_edge_1 > 15 and  distance_to_edge_2 > 15:
-                pixx, pixy=j.project_cloud_to_pixels(jnp.array([ position]), intrinsics).astype(jnp.int32)[0]
+                pixx, pixy= np.array(j.project_cloud_to_pixels(jnp.array([ position]), intrinsics).astype(jnp.int32)[0])
                 for t_ in range(t-3):
                     occluded = j.utils.resize(images[t_].depth, intrinsics.height, intrinsics.width)[pixy, pixx] < position[2]
                     if not occluded:
+                        pixx, pixy= np.array(j.project_cloud_to_pixels(jnp.array([ position]), intrinsics).astype(jnp.int32)[0]) * 4
+                        violations.append({"x": pixx, "y": pixy})
                         plausibility -= 0.1
-                        print("Object initialize not near edge! Implausible!")
+                        print("Object initialize not near edge! Implausiblepix!")
                         break
 
         for id_1 in range(num_objects_now):
@@ -281,6 +285,8 @@ class PhysicsServer():
                 if id_1 != id_2:
                     distance = jnp.linalg.norm(POSES[id_1,:3,3] - POSES[id_2,:3,3])
                     if distance < 0.4:
+                        pixx, pixy= np.array(j.project_cloud_to_pixels(jnp.array([ POSES[id_1,:3,3]]), intrinsics).astype(jnp.int32)[0]) * 4
+                        violations.append({"x": pixx, "y": pixy})
                         plausibility -= 0.1
                         print("Objects too close together! Implausible!")
 
@@ -288,18 +294,25 @@ class PhysicsServer():
         for id in range(num_objects_now):
             z_delta = POSES[id,:3,3][1] - ALL_OBJECT_POSES[self.first_appearance[id]][id,:3,3][1]
             if z_delta < -0.2:
+                pixx, pixy=  np.array(j.project_cloud_to_pixels(jnp.array([ POSES[id,:3,3]]), intrinsics).astype(jnp.int32)[0]) * 4
+                violations.append({"x": pixx, "y": pixy})
                 plausibility -= 0.05
                 print("Objects is not obeying gravity! Implausible!")
 
             if POSES[id,:3,3][1] > 1.5:
+                pixx, pixy= np.array(j.project_cloud_to_pixels(jnp.array([ POSES[id,:3,3]]), intrinsics).astype(jnp.int32)[0]) * 4
+                violations.append({"x": pixx, "y": pixy})
                 plausibility -= 0.01
                 print("Objects inside floor!")
 
             if POSES[id,:3,3][2] > 13.0:
+                pixx, pixy= np.array(j.project_cloud_to_pixels(jnp.array([ POSES[id,:3,3]]), intrinsics).astype(jnp.int32)[0]) * 4
+                violations.append({"x": pixx, "y": pixy})
                 plausibility -= 0.01
                 print("Objects behind wall!")
 
         self.plausibility.append(plausibility)
+        self.violation_locations.append(violations)
 
 
     def process_message(self, message):
@@ -320,6 +333,6 @@ class PhysicsServer():
             self.update(observation)
             return None
         elif request_type == "get_info":
-            return self.plausibility[-1], self.violation_locations
+            return self.plausibility[-1], self.violation_locations[-1]
         else:
             print("I HAVE NO IDEA WHAT REQUEST YOU'RE MAKING!")
