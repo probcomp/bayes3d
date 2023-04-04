@@ -3,27 +3,26 @@
 ###############
 
 # shape = random(shape_model, shape_model_params) where
-# shape::VoxelizedMesh
-# shape_model::ShapeModel <: Distribution{VoxelizedMesh}
+# shape::VoxelGrid
+# shape_model::ShapeModel <: Distribution{VoxelGrid}
 # shape_model_params::ShapeModelParams
 
-struct VoxelizedMesh end
 
 struct ShapeModelParams 
-    size::Tuple{Int,Int,Int} # w, l, h
-    scale::Real
     thetas::Array{Real,3}
 end
 
-struct ShapeModel <: Distribution{VoxelizedMesh} end
+struct ShapeModel <: Distribution{VoxelGrid} end
 shape_model = ShapeModel()
 
 function random(::ShapeModel, params::ShapeModelParams)
-    VoxelizedMesh() # XXX TODO
+    VoxelGrid(rand(size(params.thetas)...) .< params.thetas)
 end
 
-function logpdf(::ShapeModel, shape::VoxelizedMesh, params::ShapeModelParams)
-    0 # XXX TODO
+function logpdf(::ShapeModel, shape::VoxelGrid, params::ShapeModelParams)
+    size(params.thetas) != size(shape.occupied) ? -Inf :
+    sum(log.(params.thetas) .* shape.occupied
+        + log.(1 .- params.thetas) .* .!shape.occupied)
 end
 
 #######################
@@ -36,7 +35,7 @@ unknown_shape_prior = UnknownShapePrior()
 function random(::UnknownShapePrior) 
     thetas = [beta(UNKNOWN_SHAPE_ALPHA, UNKNOWN_SHAPE_BETA)
               for _=1:prod(VOXEL_GRID_SIZE)]
-    ShapeModelParams(VOXEL_GRID_SIZE, SCALE, reshape(thetas, VOXEL_GRID_SIZE))
+    ShapeModelParams(reshape(thetas, VOXEL_GRID_SIZE))
 end
 
 logpdf(::UnknownShapePrior, shape_params::ShapeModelParams) =

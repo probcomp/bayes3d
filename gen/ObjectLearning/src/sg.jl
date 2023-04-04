@@ -1,42 +1,33 @@
-@enum ContactPlane top bot left right front back
+@enum ContactPlane bottom top back front left right
 
 struct ContactParams
     parent_plane::ContactPlane
     child_plane::ContactPlane
-    child_relative_pose::Pose 
+    child_relative_pose::Tuple{Float64,Float64,Float64} #Δx, Δy, θ 
 end
 
 abstract type SceneGraphNode end
 
 struct ChildNode <: SceneGraphNode
     label::Symbol
-    shape_params::ShapeModelParams
-    parent::SceneGraphNode
+    mesh::Mesh
     contact_params::ContactParams
 end
 
 struct FloatingNode <: SceneGraphNode
     label::Symbol
-    shape_params::ShapeModelParams
+    mesh::Mesh
     pose::Pose
-    children::Vector{ChildNode}
 end
 
-FloatingNode(label::Symbol, shape_params::ShapeModelParams, pose::Pose) =
-    FloatingNode(label, shape_params, pose, ChildNode[])
-
-"""
-A scene graph is a forest of rooted trees. All contacts are flush. All contacts
-are parameterized w.r.t. bounding boxes.
-"""
-struct SceneGraph 
-    source_nodes::Vector{FloatingNode}
+struct TableTopSceneGraph 
+    table_node::FloatingNode
+    object_nodes::Vector{ChildNode}
 end
 
-SceneGraph() = SceneGraph(FloatingNode[])
+num_objs(scene::TableTopSceneGraph) = length(scene.object_nodes)
 
-add_floating_node!(sg::SceneGraph, node::SceneGraphNode) =
-    push!(sg.source_nodes, node)
+TableTopSceneGraph(table_node) = TableTopSceneGraph(table_node, ChildNode[])
 
-add_child_node!(sg::SceneGraph, node::ChildNode) = 
-    push!(node.parent.children, node)
+add_child_node!(sg::TableTopSceneGraph, node::ChildNode) = 
+    push!(sg.object_nodes, node)

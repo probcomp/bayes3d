@@ -19,7 +19,7 @@ end
 crp_init(m) = foldl(update, 1:m; init=empty_crp_state)
 
 @gen (static) function model(cluster_centers)
-    m, n = length(KNOWN_SHAPE_PARAMS), length(cluster_centers)
+    m, n = length(KNOWN_SHAPES), length(cluster_centers)
     crp_θ ~ exponential(1/5)
     shape_assignments ~ cond_crp(crp_init(m), m+n, crp_θ)
     shape_params ~ shapes_prior(n, shape_assignments)
@@ -28,7 +28,7 @@ crp_init(m) = foldl(update, 1:m; init=empty_crp_state)
     cam_pose ~ cam_pose_prior()
     p_outlier ~ beta(P_OUTLIER_SHAPE, P_OUTLIER_SCALE)
     noise ~ inv_gamma(NOISE_SHAPE, NOISE_SCALE) # variance of Gaussian noise
-    obs ~ stoch_render(scene, cam_pose, p_outlier, noise) # XXX prox
+    obs ~ stoch_renderer(scene, cam_pose, p_outlier, noise) # XXX prox
 end
 
 @load_generated_functions()
