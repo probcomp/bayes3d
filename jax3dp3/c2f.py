@@ -58,6 +58,52 @@ def make_schedules(grid_widths, angle_widths, grid_params, full_pose=False, sphe
 ################
 # Scoring functions
 ################
+def batch_split(proposals, num_batches):
+    num_proposals = proposals.shape[0]
+    if num_proposals % num_batches != 0:
+        # print(f"WARNING: {num_proposals} Not evenly divisible by {num_batches}; defaulting to 3x split")  # TODO find a good factor
+        num_batches = 3
+    return jnp.array(jnp.split(proposals, num_batches))
+
+def score_poses_batched(
+    renderer,
+    obj_idx,
+    obs_point_cloud_image,
+    obs_point_cloud_image_complement,
+    pose_proposals,
+    r_sweep,
+    outlier_prob,
+    outlier_volume,
+    num_batches 
+):
+    # get best pose proposal
+
+    proposals_batches = batch_split(pose_proposals, num_batches)
+    
+    print("batch split complete")
+    fully_occluded_weights = jax3dp3.threedp3_likelihood_jit(
+        obs_point_cloud_image, obs_point_cloud_image, r_sweep[0], outlier_prob, outlier_volume
+    )
+    
+    print("proposals complete")
+    all_weights = None
+    for pose_proposals_batch in proposals_batches:
+        rendered_object_images = renderer.render_parallel(pose_proposals_batch, obj_idx)[...,:3]
+        rendered_images = jax3dp3.splice_image_parallel(rendered_object_images, obs_point_cloud_image_complement)
+    
+        print("looping through batch")
+
+        weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
+            obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
+        )
+
+        if all_weights is None:
+            all_weights = weights 
+        else:
+            all_weights = jnp.append(all_weights, weights, axis=1)
+
+    # return weights, fully_occluded_weight
+    return all_weights, fully_occluded_weights
 
 def score_contact_parameters(
     renderer,
@@ -70,6 +116,7 @@ def score_contact_parameters(
     outlier_prob,
     outlier_volume,
     model_box_dims,
+    num_batches 
 ):
     contact_param_sweep, face_param_sweep = sweep
     pose_proposals = jax3dp3.scene_graph.pose_from_contact_and_face_params_parallel_jit(
@@ -80,40 +127,18 @@ def score_contact_parameters(
     )
 
     # get best pose proposal
-    rendered_object_images = renderer.render_parallel(pose_proposals, obj_idx)[...,:3]
-    rendered_images = jax3dp3.splice_image_parallel(rendered_object_images, obs_point_cloud_image_complement)
-
-    weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
-        obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
-    )
-    fully_occluded_weight = jax3dp3.threedp3_likelihood_jit(
-        obs_point_cloud_image, obs_point_cloud_image, r_sweep[0], outlier_prob, outlier_volume
-    )
+    weights, fully_occluded_weight = score_poses_batched(
+                                        renderer,
+                                        obj_idx,
+                                        obs_point_cloud_image,
+                                        obs_point_cloud_image_complement,
+                                        pose_proposals,
+                                        r_sweep,
+                                        outlier_prob,
+                                        outlier_volume,
+                                        num_batches
+                                    )
     return pose_proposals, weights, fully_occluded_weight
-
-def score_poses(
-    renderer,
-    obj_idx,
-    obs_point_cloud_image,
-    obs_point_cloud_image_complement,
-    pose_proposals,
-    r_sweep,
-    outlier_prob,
-    outlier_volume,
-):
-    # get best pose proposal
-    rendered_object_images = renderer.render_parallel(pose_proposals, obj_idx)[...,:3]
-    rendered_images = jax3dp3.splice_image_parallel(rendered_object_images, obs_point_cloud_image_complement)
-
-    weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
-        obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
-    )
-    fully_occluded_weight = jax3dp3.threedp3_likelihood_jit(
-        obs_point_cloud_image, obs_point_cloud_image, r_sweep[0], outlier_prob, outlier_volume
-    )
-    return weights, fully_occluded_weight
-
-
 
 def get_probabilites(hypotheses):
     scores = jnp.array( [i[0] for i in hypotheses])
@@ -136,7 +161,8 @@ def c2f_contact_parameters(
     outlier_prob,
     outlier_volume,
     model_box_dims,
-    obj_idx_hypotheses=None
+    obj_idx_hypotheses=None,
+    num_batches=100
 ):
 
     masked_cloud = obs_point_cloud_image_masked.reshape(-1, 3)
@@ -182,6 +208,7 @@ def c2f_contact_parameters(
                 outlier_prob,
                 outlier_volume,
                 model_box_dims,
+                num_batches 
             )
             r_idx, best_idx = jnp.unravel_index(weights.argmax(), weights.shape)
 
@@ -207,7 +234,8 @@ def c2f_full_pose(
     r_sweep,
     outlier_prob,
     outlier_volume,
-    obj_idx_hypotheses=None
+    obj_idx_hypotheses=None,
+    num_batches=100
 ):
     print("Entering full pose-only coarse to fine")
 
@@ -228,8 +256,8 @@ def c2f_full_pose(
     if obj_idx_hypotheses is None:  
         obj_idx_hypotheses = jnp.arange(len(renderer.meshes))
     for obj_idx in obj_idx_hypotheses:
-        hypotheses += [(-jnp.inf, obj_idx, pose_init, None)]
-    hypotheses_over_time = [hypotheses]
+        hypotheses += [(-jnp.inf, obj_idx, pose_init)]
+    hypotheses_over_time = []
 
     for c2f_iter in range(len(sched)):
         pose_sweep_delta = sched[c2f_iter]
@@ -241,7 +269,7 @@ def c2f_full_pose(
             pose_hyp = hyp[2]
             new_pose_proposals = jnp.einsum('ij,bjk->bik', pose_hyp, pose_sweep_delta)
             
-            weights, _ = score_poses(
+            weights, _ = score_poses_batched(
                                     renderer,
                                     obj_idx,
                                     obs_point_cloud_image,
@@ -250,7 +278,9 @@ def c2f_full_pose(
                                     r_sweep,
                                     outlier_prob,
                                     outlier_volume,
+                                    num_batches
                                 )
+
             r_idx, best_idx = jnp.unravel_index(weights.argmax(), weights.shape)
 
             new_hypotheses.append(

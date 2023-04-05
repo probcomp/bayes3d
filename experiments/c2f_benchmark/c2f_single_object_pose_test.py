@@ -8,7 +8,7 @@ import pickle
 import jax3dp3.transforms_3d as t3d
 import jax3dp3 as j
 
-from c2f_test_utils import *
+from c2f_scripts import *
 
 DATASET_FILE = "rgbd_annotated.npz"  # npz file
 
@@ -33,7 +33,7 @@ def setup_renderer():
 
     ## setup intrinsics and renderer
     intrinsics = j.camera.scale_camera_parameters(sample_rgbd.intrinsics, 0.3)
-    renderer = j.Renderer(intrinsics, num_layers=100)
+    renderer = j.Renderer(intrinsics, num_layers=25)
 
     ## load models
     model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")
@@ -59,14 +59,17 @@ if __name__=='__main__':
     ######################
     
     # setup renderer
+    start = time.time() 
     renderer = setup_renderer()
-    
+    end = time.time()
+    print("that took ", end-start)
+
     # configure c2f
     grid_widths = [0.05, 0.03, 0.02, 0.02]
     rot_angle_widths = [jnp.pi, jnp.pi, 0.001, jnp.pi / 10]
-    sphere_angle_widths = [jnp.pi, jnp.pi, jnp.pi / 3, jnp.pi / 4]
+    sphere_angle_widths = [jnp.pi, jnp.pi, jnp.pi, jnp.pi]
     # grid_params = [(7,7,7,50,21), (7,7,7,50,21), (15,15,15,20,1), (7,7,7,10,21)]   # (num_x, num_y, num_z, num_fib_sphere, num_planar_angle) 
-    grid_params = [(5,5,5,5,5), (5,5,5,5,5),(5,5,5,5,5),(5,5,5,5,5)]    
+    grid_params =  [(3,3,3,50,80), (3,3,3,50,80),(3,3,3,50,80),(3,3,3,50,80)]
 
     scheds = j.c2f.make_schedules(
         grid_widths=grid_widths, 
@@ -77,12 +80,23 @@ if __name__=='__main__':
     )
 
     # choose testing scene
-    test_idx = 0
-    image, gt_idx, gt_pose = load_data(test_idx)
-    j.viz.get_depth_image(image.depth).save("gt.png")
+    for test_idx in range(4):
+    # test_idx = 1
+        image, gt_idx, gt_pose = load_data(test_idx)
+        j.viz.get_depth_image(image.depth).save(f"scene_{test_idx}_gt.png")
 
-    seg_id = 0  # single object scene  # TODO check that kubric seg is 0 for obj
-    c2f_results, viz = run_c2f(renderer, image, scheds, infer_id=False, infer_contact=False, viz=True)
+        seg_id = 0  # single object scene  # TODO check that kubric seg is 0 for obj
+        c2f_results = run_c2f(renderer, image, scheds, infer_id=False, infer_contact=False, viz=True)
+        c2f_results = c2f_results[0]  # single-segment, single-object
+        
+        for c2f_iter, c2f_result in enumerate(c2f_results):
+            score, gt_idx, best_pose = c2f_result[0]
+            rendered = renderer.render_single_object(best_pose, gt_idx)  
+
+            rendered -= jnp.min(rendered)
+            viz = j.viz.get_rgb_image(rendered, max=jnp.max(rendered))
+            viz = j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width)
+            viz.save(f"scene_{test_idx}_best_pred_{c2f_iter}.png")
 
 
-    from IPython import embed; embed()
+        from IPython import embed; embed()

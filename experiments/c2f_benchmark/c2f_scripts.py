@@ -10,9 +10,13 @@ import jax.numpy as jnp
 R_SWEEP = jnp.array([0.02])
 OUTLIER_PROB=0.1
 OUTLIER_VOLUME=1.0
+NUM_BATCHES=200
 
 def run_grid(seg_id, sched, r_overlap_check=0.06, r_final = 0.07, viz=True):
     raise NotImplementedError("implement")
+
+def run_c2f_id_only(renderer, image:RGBD, contact_plane_pose_in_cam_frame, scheds):
+    raise NotImplementedError("TODO implement with tabletop inputs additionally")
 
 def run_c2f_contact_pose_only(renderer, image:RGBD, contact_plane_pose_in_cam_frame, scheds):
     raise NotImplementedError("TODO implement with tabletop inputs additionally")
@@ -51,7 +55,6 @@ def run_c2f_id_and_contact(renderer, image:RGBD, contact_plane_pose_in_cam_frame
 
     return results
 
-
 def run_c2f_full_pose_only(renderer, image:RGBD, scheds):
     intrinsics = renderer.intrinsics
     depth_scaled =  j.utils.resize(image.depth, intrinsics.height, intrinsics.width)
@@ -82,14 +85,13 @@ def run_c2f_full_pose_only(renderer, image:RGBD, scheds):
             R_SWEEP,
             OUTLIER_PROB,
             OUTLIER_VOLUME,
-            obj_idx_hypotheses=[gt_idx]
+            obj_idx_hypotheses=[gt_idx],
+            num_batches=NUM_BATCHES
         )
         results.append(hypotheses_over_time)
 
     print("finished c2f")
-    from IPython import embed; embed()
     return results
-
 
 def run_c2f(renderer, image:RGBD, 
             scheds, 
@@ -103,17 +105,7 @@ def run_c2f(renderer, image:RGBD,
     if not infer_id and not infer_contact:
         results = run_c2f_full_pose_only(renderer, image, scheds)
     if infer_id and not infer_contact:
-        raise ValueError("TODO: Memory likely cannot support full pose inference + id inference")
+        results = run_c2f_id_only(renderer, image, scheds)
     
-    if not viz:
-        return results, None
-    else:
-        results_over_time = results[0]
-        score, gt_idx, best_pose = results_over_time[-1][0]
-        rendered = renderer.render_single_object(best_pose, gt_idx)  # TODO ask nishad on cleanup
-        rendered -= jnp.min(rendered)
-        viz = j.viz.get_rgb_image(rendered, max=jnp.max(rendered))
-        viz.save("best_pred.png")
-
-        return results, viz  # TODO
+    return results
     

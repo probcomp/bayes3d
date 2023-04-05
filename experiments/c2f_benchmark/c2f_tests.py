@@ -8,7 +8,7 @@ import pickle
 import jax3dp3.transforms_3d as t3d
 import jax3dp3
 
-from c2f_test_utils import *
+from experiments.c2f_benchmark.c2f_scripts import *
 
 
 from IPython import embed; embed()
