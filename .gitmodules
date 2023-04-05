@@ -1,0 +1,3 @@
+[submodule "jax3dp3/posecnn-pytorch/PoseCNN-PyTorch"]
+	path = jax3dp3/posecnn-pytorch/PoseCNN-PyTorch
+	url = https://github.com/karen-sy/PoseCNN-PyTorch.git
