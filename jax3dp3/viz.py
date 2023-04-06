@@ -70,6 +70,10 @@ def overlay_image(img_1, img_2, alpha=0.5):
 def resize_image(img, h, w):
     return img.resize((w, h))
 
+def scale_image(img, factor):
+    w,h = img.size
+    return img.resize((int(w * factor), int(h * factor)))
+
 def vstack_images(images, border = 10):
     max_w = 0
     sum_h = (len(images)-1)*border
@@ -110,8 +114,10 @@ def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsiz
     w = images[0].width
     h = images[0].height
 
+    sum_of_widths = np.sum([img.width for img in images])
+
     dst = Image.new(
-        "RGBA", (num_images * w + (num_images - 1) * middle_width, h), (255, 255, 255, 255)
+        "RGBA", (sum_of_widths + (num_images - 1) * middle_width, h), (255, 255, 255, 255)
     )
 
     drawer = ImageDraw.Draw(dst)
@@ -137,36 +143,42 @@ def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsiz
             label_border = max(text_h, label_border)
 
     bottom_border += 10 
-    title_border += 10 
-    label_border += 10 
+    title_border += 50 
+    label_border += 50 
 
 
     dst = Image.new(
-        "RGBA", (num_images * w + (num_images - 1) * middle_width, h + title_border + label_border + bottom_border), (255, 255, 255, 255)
+        "RGBA", (sum_of_widths+ (num_images - 1) * middle_width, h + title_border + label_border + bottom_border), (255, 255, 255, 255)
     )
     drawer = ImageDraw.Draw(dst)
 
+    width_counter = 0
     for (j, img) in enumerate(images):
         dst.paste(
             img,
-            (j * w + j * middle_width, title_border + label_border)
+            (width_counter + j * middle_width, title_border + label_border)
         )
+        width_counter += img.width
 
     if title is not None:
         msg = title
         _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_title)
-        drawer.text(((num_images * w + (num_images - 1) * middle_width)/2.0 - text_w/2 , title_border/2 - text_h/2), msg, font=font_title, fill="black")
+        drawer.text(((sum_of_widths + (num_images - 1) * middle_width)/2.0 - text_w/2 , title_border/2 - text_h/2), msg, font=font_title, fill="black")
 
 
+    width_counter = 0
     if labels is not None:
         for (i, msg) in enumerate(labels):
+            w = images[i].width
             _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_label)
-            drawer.text((i * w + i * middle_width + w/2 - text_w/2, title_border + label_border/2 - text_h/2), msg, font=font_label, fill="black")
+            drawer.text((width_counter + i * middle_width + w/2 - text_w/2, title_border + label_border/2 - text_h/2), msg, font=font_label, fill="black")
+            width_counter += w
 
     if bottom_text is not None:
         msg = bottom_text
         _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_bottom)
         drawer.text((5,  title_border + label_border + h + 5), msg, font=font_bottom, fill="black")
+
     return dst
 
 

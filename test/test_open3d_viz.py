@@ -20,7 +20,7 @@ viz_intrinsics = j.Intrinsics(
 
 viz = j.o3d_viz.O3DVis(viz_intrinsics)
 
-model_dir = "/home/nishadgothoskar/data/bop/ycbv/models"
+model_dir = os.path.join(j.utils.get_assets_dir(),"bop/ycbv/models")
 mesh_paths = []
 for idx in range(1,22):
     mesh_paths.append(os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply"))

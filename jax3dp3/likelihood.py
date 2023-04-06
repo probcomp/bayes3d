@@ -5,7 +5,7 @@ import functools
 from functools import partial
 from jax.scipy.special import logsumexp
 
-FILTER_SIZE = 3
+FILTER_SIZE = 4
 
 @functools.partial(
     jnp.vectorize,
@@ -58,7 +58,6 @@ threedp3_likelihood_jit = jax.jit(threedp3_likelihood)
 threedp3_likelihood_with_r_parallel_jit = jax.jit(
     jax.vmap(threedp3_likelihood_parallel, in_axes=(None, None, 0, None, None)),
 )
-
 
 
 import functools

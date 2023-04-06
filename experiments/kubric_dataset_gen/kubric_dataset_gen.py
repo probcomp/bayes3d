@@ -64,21 +64,63 @@ for d in all_data:
 
     rgb_viz.append(j.get_rgb_image(rgba))
 
-
 j.hstack_images(rgb_viz).save("dataset.png")
+
+gt_poses = object_poses @ offset_pose
 
 rgbs=np.array([i.rgb for i in all_data])
 segs=np.array([i.segmentation for i in all_data])
 depths=np.array([i.depth for i in all_data])
 gt_idxs=np.array([IDX for _ in all_data])
-gt_poses=np.array([object_poses])
+gt_poses=np.array([gt_poses])
 annotated_data = np.array([(rgbd_data, IDX, object_pose) for rgbd_data, object_pose in zip(all_data, object_poses)], dtype=object)
 
-# np.savez("mug_images.npz", rgbs=rgbs, depths=depths)
 np.savez("rgbd_annotated.npz", rgbd_idx_pose=annotated_data)
 np.savez("rgbd.npz", rgbd=all_data, gt_idxs=gt_idxs, gt_poses=gt_poses)
 
+
+# ply_model_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv/models")
+# ply_mesh_path = os.path.join(ply_model_dir, "obj_" + "{}".format(IDX+1).rjust(6, '0') + ".ply")
+
+# i = 0
+# pose = object_poses[i]
+# mesh = j.mesh.load_mesh(mesh_path)
+# mesh_ply = j.mesh.load_mesh(ply_mesh_path, scaling=1.0/1000.0)
+
+# j.meshcat.setup_visualizer()
+# j.meshcat.clear()
+# j.meshcat.show_trimesh("1", mesh)
+# j.meshcat.set_pose("1", pose)
+# j.meshcat.show_trimesh("2", mesh_ply, color=j.BLUE)
+# j.meshcat.set_pose("2", pose @ offset_pose)
+
+# # Verify pose matches render
+# renderer = j.Renderer(intrinsics)
+# renderer.add_mesh(mesh_ply)
+
+# imgs = renderer.render_parallel(object_poses @  offset_pose, 0)
+# img = imgs[i]
+# j.vstack_images(
+#     [
+#         j.get_depth_image(imgs[i][:,:,2],max=intrinsics.far),
+#         j.get_depth_image(all_data[i].depth,max=intrinsics.far),
+#     ]
+# ).save("1.png")
+
+
+# j.meshcat.clear()
+# j.meshcat.show_cloud("1", imgs[i][...,:3].reshape(-1,3)*3.0)
+# j.meshcat.show_cloud("2", j.t3d.unproject_depth(all_data[i].depth, intrinsics).reshape(-1,3) * 3.0, color=j.RED)
+
+# j.meshcat.show_trimesh("2", mesh_ply, color=j.BLUE)
+# j.meshcat.set_pose("2", pose @ offset_pose)
+
+
+
+
 from IPython import embed; embed()
+
+
 
 
 ###########

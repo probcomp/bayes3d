@@ -13,19 +13,19 @@ import numpy as np
 # i = 2
 
 
-# image, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
-#     '53', '1', "/home/nishadgothoskar/data/bop/ycbv"
-# )
-# i = 2
+image, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img(
+    '53', '1', "/home/nishadgothoskar/jax3dp3/assets/bop/ycbv"
+)
+i = 2
 
-data = np.load(os.path.join(j.utils.get_assets_dir(), "3dnel.npz"), allow_pickle=True)
-image = data["rgbd"].item()
-gt_ids = data["gt_ids"]
-gt_poses = data["gt_poses"]
-seg_ids = jnp.unique(image.segmentation)
-seg_ids = seg_ids[seg_ids != 0]
-masks = [image.segmentation == i for i in seg_ids]
-i = 4
+# data = np.load(os.path.join(j.utils.get_assets_dir(), "3dnel.npz"), allow_pickle=True)
+# image = data["rgbd"].item()
+# gt_ids = data["gt_ids"]
+# gt_poses = data["gt_poses"]
+# seg_ids = jnp.unique(image.segmentation)
+# seg_ids = seg_ids[seg_ids != 0]
+# masks = [image.segmentation == i for i in seg_ids]
+# i = 4
 
 rgb_viz = j.viz.get_rgb_image(image.rgb, 255.0)
 rgb_viz.save("rgb.png")
@@ -33,7 +33,7 @@ rgb_viz.save("rgb.png")
 intrinsics = j.camera.scale_camera_parameters(image.intrinsics, 0.3)
 renderer = j.Renderer(intrinsics)
 
-model_dir = "/home/nishadgothoskar/data/bop/ycbv/models"
+model_dir = "/home/nishadgothoskar/jax3dp3/assets/bop/ycbv/models"
 mesh_paths = []
 for idx in range(1,22):
     mesh_path = os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply") 
