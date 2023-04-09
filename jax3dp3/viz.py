@@ -106,6 +106,17 @@ def hstack_images(images, border = 10):
         running_w += w + border
     return full_image
 
+def hvstack_images(images, h, w, border=10):
+    assert len(images) == h * w
+
+    images_to_vstack = []
+
+    for row_idx in range(h):
+        hstacked_row = hstack_images(images[row_idx*w:(row_idx+1)*w])
+        images_to_vstack.append(hstacked_row)
+    
+    return vstack_images(images_to_vstack)
+
 
 ####
 
