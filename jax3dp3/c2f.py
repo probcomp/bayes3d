@@ -61,8 +61,8 @@ def make_schedules(grid_widths, angle_widths, grid_params, full_pose=False, sphe
 def batch_split(proposals, num_batches):
     num_proposals = proposals.shape[0]
     if num_proposals % num_batches != 0:
-        # print(f"WARNING: {num_proposals} Not evenly divisible by {num_batches}; defaulting to 3x split")  # TODO find a good factor
-        num_batches = 3
+        print(f"WARNING: {num_proposals} Not evenly divisible by {num_batches}; defaulting to 5x split")  # TODO find a good factor
+        num_batches = 5
     return jnp.array(jnp.split(proposals, num_batches))
 
 def score_poses_batched(
@@ -87,11 +87,11 @@ def score_poses_batched(
     
     print("proposals complete")
     all_weights = None
-    for pose_proposals_batch in proposals_batches:
+    for batch_idx, pose_proposals_batch in enumerate(proposals_batches):
         rendered_object_images = renderer.render_parallel(pose_proposals_batch, obj_idx)[...,:3]
         rendered_images = jax3dp3.splice_image_parallel(rendered_object_images, obs_point_cloud_image_complement)
     
-        print("looping through batch")
+        print(f"{batch_idx}/{num_batches}")
 
         weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
             obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
@@ -267,7 +267,7 @@ def c2f_full_pose(
             old_score = hyp[0]
             obj_idx = hyp[1]
             pose_hyp = hyp[2]
-            new_pose_proposals = jnp.einsum('ij,bjk->bik', pose_hyp, pose_sweep_delta)
+            new_pose_proposals = jnp.einsum('ij,ajk->aik', pose_hyp, pose_sweep_delta)
             
             weights, _ = score_poses_batched(
                                     renderer,
@@ -290,6 +290,11 @@ def c2f_full_pose(
                     new_pose_proposals[best_idx],
                 )
             )
+        
+            score, gt_idx, best_pose = weights[r_idx, best_idx], obj_idx, new_pose_proposals[best_idx]
+            rendered = renderer.render_single_object(best_pose, gt_idx)  
+            viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.5)
+            viz.save(f"_best_pred_{c2f_iter}.png")       
 
         hypotheses_over_time.append(new_hypotheses)
         hypotheses = new_hypotheses

@@ -36,13 +36,15 @@ def setup_renderer():
     renderer = j.Renderer(intrinsics, num_layers=25)
 
     ## load models
-    model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")
+    # model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")
+    # model_names = j.ycb_loader.MODEL_NAMES
+    model_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv/models")
+    model_names = ["obj_" + f"{str(idx+1).rjust(6, '0')}.ply" for idx in range(21)]
     mesh_paths = []
-    model_names = j.ycb_loader.MODEL_NAMES
     for name in model_names:
-        mesh_path = os.path.join(model_dir,name,"textured.obj")
+        mesh_path = os.path.join(model_dir,name)
         mesh_paths.append(mesh_path)
-        model_scaling_factor = 1.0
+        model_scaling_factor = 1.0/1000.0
         renderer.add_mesh_from_file(
             mesh_path,
             scaling_factor=model_scaling_factor
@@ -65,11 +67,11 @@ if __name__=='__main__':
     print("that took ", end-start)
 
     # configure c2f
-    grid_widths = [0.05, 0.03, 0.02, 0.02]
-    rot_angle_widths = [jnp.pi, jnp.pi, 0.001, jnp.pi / 10]
-    sphere_angle_widths = [jnp.pi, jnp.pi, jnp.pi, jnp.pi]
-    # grid_params = [(7,7,7,50,21), (7,7,7,50,21), (15,15,15,20,1), (7,7,7,10,21)]   # (num_x, num_y, num_z, num_fib_sphere, num_planar_angle) 
-    grid_params =  [(3,3,3,50,80), (3,3,3,50,80),(3,3,3,50,80),(3,3,3,50,80)]
+    grid_widths = [0.1, 0.05, 0.03, 0.01, 0.01, 0.01]
+    rot_angle_widths = [jnp.pi, jnp.pi, jnp.pi, jnp.pi, jnp.pi/5, jnp.pi/5]
+    sphere_angle_widths = [jnp.pi, jnp.pi/2, jnp.pi/4, jnp.pi/4, jnp.pi/5, jnp.pi/5]
+    grid_params =  [(3,3,3,75*5,15), (3,3,3,75*3,21),(3,3,3,55,45),(3,3,3,55,45), (3,3,3,45,45), (3,3,3,45,45)]  # (num_x, num_y, num_z, num_fib_sphere, num_planar_angle)
+
 
     scheds = j.c2f.make_schedules(
         grid_widths=grid_widths, 
@@ -80,23 +82,30 @@ if __name__=='__main__':
     )
 
     # choose testing scene
-    for test_idx in range(4):
+    for test_idx in [0,1,2,3]:
     # test_idx = 1
         image, gt_idx, gt_pose = load_data(test_idx)
         j.viz.get_depth_image(image.depth).save(f"scene_{test_idx}_gt.png")
+        rendered = renderer.render_single_object(gt_pose, gt_idx)  
+        rendered -= jnp.min(rendered)  # to make minimum 0
+        viz = j.viz.get_depth_image(rendered[:,:,2], max=jnp.max(rendered[:,:,2])+0.5)
+        viz = j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width)
+        viz.save(f"scene_{test_idx}_gt_depth.png")
 
         seg_id = 0  # single object scene  # TODO check that kubric seg is 0 for obj
         c2f_results = run_c2f(renderer, image, scheds, infer_id=False, infer_contact=False, viz=True)
         c2f_results = c2f_results[0]  # single-segment, single-object
         
+        print("gt:", gt_pose)
         for c2f_iter, c2f_result in enumerate(c2f_results):
             score, gt_idx, best_pose = c2f_result[0]
+            print(best_pose)
             rendered = renderer.render_single_object(best_pose, gt_idx)  
-
-            rendered -= jnp.min(rendered)
-            viz = j.viz.get_rgb_image(rendered, max=jnp.max(rendered))
+            viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.5)
             viz = j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width)
             viz.save(f"scene_{test_idx}_best_pred_{c2f_iter}.png")
+        
+        print(f"=================\n test idx {test_idx} complete \n================")
 
 
-        from IPython import embed; embed()
+    from IPython import embed; embed()

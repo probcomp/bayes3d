@@ -10,7 +10,7 @@ import jax.numpy as jnp
 R_SWEEP = jnp.array([0.02])
 OUTLIER_PROB=0.1
 OUTLIER_VOLUME=1.0
-NUM_BATCHES=200
+NUM_BATCHES=45*5
 
 def run_grid(seg_id, sched, r_overlap_check=0.06, r_final = 0.07, viz=True):
     raise NotImplementedError("implement")

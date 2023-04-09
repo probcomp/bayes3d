@@ -56,7 +56,7 @@ def get_rotation_proposals(fib_sample, rot_sample, min_rot_angle=0, max_rot_angl
     return rotation_proposals
 
 
-def make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_points, min_rot_angle=0, max_rot_angle=2*jnp.pi, sphere_angle_range=jnp.pi):
+def make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_points, min_rot_angle, max_rot_angle, sphere_angle_range):
     return get_rotation_proposals(fibonacci_sphere_points, num_planar_angle_points, min_rot_angle, max_rot_angle, sphere_angle_range)
 
 
