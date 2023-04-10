@@ -270,16 +270,16 @@ def c2f_full_pose(
             new_pose_proposals = jnp.einsum('ij,ajk->aik', pose_hyp, pose_sweep_delta)
             
             weights, _ = score_poses_batched(
-                                    renderer,
-                                    obj_idx,
-                                    obs_point_cloud_image,
-                                    obs_point_cloud_image_complement,
-                                    new_pose_proposals,
-                                    r_sweep,
-                                    outlier_prob,
-                                    outlier_volume,
-                                    num_batches
-                                )
+                                renderer,
+                                obj_idx,
+                                obs_point_cloud_image,
+                                obs_point_cloud_image_complement,
+                                new_pose_proposals,
+                                r_sweep,
+                                outlier_prob,
+                                outlier_volume,
+                                num_batches
+                            )
 
             r_idx, best_idx = jnp.unravel_index(weights.argmax(), weights.shape)
 

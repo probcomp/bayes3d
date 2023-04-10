@@ -205,8 +205,8 @@ def unproject_depth(
     intrinsics,
 ):
     depth = jnp.array(depth_in)
-    depth.at[depth > intrinsics.far].set(intrinsics.far)
-    depth.at[depth < intrinsics.near].set(intrinsics.far)
+    mask = (depth < intrinsics.far) * (depth > intrinsics.near)
+    depth = depth * mask + intrinsics.far * (1.0 - mask)
     K = jnp.array(
         [
             [intrinsics.fx, 0.0, intrinsics.cx],
@@ -223,6 +223,9 @@ def unproject_depth(
         jnp.einsum('ij,j...->i...', jnp.linalg.inv(K), full_vec), 0, -1
     )
     return coords_in_camera
+
+unproject_depth_jit = jax.jit(unproject_depth)
+unproject_depth_vmap_jit = jax.jit(jax.vmap(unproject_depth, in_axes=(0,None)))
 
 
 def transform_from_pos_target_up(pos, target, up):

@@ -29,7 +29,7 @@ intrinsics = j.Intrinsics(
     width=rgbd.intrinsics.width,
     fx=rgbd.intrinsics.fx, fy=rgbd.intrinsics.fx,
     cx=rgbd.intrinsics.width/2.0, cy=rgbd.intrinsics.height/2.0,
-    near=0.001, far=50.0
+    near=0.001, far=3.0
 )
 
 
@@ -52,7 +52,9 @@ _, offset_pose = j.mesh.center_mesh(trimesh.load(mesh_path), return_pose=True)
 all_data = j.kubric_interface.render_multiobject_parallel(mesh_paths, object_poses[None,:,...], intrinsics, scaling_factor=1.0, lighting=5.0) # multi img singleobj
 gt_poses = object_poses @ offset_pose
 
-np.savez("dataset.npz", rgbds=all_data, poses=gt_poses, id=IDX, name=model_names[IDX])
+DATASET_FILENAME = "dataset.npz"  # npz file
+DATASET_FILE = os.path.join(j.utils.get_assets_dir(), f"datasets/{DATASET_FILENAME}")
+np.savez(DATASET_FILE, rgbds=all_data, poses=gt_poses, id=IDX, name=model_names[IDX], intrinsics=intrinsics, mesh_path=mesh_path)
 
 rgb_images = j.hstack_images([j.get_rgb_image(r.rgb) for r in all_data]).save("dataset.png")
 
