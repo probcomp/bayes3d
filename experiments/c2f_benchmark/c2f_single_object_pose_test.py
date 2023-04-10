@@ -82,7 +82,7 @@ if __name__=='__main__':
     )
 
     # choose testing scene
-    for test_idx in [0,1,2,3]:
+    for test_idx in range(4):
     # test_idx = 1
         image, gt_idx, gt_pose = load_data(test_idx)
         j.viz.get_depth_image(image.depth).save(f"scene_{test_idx}_gt.png")
@@ -104,8 +104,5 @@ if __name__=='__main__':
             viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.5)
             viz = j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width)
             viz.save(f"scene_{test_idx}_best_pred_{c2f_iter}.png")
-        
-        print(f"=================\n test idx {test_idx} complete \n================")
-
 
     from IPython import embed; embed()

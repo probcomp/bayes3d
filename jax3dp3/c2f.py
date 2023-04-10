@@ -59,11 +59,8 @@ def make_schedules(grid_widths, angle_widths, grid_params, full_pose=False, sphe
 # Scoring functions
 ################
 def batch_split(proposals, num_batches):
-    num_proposals = proposals.shape[0]
-    if num_proposals % num_batches != 0:
-        print(f"WARNING: {num_proposals} Not evenly divisible by {num_batches}; defaulting to 5x split")  # TODO find a good factor
-        num_batches = 5
-    return jnp.array(jnp.split(proposals, num_batches))
+    print(f"{num_batches} batches with batchsize {len(proposals) // num_batches}")
+    return jnp.asarray(jnp.array_split(proposals, num_batches))
 
 def score_poses_batched(
     renderer,

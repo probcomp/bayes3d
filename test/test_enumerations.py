@@ -36,7 +36,7 @@ viz.save(f"gt_render.png")
 
 fib_pts = 15
 planar_pts = 15
-sphere_angle_range = jnp.pi/10
+sphere_angle_range = jnp.pi/2
 min_rot_angle = 0
 max_rot_angle = jnp.pi*2
 
