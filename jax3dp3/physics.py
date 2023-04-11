@@ -175,7 +175,7 @@ class PhysicsServer():
                 all_pose_proposals = jnp.vstack(all_pose_proposals)
 
                 all_weights = []
-                for batch in jnp.array_split(all_pose_proposals,2):
+                for batch in jnp.array_split(all_pose_proposals,3):
                     rendered_images = renderer.render_parallel(batch, known_id)[...,:3]
                     rendered_images_spliced = j.splice_image_parallel(rendered_images, point_cloud_image_complement)
                     weights = j.threedp3_likelihood_with_r_parallel_jit(
