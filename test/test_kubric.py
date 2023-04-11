@@ -36,20 +36,6 @@ intrinsics = j.Intrinsics(
     rgbd.intrinsics.near, rgbd.intrinsics.far
 )
 
-
-IDX = 0
-
-camera_pose = j.t3d.transform_from_pos_target_up(
-    jnp.array([0.0, 1.0, 1.0]),
-    jnp.array([0.0, 0.0, 0.0]),
-    jnp.array([0.0, 0.0, 1.0]),
-)
-poses = jnp.array([jnp.linalg.inv(camera_pose)])
-
-rgbds = j.kubric_interface.render_multiobject_parallel([mesh_paths[0]], poses[:,None,...], intrinsics, scaling_factor=1.0, lighting=5.0)
-single_object_viz = j.get_rgb_image(rgbds[0].rgb)
-
-
 paths = []
 for i in gt_ids:
     paths.append(mesh_paths[i])
@@ -61,23 +47,30 @@ intrinsics = j.Intrinsics(
     rgbd.intrinsics.near, rgbd.intrinsics.far
 )
 
-i = 4
-gt_poses_new = gt_poses.at[i].set(gt_poses[i] @ j.t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]),jnp.pi))
-
 poses = []
 for i in range(len(gt_ids)):
     poses.append(
-        gt_poses_new[i] @ j.t3d.inverse_pose(offset_poses[gt_ids[i]])
+        gt_poses[i] @ j.t3d.inverse_pose(offset_poses[gt_ids[i]])
     )
 poses = jnp.array(poses)
 
 mesh_paths = paths
-
 rgbds = j.kubric_interface.render_multiobject_parallel(paths, poses[:,None,...], intrinsics, scaling_factor=1.0, lighting=5.0)
+
+
 T = 0
+rgbd = rgbds[0]
 rgb = rgbds[T].rgb
 seg = rgbds[T].segmentation
 depth = rgbds[T].depth
+j.get_rgb_image(rgb).save("rgb.png")
+
+# import jax3dp3.posecnn_densefusion
+# densefusion = j.posecnn_densefusion.DenseFusion()
+# results = densefusion.get_densefusion_results(rgbd.rgb, rgbd.depth, rgbd.intrinsics, scene_name="1")
+# print(results)
+
+
 
 rgba = jnp.array(j.viz.add_rgba_dimension(rgb))
 rgba = rgba.at[seg == 0, 3].set(0.0)

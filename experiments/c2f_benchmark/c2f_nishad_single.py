@@ -18,7 +18,7 @@ rgbds = data["rgbds"]
 poses = data["poses"]
 id = data["id"].item()
 
-IMG_NUMBER = 1
+IMG_NUMBER = 3
 rgbd = rgbds[IMG_NUMBER]
 gt_pose = poses[IMG_NUMBER]
 original_intrinsics = rgbd.intrinsics
@@ -79,6 +79,15 @@ for deltas in scheds:
 j.meshcat.show_cloud("2", renderer.render_single_object(pose_estimate, 0)[...,:3].reshape(-1,3), color=j.RED)
 
 
+
+import jax3dp3.posecnn_densefusion
+densefusion = j.posecnn_densefusion.DenseFusion()
+
+
+IMG_NUMBER = 3
+rgbd = rgbds[IMG_NUMBER]
+results = densefusion.get_densefusion_results(rgbd.rgb, rgbd.depth, rgbd.intrinsics, scene_name="1")
+print(results)
 
 # pose_proposals = jnp.array([gt_pose, gt_pose])
 # rendered_depth = renderer.render_parallel(pose_proposals, 0)[...,2]

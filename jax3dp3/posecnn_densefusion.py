@@ -84,7 +84,7 @@ class DenseFusion(object):
 
         print(f"\n Running models on {scene_name}..")
         posecnn_meta = run_posecnn(bgr_image, depth_image, meta_data, self.POSECNN_NETWORK, self.dataset_cfg, self.posecnn_cfg)    
-
+        print(f"\n Running dense fusion models on {scene_name}..")
         prediction_results =  run_DenseFusion(rgb_image, depth_image, meta_data,
                                             self.DF_ESTIMATOR, self.DF_REFINER, 
                                             class_names=self.class_names, 

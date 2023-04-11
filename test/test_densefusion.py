@@ -18,6 +18,7 @@ import jax3dp3 as j
 bop_ycb_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv")
 rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', bop_ycb_dir)
 
+import jax3dp3.posecnn_densefusion
 densefusion = j.posecnn_densefusion.DenseFusion()
 results = densefusion.get_densefusion_results(rgbd.rgb, rgbd.depth, rgbd.intrinsics, scene_name="1")
 print(results)

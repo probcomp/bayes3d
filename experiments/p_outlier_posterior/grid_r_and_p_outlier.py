@@ -47,24 +47,14 @@ observed_image = renderer.render_multiobject(
 j.get_depth_image(observed_image[:,:,2],max=intrinsics.far).save("gt.png")
 
 
+delta = j.distributions.gaussian_vmf(jax.random.PRNGKey(6), 0.01, 10000.0)
 
-
-
-object_pose_noisier = j.distributions.gaussian_vmf_sample(
-    jax.random.PRNGKey(9),
-    object_pose,
-    3.0, 400.0
-)
 
 rendered = renderer.render_multiobject(
-    jnp.array([object_pose_noisy, wall_pose]),
-    [GT_ID+1, 0]
+    jnp.linalg.inv(delta) @ jnp.array([object_pose, wall_pose]),
+    [GT_ID, 0]
 )
-
-
-likelihood_outlier_parallel_jit = jax.jit(
-    jax.vmap(jax.vmap(j.threedp3_likelihood, in_axes=(None, None, None, 0, None)), in_axes=(None, None, 0, None, None))
-)
+rendered = observed_image
 
 j.vstack_images(
     [
@@ -73,32 +63,41 @@ j.vstack_images(
     ]
 ).save("data.png")
 
-# likelihood_r = jax.jit(
-#     jax.vmap(j.gaussian_mixture_image, in_axes=(None, None, 0))
-# )
+likelihood_outlier_parallel_jit = jax.jit(
+    jax.vmap(jax.vmap(j.threedp3_likelihood, in_axes=(None, None, None, 0, None)), in_axes=(None, None, 0, None, None))
+)
 
 
-OUTLIER_PROBS = jnp.linspace(0.1, 0.2, 100)
-R = jnp.linspace(0.01, 0.1, 100)
+OUTLIER_PROBS = jnp.linspace(0.0001, 0.01, 200)
+R = jnp.linspace(0.00001, 1.0, 100)
 OUTLIER_VOLUME = 1000000000.0
 
 p = likelihood_outlier_parallel_jit(observed_image, rendered, R, OUTLIER_PROBS, OUTLIER_VOLUME)
 norm_p = j.utils.normalize_log_scores(p)
 
-plt.clf()
-for i in range(len(R)):
-    plt.plot(OUTLIER_PROBS,j.utils.normalize_log_scores(p[i]).reshape(-1))
-plt.tight_layout()
-plt.savefig("1.png")
+ii,jj = jnp.unravel_index(norm_p.argmax(), norm_p.shape)
+print(R[ii], OUTLIER_PROBS[jj])
 
 
 plt.clf()
 plt.matshow(norm_p)
 plt.xlabel("outlier prob")
 plt.ylabel("R")
+plt.yticks([0,len(R)-1],[str(np.round(R[0].item(),6)), str(np.round(R[-1].item(),6)) ])
+plt.xticks([0,len(OUTLIER_PROBS)-1],[str(np.round(OUTLIER_PROBS[0].item(),6)),str(np.round(OUTLIER_PROBS[-1].item(),6))])
+# ([str(OUTLIER_PROBS[0].item())] + ['' for _ in range(len(OUTLIER_PROBS)-2)] + [str(OUTLIER_PROBS[-1].item())])
 plt.colorbar()
 plt.tight_layout()
 plt.savefig("1.png")
+
+
+# plt.clf()
+# for i in range(len(R)):
+#     plt.plot(OUTLIER_PROBS,j.utils.normalize_log_scores(p[i]).reshape(-1))
+# plt.tight_layout()
+# plt.savefig("1.png")
+
+
 
 from IPython import embed; embed()
 

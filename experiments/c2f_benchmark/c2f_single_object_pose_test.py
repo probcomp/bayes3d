@@ -10,8 +10,8 @@ import jax3dp3 as j
 
 from c2f_scripts import *
 
-DATASET_FILE = "rgbd_annotated.npz"  # npz file
-
+DATASET_FILENAME = "rgbd_annotated.npz"  # npz file
+DATASET_FILE = os.path.join(j.utils.get_assets_dir(), f"datasets/{DATASET_FILENAME}")
 
 # TODO: move these to utils
 def load_data(scene_idx):
