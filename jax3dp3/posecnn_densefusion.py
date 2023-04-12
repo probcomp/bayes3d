@@ -1,6 +1,7 @@
 import sys
 import os
-densefusion_path = f"{os.path.dirname(os.path.abspath(__file__))}/posecnn-pytorch/PoseCNN-PyTorch"  
+densefusion_path = f"{os.path.dirname(os.path.abspath(__file__))}/posecnn-pytorch/PoseCNN-PyTorch"
+print(densefusion_path)
 sys.path.append(densefusion_path)   # TODO cleaner import / add to path
 import easydict
 import pickle

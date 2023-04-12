@@ -44,17 +44,11 @@ observed_image = renderer.render_multiobject(
     jnp.array([object_pose, wall_pose]),
     [GT_ID, 0]
 )
-j.get_depth_image(observed_image[:,:,2],max=intrinsics.far).save("gt.png")
 
-
-delta = j.distributions.gaussian_vmf(jax.random.PRNGKey(6), 0.01, 10000.0)
-
-
-rendered = renderer.render_multiobject(
-    jnp.linalg.inv(delta) @ jnp.array([object_pose, wall_pose]),
-    [GT_ID, 0]
+likelihood_outlier_parallel_jit = jax.jit(
+    jax.vmap(jax.vmap(j.threedp3_likelihood, in_axes=(None, None, None, 0, None)), in_axes=(None, None, 0, None, None))
 )
-rendered = observed_image
+
 
 j.vstack_images(
     [
@@ -63,19 +57,37 @@ j.vstack_images(
     ]
 ).save("data.png")
 
-likelihood_outlier_parallel_jit = jax.jit(
-    jax.vmap(jax.vmap(j.threedp3_likelihood, in_axes=(None, None, None, 0, None)), in_axes=(None, None, 0, None, None))
+
+
+delta = j.distributions.gaussian_vmf(jax.random.PRNGKey(6), 0.01, 10000.0)
+rendered = renderer.render_multiobject(
+    jnp.linalg.inv(delta) @ jnp.array([object_pose, wall_pose]),
+    [GT_ID, 0]
 )
-
-
-OUTLIER_PROBS = jnp.linspace(0.0001, 0.01, 200)
-R = jnp.linspace(0.00001, 1.0, 100)
+OUTLIER_PROBS = jnp.linspace(0.01, 0.1, 200)
+R = jnp.linspace(7.0, 10.0, 100)
 OUTLIER_VOLUME = 1000000000.0
+
+
+delta = j.distributions.gaussian_vmf(jax.random.PRNGKey(6), 0.001, 1000000.0)
+rendered = renderer.render_multiobject(
+    jnp.linalg.inv(delta) @ jnp.array([object_pose, wall_pose]),
+    [GT_ID+1, 0]
+)
+OUTLIER_PROBS = jnp.linspace(0.01, 0.1, 200)
+R = jnp.linspace(1.0, 10.0, 100)
+OUTLIER_VOLUME = 1000000000.0
+
+
+j.meshcat.show_cloud("1", observed_image[...,:3].reshape(-1,3) / 100.0)
+j.meshcat.show_cloud("2", rendered[...,:3].reshape(-1,3) / 100.0, color=j.RED)
+
 
 p = likelihood_outlier_parallel_jit(observed_image, rendered, R, OUTLIER_PROBS, OUTLIER_VOLUME)
 norm_p = j.utils.normalize_log_scores(p)
 
 ii,jj = jnp.unravel_index(norm_p.argmax(), norm_p.shape)
+best_r, best_outlier_prob = (R[ii], OUTLIER_PROBS[jj])
 print(R[ii], OUTLIER_PROBS[jj])
 
 
@@ -91,11 +103,21 @@ plt.tight_layout()
 plt.savefig("1.png")
 
 
-# plt.clf()
-# for i in range(len(R)):
-#     plt.plot(OUTLIER_PROBS,j.utils.normalize_log_scores(p[i]).reshape(-1))
-# plt.tight_layout()
-# plt.savefig("1.png")
+
+outliers = (
+    (j.gaussian_mixture_image(observed_image, rendered, best_r) * (1.0 - best_outlier_prob)) 
+        <
+    (best_outlier_prob / OUTLIER_VOLUME)
+)
+j.get_depth_image(outliers).save("outliers.png")
+
+
+
+
+
+
+
+
 
 
 
