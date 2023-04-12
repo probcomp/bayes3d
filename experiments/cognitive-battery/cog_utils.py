@@ -74,6 +74,8 @@ def find_best_mesh(
         obj_transforms = get_object_transforms(meshes[m], obj_transform)
         for i, transform in enumerate(obj_transforms):
             rendered_image = renderer.render_single_object(transform, m)
+            scaling_factor = (rendered_image[:, :, 2] != 0.0).sum() / (depth[:, :, 2] != 0.0).sum()
+            scaling_factor = 1 / scaling_factor if scaling_factor < 1 else scaling_factor
             keep_points = (
                 jnp.sum(
                     jnp.logical_or(
@@ -81,7 +83,7 @@ def find_best_mesh(
                         ((depth[:, :, 2] == 0.0) * (rendered_image[:, :, 2] != 0)),
                     )
                 )
-                / (rendered_image[:, :, 2] != 0.0).sum()
+                * scaling_factor
             )
             if keep_points < k:
                 k = keep_points
@@ -169,3 +171,18 @@ def full_translation_deltas_single(
     )
     translation_proposals = jnp.einsum("bij,abjk->abik", poses, translation_deltas_full)
     return translation_proposals
+
+
+def get_reward_idx(
+    meshes: List[str], indices: List[int], reward_mesh_name: str = "apple"
+) -> int:
+    """
+    TODO
+    """
+    if not reward_mesh_name in meshes:
+        raise Exception(
+            f"Could not find mesh name {reward_mesh_name} in the meshes list."
+        )
+    reward_mesh_idx = meshes.index(reward_mesh_name)
+
+    return indices.index(reward_mesh_idx)
