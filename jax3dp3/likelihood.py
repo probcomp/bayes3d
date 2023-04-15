@@ -5,7 +5,7 @@ import functools
 from functools import partial
 from jax.scipy.special import logsumexp
 
-FILTER_SIZE = 4
+FILTER_SIZE = 7
 
 @functools.partial(
     jnp.vectorize,

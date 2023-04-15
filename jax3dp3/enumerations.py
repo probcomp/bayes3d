@@ -47,18 +47,12 @@ def fibonacci_sphere(samples_in_range, phi_range=jnp.pi):
     points = jnp.arange(samples_in_range)
     return fib_sphere(points)
 
-
-def get_rotation_proposals(fib_sample, rot_sample, min_rot_angle=0, max_rot_angle=2*jnp.pi, sphere_angle_range=jnp.pi):
-    unit_sphere_directions = fibonacci_sphere(fib_sample, sphere_angle_range)
+def make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_points, min_rot_angle, max_rot_angle, sphere_angle_range):
+    unit_sphere_directions = fibonacci_sphere(fibonacci_sphere_points, sphere_angle_range)
     geodesicHopf_select_axis_vmap = jax.vmap(jax.vmap(geodesicHopf_select_axis, in_axes=(0,None)), in_axes=(None,0))
-    rot_stepsize = (max_rot_angle - min_rot_angle)/ rot_sample
+    rot_stepsize = (max_rot_angle - min_rot_angle)/ num_planar_angle_points
     rotation_proposals = geodesicHopf_select_axis_vmap(unit_sphere_directions, jnp.arange(min_rot_angle, max_rot_angle, rot_stepsize)).reshape(-1, 4, 4)
     return rotation_proposals
-
-
-def make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_points, min_rot_angle, max_rot_angle, sphere_angle_range):
-    return get_rotation_proposals(fibonacci_sphere_points, num_planar_angle_points, min_rot_angle, max_rot_angle, sphere_angle_range)
-
 
 def make_translation_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x=2,num_y=2,num_z=2):
     deltas = jnp.stack(jnp.meshgrid(
