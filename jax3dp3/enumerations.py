@@ -17,7 +17,7 @@ def angle_axis_helper(newZ):
     return axis, geodesicAngle
 
 
-def geodesicHopf_select_axis(newZ, planarAngle):
+def geodesicHopf_rotate_within_axis(newZ, planarAngle):
     # newZ should be a normalized vector
     # returns a 4x4 quaternion
     zUnit = jnp.array([0.0, 0.0, 1.0])
@@ -48,8 +48,20 @@ def fibonacci_sphere(samples_in_range, phi_range=jnp.pi):
     return fib_sphere(points)
 
 def make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_points, min_rot_angle, max_rot_angle, sphere_angle_range):
+    """
+    Generate uniformly spaced rotation proposals around a constrained region of SO(3) 
+
+    Params:
+    fib_sample: number of rotation axes to sample, on the region of the fibonacci sphere specified by `sphere_angle_range`
+    rot_sample: number of in-axis rotations to sample, in the interval [min_rot_angle, max_rot_angle]
+    min_rot_angle, max_rot_angle: the minimum and maximum rotation angle values; max_rot_angle - min_rot_angle \leq 2*pi
+    sphere_angle_range: the maximum phi angle (in spherical coordinates) that bounds the region of the fibonacci sphere to sample rotation axes from; sphere_angle_range \leq pi
+
+    Returns: 
+    rotation proposals: (fib_sample*rot_sample, 4, 4)
+    """
     unit_sphere_directions = fibonacci_sphere(fibonacci_sphere_points, sphere_angle_range)
-    geodesicHopf_select_axis_vmap = jax.vmap(jax.vmap(geodesicHopf_select_axis, in_axes=(0,None)), in_axes=(None,0))
+    geodesicHopf_select_axis_vmap = jax.vmap(jax.vmap(geodesicHopf_rotate_within_axis, in_axes=(0,None)), in_axes=(None,0))
     rot_stepsize = (max_rot_angle - min_rot_angle)/ num_planar_angle_points
     rotation_proposals = geodesicHopf_select_axis_vmap(unit_sphere_directions, jnp.arange(min_rot_angle, max_rot_angle, rot_stepsize)).reshape(-1, 4, 4)
     return rotation_proposals
