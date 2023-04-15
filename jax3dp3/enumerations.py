@@ -56,7 +56,7 @@ def get_rotation_proposals(fib_sample, rot_sample, min_rot_angle=0, max_rot_angl
     fib_sample: number of rotation axes to sample, on the region of the fibonacci sphere specified by `sphere_angle_range`
     rot_sample: number of in-axis rotations to sample, in the interval [min_rot_angle, max_rot_angle]
     min_rot_angle, max_rot_angle: the minimum and maximum rotation angle values; max_rot_angle - min_rot_angle \leq 2*pi
-    sphere_angle_range: the maximum phi angle (in spherical coordinates) that bounds the region of the fibonacci sphere to sample rotation axes from
+    sphere_angle_range: the maximum phi angle (in spherical coordinates) that bounds the region of the fibonacci sphere to sample rotation axes from; sphere_angle_range \leq pi
 
     Returns: 
     rotation proposals: (fib_sample*rot_sample, 4, 4)
