@@ -40,9 +40,9 @@ def get_depth_image(image, min=None, max=None, cmap=None):
     if cmap is None:
         cmap = plt.get_cmap('turbo')
     if min is None:
-        min = np.minimum(image)
+        min = np.min(image)
     if max is None:
-        max = np.minimum(max)
+        max = np.max(image)
         
     depth = (image - min) / (max - min + 1e-10)
     depth = np.clip(depth, 0, 1)
