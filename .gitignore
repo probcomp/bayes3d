@@ -12,3 +12,7 @@ assets/panda_dataset/*
 assets/ycb_video_models/*
 *.jpeg
 experiments/3dnel/threednel
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+assets/sam/*
+assets/tum/*

@@ -90,7 +90,7 @@ def segment_scene(rgb_original, point_cloud_image, intrinsics, depth_original=No
     if viz:
         unique_vals = np.unique(final_segmentation_image)
         unique_vals = unique_vals[unique_vals != -1]
-        images = [jax3dp3.viz.get_depth_image(final_segmentation_image==i, max=1.0) for i in unique_vals]
+        images = [jax3dp3.viz.get_depth_image( 1.0 * (final_segmentation_image==i), max=1.0) for i in unique_vals]
         viz_image = jax3dp3.viz.multi_panel(
             [
                 jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0),h,w),

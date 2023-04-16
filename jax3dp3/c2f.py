@@ -60,7 +60,7 @@ def make_schedules(grid_widths, angle_widths, grid_params, full_pose=False, sphe
 ################
 def batch_split(proposals, num_batches):
     print(f"{num_batches} batches with batchsize {len(proposals) // num_batches}")
-    return jnp.asarray(jnp.array_split(proposals, num_batches))
+    return jnp.array_split(proposals, num_batches)
 
 def score_poses_batched(
     renderer,

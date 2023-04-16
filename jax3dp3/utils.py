@@ -208,5 +208,4 @@ def infer_table_plane(point_cloud_image, camera_pose, intrinsics, ransac_thresho
     table_pose_in_cam_frame = t3d.inverse_pose(camera_pose) @ table_pose
     if table_pose_in_cam_frame[2,2] > 0:
         table_pose = table_pose @ t3d.transform_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), jnp.pi)
-    
     return table_pose, table_dims
