@@ -35,10 +35,11 @@ intrinsics = j.Intrinsics(
 
 
 
-NUM_IMAGES_PER_ITER = 100
-NUM_ITER = 10
+NUM_IMAGES_PER_ITER = 10
+NUM_ITER = 100
 
-for iter in range(5, NUM_ITER):
+for iter in range(NUM_ITER):
+    print("Iteration: ", iter)
     key = jax.random.PRNGKey(iter)
     object_poses = jax.vmap(lambda key: j.distributions.gaussian_vmf(key, 0.00001, 0.001))(
         jax.random.split(key, NUM_IMAGES_PER_ITER)
@@ -52,13 +53,13 @@ for iter in range(5, NUM_ITER):
     _, offset_pose = j.mesh.center_mesh(trimesh.load(mesh_path), return_pose=True)
 
 
-    all_data = j.kubric_interface.render_multiobject_parallel(mesh_paths, object_poses[None,:,...], intrinsics, scaling_factor=1.0, lighting=5.0) # multi img singleobj
+    all_data = j.kubric_interface.render_multiobject_parallel(mesh_paths, object_poses[None,:,...], intrinsics, scaling_factor=1.0, lighting=3.0) # multi img singleobj
     gt_poses = object_poses @ offset_pose
 
     DATASET_FILENAME = f"dataset_{iter}.npz"  # npz file
     DATASET_FILE = os.path.join(j.utils.get_assets_dir(), f"datasets/{DATASET_FILENAME}")
     np.savez(DATASET_FILE, rgbds=all_data, poses=gt_poses, id=IDX, name=model_names[IDX], intrinsics=intrinsics, mesh_path=mesh_path)
 
-    rgb_images = j.hvstack_images([j.get_rgb_image(r.rgb) for r in all_data], 10, 10).save(f"dataset_{iter}.png")
+    rgb_images = j.hstack_images([j.get_rgb_image(r.rgb) for r in all_data]).save(f"dataset_{iter}.png")
 
 from IPython import embed; embed()
