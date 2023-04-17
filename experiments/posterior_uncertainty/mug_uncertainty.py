@@ -1,10 +1,8 @@
-
-
 import jax3dp3
 import jax3dp3 as j
 import trimesh
 import jax3dp3.transforms_3d as t3d
-import jax3dp3.pybullet
+import jax3dp3.pybullet_utils
 import jax.numpy as jnp
 import os
 import pybullet as p

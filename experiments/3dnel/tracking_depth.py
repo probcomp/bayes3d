@@ -7,7 +7,7 @@ from copy import copy
 from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
 import jax3dp3.utils
 import jax3dp3.viz
-import jax3dp3.pybullet
+import jax3dp3.pybullet_utils
 import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
 

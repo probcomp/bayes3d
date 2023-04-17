@@ -9,7 +9,7 @@ from copy import copy
 from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
 import jax3dp3.utils
 import jax3dp3.viz
-import jax3dp3.pybullet
+import jax3dp3.pybullet_utils
 import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
 import trimesh
@@ -47,7 +47,7 @@ objects = []
 box_dims = []
 for name in model_names:
     path = os.path.join(name, "textured.obj")
-    obj, dims = jax3dp3.pybullet.add_mesh(path)
+    obj, dims = jax3dp3.pybullet_utils.add_mesh(path)
     objects.append(obj)
     box_dims.append(dims)
 # planeId = p.loadURDF("plane.urdf")
@@ -73,10 +73,10 @@ cam_pose = t3d.transform_from_rot_and_pos(
 rgb_images = []
 depth_images = []
 for x in jnp.linspace(0.0, 600.0, 40):
-    jax3dp3.pybullet.set_pose_wrapped(objects[0], cracker_box_pose)
-    jax3dp3.pybullet.set_pose_wrapped(objects[1], t3d.transform_from_pos(jnp.array([x, 0.0, 0.0])) @ sugar_box_pose)
+    jax3dp3.pybullet_utils.set_pose_wrapped(objects[0], cracker_box_pose)
+    jax3dp3.pybullet_utils.set_pose_wrapped(objects[1], t3d.transform_from_pos(jnp.array([x, 0.0, 0.0])) @ sugar_box_pose)
 
-    rgb, depth, segmentation = jax3dp3.pybullet.capture_image(
+    rgb, depth, segmentation = jax3dp3.pybullet_utils.capture_image(
         cam_pose,
         h, w, fx,fy, cx,cy , near, far
     )

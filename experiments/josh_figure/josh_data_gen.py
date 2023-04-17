@@ -9,7 +9,7 @@ from copy import copy
 from jax3dp3.viz import save_depth_image, get_depth_image, multi_panel
 import jax3dp3.utils
 import jax3dp3.viz
-import jax3dp3.pybullet
+import jax3dp3.pybullet_utils
 import jax3dp3.transforms_3d as t3d
 import jax.numpy as jnp
 import trimesh
@@ -47,7 +47,7 @@ for (name, path) in zip(model_names,model_paths):
 
 p.resetSimulation()
 
-table_obj, table_dims = jax3dp3.pybullet.create_table(
+table_obj, table_dims = jax3dp3.pybullet_utils.create_table(
     0.5,
     0.5,
     0.1,
@@ -59,7 +59,7 @@ box_dims = [table_dims]
 
 for name in model_names:
     path = os.path.join(name, "textured.obj")
-    obj, dims = jax3dp3.pybullet.add_mesh(path)
+    obj, dims = jax3dp3.pybullet_utils.add_mesh(path)
     objects.append(obj)
     box_dims.append(dims)
 box_dims = jnp.array(box_dims)
@@ -109,9 +109,9 @@ cam_pose = t3d.transform_from_rot_and_pos(
 )
 
 for (obj, p) in zip(objects, poses[1:]):
-    jax3dp3.pybullet.set_pose_wrapped(obj, p)
+    jax3dp3.pybullet_utils.set_pose_wrapped(obj, p)
 
-rgb, depth, segmentation = jax3dp3.pybullet.capture_image(
+rgb, depth, segmentation = jax3dp3.pybullet_utils.capture_image(
     cam_pose,
     h, w, fx,fy, cx,cy , near, far
 )

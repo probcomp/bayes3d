@@ -6,7 +6,7 @@ import jax3dp3
 import jax3dp3 as j
 import trimesh
 import jax.numpy as jnp
-import jax3dp3.pybullet
+import jax3dp3.pybullet_utils
 import jax3dp3.transforms_3d as t3d
 import pybullet_data
 import pybullet_planning
@@ -53,7 +53,7 @@ os.makedirs(os.path.dirname(mesh_path),exist_ok=True)
 mesh.export(mesh_path)
 
 p.resetSimulation()
-object, obj_dims = jax3dp3.pybullet.add_mesh(mesh_path)
+object, obj_dims = jax3dp3.pybullet_utils.add_mesh(mesh_path)
 planeId = p.loadURDF("plane.urdf")
 
 
@@ -82,7 +82,7 @@ for i in range(len(rots)):
     obj_pose = t3d.transform_from_pos(jnp.array([0.0, 0.0, 20.0])) @ rots[i]
 
     pose = obj_pose
-    jax3dp3.pybullet.set_pose_wrapped(object, pose)
+    jax3dp3.pybullet_utils.set_pose_wrapped(object, pose)
     jax3dp3.show_trimesh("1", meshes[idx])
 
 
@@ -92,12 +92,12 @@ for i in range(len(rots)):
 
     for _ in range(300):
         p.stepSimulation()
-        pose = jax3dp3.pybullet.get_pose_wrapped(object)
+        pose = jax3dp3.pybullet_utils.get_pose_wrapped(object)
         jax3dp3.set_pose("1", pose)
 
 
     object_poses.append(
-        jax3dp3.pybullet.get_pose_wrapped(object)
+        jax3dp3.pybullet_utils.get_pose_wrapped(object)
     )
 
 
@@ -128,7 +128,7 @@ for i in range(len(contact_planes)):
 
 from IPython import embed; embed()
 
-rgb, depth, segmentation = jax3dp3.pybullet.capture_image(cam_pose, h,w, fx,fy, cx,cy, near,far)
+rgb, depth, segmentation = jax3dp3.pybullet_utils.capture_image(cam_pose, h,w, fx,fy, cx,cy, near,far)
 jax3dp3.viz.get_rgb_image(rgb).save("rgb.png")
 
 
@@ -141,7 +141,7 @@ p.resetDebugVisualizerCamera( cameraDistance=1, cameraYaw=30, cameraPitch=-52, c
 rgbs = []
 for _ in range(100):
     p.stepSimulation()
-    rgb, depth, segmentation = jax3dp3.pybullet.capture_image(cam_pose, h,w, fx,fy, cx,cy, near,far)
+    rgb, depth, segmentation = jax3dp3.pybullet_utils.capture_image(cam_pose, h,w, fx,fy, cx,cy, near,far)
     rgbs.append(rgb)
 
 from IPython import embed; embed()
