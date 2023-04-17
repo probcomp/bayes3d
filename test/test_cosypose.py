@@ -15,20 +15,20 @@ def main():
     name = str(data['name'])
     GT_IDX = int(data['id'])
 
-    # ## set up renderer
-    # renderer = j.Renderer(rgbds[0].intrinsics, num_layers=25)
-    # # load models
-    # model_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv/models")
-    # model_names = ["obj_" + f"{str(idx+1).rjust(6, '0')}.ply" for idx in range(14)]
-    # mesh_paths = []
-    # for name in model_names:
-    #     mesh_path = os.path.join(model_dir,name)
-    #     mesh_paths.append(mesh_path)
-    #     model_scaling_factor = 1.0/1000.0
-    #     renderer.add_mesh_from_file(
-    #         mesh_path,
-    #         scaling_factor=model_scaling_factor
-    #     )
+    ## set up renderer
+    renderer = j.Renderer(rgbds[0].intrinsics, num_layers=25)
+    # load models
+    model_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv/models")
+    model_names = ["obj_" + f"{str(idx+1).rjust(6, '0')}.ply" for idx in range(14)]
+    mesh_paths = []
+    for name in model_names:
+        mesh_path = os.path.join(model_dir,name)
+        mesh_paths.append(mesh_path)
+        model_scaling_factor = 1.0/1000.0
+        renderer.add_mesh_from_file(
+            mesh_path,
+            scaling_factor=model_scaling_factor
+        )
 
     for IMG_IDX in range(len(rgbds)):
         rgbd = rgbds[IMG_IDX]
@@ -38,6 +38,10 @@ def main():
         camera_k = j.K_from_intrinsics(intrinsics)
 
         ## run cosypose predictions
+        #########
+        # TODO run subprocssing once for entire dataset
+        #########
+
         # pred = j.cosypose_utils.cosypose_interface(rgb_img,camera_k)
         pred = j.cosypose_utils.cosypose_interface(rgb_img,camera_k)
 
