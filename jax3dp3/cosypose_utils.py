@@ -1,6 +1,7 @@
 import os
-import sys
+import signal
 import subprocess
+import sys
 import numpy as np
 cosypose_path = f"{os.path.dirname(os.path.abspath(__file__))}/cosypose_baseline/cosypose"
 sys.path.append(cosypose_path)   # TODO cleaner import / add to path
@@ -116,12 +117,13 @@ def cosypose_interface(rgb_imgs, camera_k):
     py = os.popen(f"conda run -n {COSYPOSE_CONDA_ENV_NAME} which python").read().strip()
     print(py)
     cmd = f"{py} {os.path.abspath(__file__)}" 
-    p = subprocess.Popen(cmd, shell=True)
+    pro = subprocess.Popen(cmd, stdout=subprocess.PIPE, 
+                       shell=True, preexec_fn=os.setsid)
     
     while not os.path.exists("/tmp/cosypose_output.npz"):
         # print("waiting...")
         time.sleep(1.0)
-    p.kill()
+    os.killpg(os.getpgid(pro.pid), signal.SIGTERM)  # Send the signal to all the process groups
 
     print("Finished COSYPOSE")
     data = np.load("/tmp/cosypose_output.npz")
