@@ -4,6 +4,3 @@
 [submodule "cosypose"]
 	path = cosypose
 	url = https://github.com/Simple-Robotics/cosypose.git
-[submodule "jax3dp3/cosypose_baseline/cosypose"]
-	path = jax3dp3/cosypose_baseline/cosypose
-	url = https://github.com/Simple-Robotics/cosypose.git
