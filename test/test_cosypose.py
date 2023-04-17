@@ -9,7 +9,8 @@ COSYPOSE_CONDA_ENV_NAME = 'cosypose'
 
 def main():
     ## get data to predict
-    data = np.load("dataset_0.npz", allow_pickle=True)
+    DATASET_FILE = os.path.join(j.utils.get_assets_dir(), f"datasets/dataset_0.npz")
+    data = np.load(DATASET_FILE, allow_pickle=True)
     rgbds = data['rgbds']
     gt_poses = data['poses']
     name = str(data['name'])
@@ -63,9 +64,6 @@ def main():
 
         comparison_viz = j.hstack_images([gt_viz, pred_viz])
         comparison_viz.save(f"comparison_{IMG_IDX}.png")
-
-        break
-
 
 if __name__ == '__main__':
     main()

@@ -16,7 +16,7 @@ name = model_names[IDX]
 print(name)
 
 camera_pose = j.t3d.transform_from_pos_target_up(
-    jnp.array([0.0, 1.0, 0.0]),
+    jnp.array([0.0, 0.5, 0.0]),
     jnp.array([0.0, 0.0, 0.0]),
     jnp.array([0.0, 0.0, 1.0]),
 )

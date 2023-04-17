@@ -97,6 +97,11 @@ class CosyPose(object):
     
 
 def cosypose_interface(rgb_imgs, camera_k):
+    if os.path.exists("/tmp/cosypose_output.npz"):
+        os.remove("/tmp/cosypose_output.npz")
+    else:
+        print("The file does not exist")
+    
     np.savez("/tmp/cosypose_input.npz", 
                 rgbs=rgb_imgs,
                 K=camera_k)
@@ -107,14 +112,13 @@ def cosypose_interface(rgb_imgs, camera_k):
     print(py)
     cmd = f"{py} {os.path.abspath(__file__)}" 
     p = subprocess.Popen(cmd, shell=True)
-    time.sleep(10 + len(rgb_imgs))
-    if p.poll() is None:
-        p.kill()
-    else:
-        print(p.communicate())
+    
+    while not os.path.exists("/tmp/cosypose_output.npz"):
+        print("waiting...")
+        time.sleep(1.0)
+    p.kill()
 
     print("Finished COSYPOSE")
-
     data = np.load("/tmp/cosypose_output.npz")
 
     return data
@@ -149,22 +153,26 @@ if __name__=="__main__":
     os.environ["CUDA_VISIBLE_DEVICES"]= '0'
 
     # load model
+    print("instantiated")
     COSYPOSE_MODEL = CosyPose()
 
     # load data
     data = np.load("/tmp/cosypose_input.npz")
-    rgb_img, camera_k = data['rgb'], data['K']
+    rgb_img, camera_k = data['rgbs'], data['K']
 
     pred = COSYPOSE_MODEL.inference(rgb_img, camera_k)
+    print("inference done")
 
     pred_poses = pred.poses.cpu()
     pred_ids = [int(l[-3:])-1 for l in pred.infos.label]  # ex) 'obj_000014' for GT_IDX 13 
     pred_scores = [pred.infos.iloc[i].score for i in range(len(pred.infos))]
+    print(pred_poses, pred_ids, pred_scores)
 
     np.savez("/tmp/cosypose_output.npz", 
                 pred_poses=pred_poses,
                 pred_ids=pred_ids, 
                 pred_scores=pred_scores)
+    print("saved results. exiting")
     sys.exit()
 
 
