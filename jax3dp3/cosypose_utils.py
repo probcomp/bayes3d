@@ -14,6 +14,7 @@ torch.backends.cudnn.benchmark = False
 torch.cuda.synchronize()
 
 COSYPOSE_CONDA_ENV_NAME = 'cosypose'
+COSYPOSE_MODEL = None
 
 class CosyPose(object):
     def __init__(self, detector_run_id='detector-bop-ycbv-synt+real--292971', coarse_run_id='coarse-bop-ycbv-synt+real--822463', refiner_run_id='refiner-bop-ycbv-synt+real--631598') -> None:
@@ -102,6 +103,10 @@ def cosypose_interface(rgb_imgs, camera_k):
     else:
         print("The file does not exist")
     
+    if len(rgb_imgs.shape) == 3:    
+        # unsqueeze into (1, H, W, 3) if single-image (H,W,3)
+        rgb_imgs = rgb_imgs[None, :]
+    
     np.savez("/tmp/cosypose_input.npz", 
                 rgbs=rgb_imgs,
                 K=camera_k)
@@ -114,7 +119,7 @@ def cosypose_interface(rgb_imgs, camera_k):
     p = subprocess.Popen(cmd, shell=True)
     
     while not os.path.exists("/tmp/cosypose_output.npz"):
-        print("waiting...")
+        # print("waiting...")
         time.sleep(1.0)
     p.kill()
 
@@ -124,7 +129,7 @@ def cosypose_interface(rgb_imgs, camera_k):
     return data
 
 if __name__=="__main__":
-    print("SUBPROCESS:", sys.version)
+    print("SUBPROCESS:", sys.version)  # expect Python 3.7.6
 
     # do imports here to bypass during imports from jax3dp3 __init__
     from cosypose.datasets.datasets_cfg import make_scene_dataset, make_object_dataset
@@ -158,20 +163,27 @@ if __name__=="__main__":
 
     # load data
     data = np.load("/tmp/cosypose_input.npz")
-    rgb_img, camera_k = data['rgbs'], data['K']
+    rgb_imgs, camera_k = data['rgbs'], data['K']
+    num_imgs = len(rgb_imgs)
 
-    pred = COSYPOSE_MODEL.inference(rgb_img, camera_k)
-    print("inference done")
+    all_poses = []
+    all_ids = []
+    all_scores = []
+    for i, rgb_img in enumerate(rgb_imgs):
+        pred = COSYPOSE_MODEL.inference(rgb_img, camera_k)
+        print(f"{i+1}/{num_imgs} inference done")
 
-    pred_poses = pred.poses.cpu()
-    pred_ids = [int(l[-3:])-1 for l in pred.infos.label]  # ex) 'obj_000014' for GT_IDX 13 
-    pred_scores = [pred.infos.iloc[i].score for i in range(len(pred.infos))]
-    print(pred_poses, pred_ids, pred_scores)
+        pred_poses = np.asarray(pred.poses.cpu())
+        pred_ids = [int(l[-3:])-1 for l in pred.infos.label]  # ex) 'obj_000014' for GT_IDX 13 
+        pred_scores = [pred.infos.iloc[i].score for i in range(len(pred.infos))]
+
+        all_poses.append(pred_poses); all_ids.append(pred_ids); all_scores.append(pred_scores)
+        print(pred_poses, pred_ids, pred_scores)
 
     np.savez("/tmp/cosypose_output.npz", 
-                pred_poses=pred_poses,
-                pred_ids=pred_ids, 
-                pred_scores=pred_scores)
+                pred_poses=np.asarray(all_poses),
+                pred_ids=np.asarray(all_ids), 
+                pred_scores=np.asarray(all_scores))
     print("saved results. exiting")
     sys.exit()
 
