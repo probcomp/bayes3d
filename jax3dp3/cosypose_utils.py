@@ -105,7 +105,7 @@ def cosypose_interface(rgb_imgs, camera_k):
 
     py = os.popen(f"conda run -n {COSYPOSE_CONDA_ENV_NAME} which python").read().strip()
     print(py)
-    cmd = f"{py} ~/jax3dp3/jax3dp3/cosypose_utils.py" 
+    cmd = f"{py} {os.path.abspath(__file__)}" 
     p = subprocess.Popen(cmd, shell=True)
     time.sleep(10 + len(rgb_imgs))
     if p.poll() is None:
