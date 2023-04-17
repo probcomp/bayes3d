@@ -12,7 +12,7 @@ else
 fi
 unset __conda_setup
 
-git clone --recurse-submodules https://github.com/Simple-Robotics/cosypose.git
+# git clone --recurse-submodules https://github.com/Simple-Robotics/cosypose.git
 cd cosypose
 conda env create -n cosypose --file environment.yaml
 conda activate cosypose
