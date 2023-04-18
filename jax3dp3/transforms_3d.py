@@ -66,6 +66,8 @@ def apply_transform(coords, transform):
     )[..., :-1]
     return coords
 
+apply_transform_jit = jax.jit(apply_transform)
+
 def quaternion_to_rotation_matrix(Q):
     """
     Covert a quaternion into a full three-dimensional rotation matrix.

@@ -55,6 +55,41 @@ def make_schedules(grid_widths, angle_widths, grid_params, full_pose=False, sphe
         assert len(grid_widths) == len(sphere_angle_widths)
         return make_schedules_full_pose_params(grid_widths, sphere_angle_widths, angle_widths, grid_params)
 
+
+
+def single_object_c2f(point_cloud_image, intrinsics, renderer, obj_id, scheds, init_pose=None, num_iterations=None):
+    if init_pose is None:
+        center = jnp.mean(point_cloud_image[point_cloud_image[:,:,2]< intrinsics.far],axis=0)
+        pose_estimate = j.t3d.transform_from_pos(center)
+    else:
+        pose_estimate = init_pose
+    best_weight = -jnp.inf
+    
+    if num_iterations is None:
+        num_iterations = len(scheds)
+    
+    grids_and_scores = []
+    for iteration in range(num_iterations):
+        deltas = scheds[iteration]
+        for batch in jnp.array_split(deltas, deltas.shape[0] // 2000):
+            pose_proposals = jnp.einsum('ij,ajk->aik', pose_estimate, batch)
+
+            rendered_depth = renderer.render_parallel(pose_proposals, obj_id)[...,2]
+            rendered_point_cloud_images = j.t3d.unproject_depth_vmap_jit(rendered_depth, intrinsics)
+
+            weights = j.threedp3_likelihood_with_r_parallel_jit(
+                point_cloud_image, rendered_point_cloud_images, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
+            )
+            grids_and_scores.append((pose_proposals, weights))
+            if weights.max() > best_weight:
+                pose_estimate = pose_proposals[weights.argmax()]
+                best_weight = weights.max()
+        print(best_weight)
+    return pose_estimate, grids_and_scores
+
+
+
+
 ################
 # Scoring functions
 ################
