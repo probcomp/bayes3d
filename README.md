@@ -58,3 +58,14 @@ bash download.sh
 <!-- ```
 sudo apt install libeigen3-dev
 sudo ln -s /usr/include/eigen3/Eigen /usr/include/Eigen -->
+
+
+# CosyPose Setup
+
+```
+git submodule update --init --recursive
+cd jax3dp3/cosypose_baseline
+bash cosypose_setup.sh
+```
+
+To test setup, run `test/test_cosypose.py`

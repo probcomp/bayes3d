@@ -15,6 +15,7 @@ unset __conda_setup
 # git clone --recurse-submodules https://github.com/Simple-Robotics/cosypose.git
 cd cosypose
 conda env create -n cosypose --file environment.yaml
+source ~/.bashrc
 conda activate cosypose
 git lfs pull
 python setup.py install

@@ -99,6 +99,7 @@ class CosyPose(object):
     
 
 def cosypose_interface(rgb_imgs, camera_k):
+    rgb_imgs = rgb_imgs[...,:3]
     if os.path.exists("/tmp/cosypose_output.npz"):
         os.remove("/tmp/cosypose_output.npz")
     else:
