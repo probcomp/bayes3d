@@ -17,6 +17,7 @@ cd cosypose
 conda env create -n cosypose --file environment.yaml
 source ~/.bashrc
 conda activate cosypose
+# make sure to install git-lfs before running this
 git lfs pull
 python setup.py install
 mkdir local_data
