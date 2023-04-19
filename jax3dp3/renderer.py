@@ -133,7 +133,7 @@ def render_point_cloud(point_cloud, intrinsics, pixel_smudge=0):
     pixels = project_cloud_to_pixels(point_cloud, intrinsics)
     x, y = jnp.meshgrid(jnp.arange(intrinsics.width), jnp.arange(intrinsics.height))
     matches = (jnp.abs(x[:, :, None] - pixels[:, 0]) <= pixel_smudge) & (jnp.abs(y[:, :, None] - pixels[:, 1]) <= pixel_smudge)
-    matches = matches * (intrinsics.far - point_cloud[:,-1][None, None, :])
+    matches = matches * (intrinsics.far * 2.0 - point_cloud[:,-1][None, None, :])
     a = jnp.argmax(matches, axis=-1)    
     return point_cloud[a]
 
