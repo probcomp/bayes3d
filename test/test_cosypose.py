@@ -12,6 +12,10 @@ pred = j.cosypose_utils.cosypose_interface(np.array(rgbd.rgb), j.K_from_intrinsi
 
 pred_poses, pred_ids, pred_scores = pred['pred_poses'], pred['pred_ids'], pred['pred_scores']
 
+# printout pred_scores
+for i in range(len(pred_scores)):
+    print(f"pred_scores[{i}] = {pred_scores[i]}")
+
 renderer = j.Renderer(rgbd.intrinsics, num_layers=25)
 # load models
 model_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv/models")
