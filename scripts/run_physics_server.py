@@ -2,11 +2,12 @@ import zmq
 import pickle5
 import zlib
 import jax3dp3 as j
+import jax3dp3.physics
 
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5432")
-physics_server = j.physics.PhysicsServer()
+physics_server = jax3dp3.physics.PhysicsServer()
 
 while True:
     #  Wait for next request from client
