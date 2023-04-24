@@ -42,10 +42,6 @@ logging.basicConfig(level="INFO")
 #convert intrinsics to focal_length, sensor_width
 focal_length = fx / width
 sensor_width = 1 
-print(f"POSES: {poses}")
-print(f"CAMERA POSE: {camera_pose}")
-
-
 
 for scene_number in range(len(poses)):
     # --- create scene and attach a renderer to it
@@ -72,9 +68,7 @@ for scene_number in range(len(poses)):
         scene += obj
 
     frame = renderer.render_still()
-    print(f"RENDERED FRAME ")
     np.savez(f"/tmp/{scene_number}.npz", rgba=frame["rgba"], segmentation=frame["segmentation"], depth=frame["depth"])
-    print(f"SAVED FRAME USING NP")
 
 
 
