@@ -12,9 +12,15 @@ pred = j.cosypose_utils.cosypose_interface(np.array(rgbd.rgb), j.K_from_intrinsi
 
 pred_poses, pred_ids, pred_scores = pred['pred_poses'], pred['pred_ids'], pred['pred_scores']
 
-# printout pred_scores
+# printout pred_scores and pred_ids
 for i in range(len(pred_scores)):
     print(f"pred_scores[{i}] = {pred_scores[i]}")
+    print(f"pred_ids[{i}] = {pred_ids[i]}")
+
+# printout gt_poses and gt_ids
+for i in range(len(gt_poses)):
+    print(f"gt_poses[{i}] = {gt_poses[i]}")
+    print(f"gt_ids[{i}] = {gt_ids[i]}")
 
 renderer = j.Renderer(rgbd.intrinsics, num_layers=25)
 # load models
