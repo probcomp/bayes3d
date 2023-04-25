@@ -1,3 +1,0 @@
-model preds:
-024_bowl
-025_mug

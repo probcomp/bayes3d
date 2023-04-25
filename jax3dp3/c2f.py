@@ -74,13 +74,12 @@ def score_poses_batched(
     obs_point_cloud_image_complement,
     pose_proposals
 ):
-    all_weights = []
+    all_weights = None
+    batches = jnp.array_split(pose_proposals, pose_proposals.shape[0] // 2000)
 
-    for batch_idx, pose_proposals_batch in enumerate(jnp.array_split(pose_proposals, pose_proposals.shape[0] // 2000)):
+    for batch_idx, pose_proposals_batch in enumerate(batches):
         render = renderer.render_parallel(pose_proposals_batch, obj_idx)
         rendered_depth = render[...,2]
-        rendered_seg = render[...,3] # TODO?
-        from IPython import embed; embed()
         rendered_point_cloud_images = j.t3d.unproject_depth_vmap_jit(rendered_depth, renderer.intrinsics)
 
         R_SWEEP = jnp.array([0.02])
@@ -88,13 +87,18 @@ def score_poses_batched(
         OUTLIER_VOLUME=1.0
 
         weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
-            obs_point_cloud_image, rendered_point_cloud_images, rendered_seg, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
+            obs_point_cloud_image, rendered_point_cloud_images, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
         )
 
-        print(f"batch {batch_idx} complete")
-        all_weights.append(weights)
+        if all_weights == None:
+            all_weights = weights
+        else:
+            all_weights = jnp.hstack((all_weights, weights))
 
-    return jnp.asarray(all_weights) 
+        print(f"batch {batch_idx} complete")
+
+    # from IPython import embed; embed()
+    return all_weights
 
 def score_contact_parameters(
     renderer,
@@ -216,42 +220,6 @@ def c2f_contact_parameters(
         hypotheses = new_hypotheses
     return hypotheses_over_time
 
-
-def single_object_c2f(point_cloud_image, 
-                      intrinsics, 
-                      renderer, 
-                      obj_id, 
-                      scheds, init_pose=None, num_iterations=None):
-    if init_pose is None:
-        center = jnp.mean(point_cloud_image[point_cloud_image[:,:,2]< intrinsics.far],axis=0)
-        pose_estimate = j.t3d.transform_from_pos(center)
-    else:
-        pose_estimate = init_pose
-    best_weight = -jnp.inf
-    
-    if num_iterations is None:
-        num_iterations = len(scheds)
-    
-    grids_and_scores = []
-    for iteration in range(num_iterations):
-        deltas = scheds[iteration]
-        for batch in jnp.array_split(deltas, deltas.shape[0] // 2000):
-            pose_proposals = jnp.einsum('ij,ajk->aik', pose_estimate, batch)
-
-            rendered_depth = renderer.render_parallel(pose_proposals, obj_id)[...,2]
-            rendered_point_cloud_images = j.t3d.unproject_depth_vmap_jit(rendered_depth, intrinsics)
-
-            weights = j.threedp3_likelihood_with_r_parallel_jit(
-                point_cloud_image, rendered_point_cloud_images, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
-            )
-            grids_and_scores.append((pose_proposals, weights))
-            if weights.max() > best_weight:
-                pose_estimate = pose_proposals[weights.argmax()]
-                best_weight = weights.max()
-        print(best_weight)
-    return pose_estimate, grids_and_scores
-
-
 def c2f_full_pose(
     renderer,
     obs_point_cloud_image,
@@ -285,7 +253,7 @@ def c2f_full_pose(
             pose_hyp = hyp[2]
             new_pose_proposals = jnp.einsum('ij,ajk->aik', pose_hyp, pose_sweep_delta)
             
-            weights, _ = score_poses_batched(
+            weights = score_poses_batched(
                                 renderer,
                                 obj_idx,
                                 obs_point_cloud_image,
@@ -324,7 +292,7 @@ def c2f_occlusion_viz(
     segmentation_image,
     camera_params
 ):
-    (h,w,fx,fy,cx,cy, near, far) = camera_params
+    (h,w,fx,fy,cx,cy, near, far) = camerax_params
     rgb_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0), h,w)
     all_images_overlayed = jax3dp3.render_multiobject(pose_proposals, [obj_idx for _ in range(pose_proposals.shape[0])])
     enumeration_viz_all = jax3dp3.viz.get_depth_image(all_images_overlayed[:,:,2], max=far)

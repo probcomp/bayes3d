@@ -10,16 +10,21 @@ import jax3dp3 as j
 
 from c2f_scripts import *
 
-DATASET_FILENAME = "dataset_0.npz"  # npz file
-DATASET_FILE = os.path.join(j.utils.get_assets_dir(), f"datasets/{DATASET_FILENAME}")
-DATA = np.load(DATASET_FILE, allow_pickle=True)
-
 # TODO: move these to utils
-def load_data(scene_idx):
-    rgbd_img = DATA['rgbds'][scene_idx]
-    gt_pose = DATA['poses'][scene_idx]
-    gt_name = str(DATA['name'])
-    gt_idx = int(DATA['id'])
+def load_dataset(dataset_idx):
+    dataset_filename = f"datasets/dataset_{dataset_idx}.npz"  # npz file
+    dataset_file = os.path.join(j.utils.get_assets_dir(), f"datasets/{dataset_filename}")
+    data = np.load(dataset_file, allow_pickle=True)
+    num_scenes_in_dataset = len(data['rgbds'])
+
+    return data, num_scenes_in_dataset
+
+def load_scene(dataset:np.lib.npyio.NpzFile, scene_idx):
+ 
+    rgbd_img = dataset['rgbds'][scene_idx]
+    gt_pose = dataset['poses'][scene_idx]
+    gt_name = str(dataset['name'])
+    gt_idx = int(dataset['id'])
 
     # sanity check
     assert len(np.unique(rgbd_img.segmentation[rgbd_img.segmentation != 0])) == 1, "Single object dataset should contain one unique nonzero segmentation ID"
@@ -27,12 +32,35 @@ def load_data(scene_idx):
         rgbd_img.segmentation[rgbd_img.segmentation != 0] = gt_idx 
     return (rgbd_img, gt_idx, jnp.asarray(gt_pose))
 
-def setup_renderer():
-    sample_rgbd = DATA['rgbds'][0]
+def save_dataset_results(dataset_idx, pred_weights, pred_poses):
+    gt_data, _ = load_dataset(dataset_idx)
+
+    gt_rgbds = gt_data['rgbds'] 
+    gt_poses = gt_data['poses'] 
+    gt_name = str(gt_data['name'])
+    gt_idx = int(gt_data['id'])
+    
+    np.savez(f"{RESULTS_DATA_DIR}/results_dataset_{dataset_idx}.npz", 
+        gt_rgbds = gt_rgbds, 
+        gt_poses = gt_poses,
+        gt_name = gt_name,
+        gt_idx = gt_idx,
+        grid_widths = np.asarray(grid_widths),
+        rot_angle_widths = np.asarray(rot_angle_widths),
+        sphere_angle_widths = np.asarray(sphere_angle_widths),
+        grid_params = np.asarray(grid_params),
+        pred_weights = np.asarray(pred_weights),
+        pred_poses = np.asarray(pred_poses)
+    )
+
+
+
+def setup_renderer(num_layers=25):
+    sample_rgbd = load_dataset(0)[0]['rgbds'][0]
 
     ## setup intrinsics and renderer
     intrinsics = j.camera.scale_camera_parameters(sample_rgbd.intrinsics, 0.3)
-    renderer = j.Renderer(intrinsics, num_layers=25)
+    renderer = j.Renderer(intrinsics, num_layers=num_layers)
 
     ## load models
     # model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")
@@ -58,19 +86,27 @@ if __name__=='__main__':
     # Single-object (of known identity) scenes
     # Infer the full pose in the full orientation space
     ######################
-    
+    RESULTS_DIR = 'c2f_results'
+    RESULTS_DATA_DIR = f'{RESULTS_DIR}/data'
+    RESULTS_IMGS_DIR = f'{RESULTS_DIR}/imgs'
+    if not os.path.exists(RESULTS_DIR):
+        os.makedirs(RESULTS_DIR)
+        os.makedirs(RESULTS_DATA_DIR)
+        os.makedirs(RESULTS_IMGS_DIR)
+
+    NUM_DATASET = 100
+
     # setup renderer
     start = time.time() 
     renderer = setup_renderer()
     end = time.time()
-    print("that took ", end-start)
+    print("setup renderer ", end-start)
 
     # configure c2f
     grid_widths = [0.1, 0.05, 0.03, 0.01, 0.01, 0.01]
-    rot_angle_widths = [jnp.pi, jnp.pi, jnp.pi, jnp.pi, jnp.pi/5, jnp.pi/5]
-    sphere_angle_widths = [jnp.pi, jnp.pi/2, jnp.pi/4, jnp.pi/4, jnp.pi/5, jnp.pi/5]
+    rot_angle_widths = [jnp.pi, jnp.pi, jnp.pi, jnp.pi, jnp.pi/1.5, jnp.pi/1.5]
+    sphere_angle_widths = [jnp.pi, jnp.pi/1.5, jnp.pi/3, jnp.pi/4, jnp.pi/5, jnp.pi/5]
     grid_params =  [(3,3,3,75*5,15), (3,3,3,75*3,21),(3,3,3,55,45),(3,3,3,55,45), (3,3,3,45,45), (3,3,3,45,45)]  # (num_x, num_y, num_z, num_fib_sphere, num_planar_angle)
-
 
     scheds = j.c2f.make_schedules(
         grid_widths=grid_widths, 
@@ -80,26 +116,42 @@ if __name__=='__main__':
         sphere_angle_widths=sphere_angle_widths
     )
 
-    # choose testing scene
-    for test_idx in range(4):
-        ## load data, visualize gt
-        image, gt_idx, gt_pose = load_data(test_idx)
-        j.viz.get_depth_image(image.depth).save(f"scene_{test_idx}_gt.png")
-        rendered = renderer.render_single_object(gt_pose, gt_idx)  
-        viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.5)
-        j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width).save(f"scene_{test_idx}_gt_depth.png")
-
-        ## run c2f
-        c2f_results = run_c2f(renderer, image, scheds, infer_id=False, infer_contact=False, viz=True)
-        c2f_results = c2f_results[0]  # single-segment, single-object
+    ## run test
+    for dataset_idx in range(NUM_DATASET):
+        print(f"################\n Dataset {dataset_idx} \n ###############")
         
-        print("gt:", gt_pose)
-        for c2f_iter, c2f_result in enumerate(c2f_results):
+        data, num_scenes_in_dataset = load_dataset(dataset_idx)
+        dataset_results = []
+
+        for test_idx in range(num_scenes_in_dataset):
+            print(f"#### Starting scene {test_idx}/{num_scenes_in_dataset} ####")
+            ## load data, visualize gt
+            image, gt_idx, gt_pose = load_scene(data, test_idx)
+            j.viz.get_depth_image(image.depth).save(f"{RESULTS_IMGS_DIR}/dataset_{dataset_idx}_scene_{test_idx}_gt.png")
+            rendered = renderer.render_single_object(gt_pose, gt_idx)  
+            viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.5)
+            j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width).save(f"{RESULTS_IMGS_DIR}/dataset_{dataset_idx}_scene_{test_idx}_gt_depth.png")
+
+            ## run c2f
+            c2f_results = run_c2f(renderer, image, scheds, infer_id=False, infer_contact=False, viz=True)
+            c2f_results = c2f_results[0]  # single-segment, single-object
+            
+            print("gt:", gt_pose)
+            c2f_iter, c2f_result = len(c2f_results), c2f_results[-1]
             score, gt_idx, best_pose = c2f_result[0]
             print(best_pose)
             rendered = renderer.render_single_object(best_pose, gt_idx)  
-            viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.5)
+            viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.1)
             viz = j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width)
-            viz.save(f"scene_{test_idx}_best_pred_{c2f_iter}.png")
+            viz.save(f"{RESULTS_IMGS_DIR}/dataset_{dataset_idx}_scene_{test_idx}_best_pred.png")
+            
+            dataset_results.append(c2f_results)
+            
+        ## Save whole dataset results
+        # [[num_c2f_steps] * num_scenes_in_dataset]
+        c2f_pred_weights = [[r[0][0] for r in c2f_stage_results] for c2f_stage_results in dataset_results]
+        c2f_pred_poses = [[r[0][2] for r in c2f_stage_results] for c2f_stage_results in dataset_results]
+        
+        save_dataset_results(dataset_idx, c2f_pred_weights, c2f_pred_poses)
 
-    from IPython import embed; embed()
+from IPython import embed; embed()
