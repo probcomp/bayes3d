@@ -56,6 +56,9 @@ def run_c2f_id_and_contact(renderer, image:RGBD, contact_plane_pose_in_cam_frame
     return results
 
 def run_c2f_full_pose_only(renderer, image:RGBD, scheds):
+    """
+    Run c2f for pose-only enumerative inference for object(s) with known ID/segmentation map
+    """
     intrinsics = renderer.intrinsics
     depth_scaled =  j.utils.resize(image.depth, intrinsics.height, intrinsics.width)
 
@@ -71,8 +74,8 @@ def run_c2f_full_pose_only(renderer, image:RGBD, scheds):
         gt_idx = segmentation_id  # pose-only kubric dataset must have gt segmentation with gt obj id
 
         depth_masked, depth_complement = j.get_masked_and_complement_image(depth_scaled, seg_scaled, segmentation_id, intrinsics)
-        j.get_depth_image(depth_masked, max=intrinsics.far).save("masked.png")
-        j.get_depth_image(depth_complement, max=intrinsics.far).save("complement.png")
+        # j.get_depth_image(depth_masked, max=intrinsics.far).save("masked.png")
+        # j.get_depth_image(depth_complement, max=intrinsics.far).save("complement.png")
         obs_point_cloud_image_masked = t3d.unproject_depth(depth_masked, intrinsics)
         obs_point_cloud_image_complement = t3d.unproject_depth(depth_complement, intrinsics)
 
@@ -82,11 +85,7 @@ def run_c2f_full_pose_only(renderer, image:RGBD, scheds):
             obs_point_cloud_image_masked,
             obs_point_cloud_image_complement,
             scheds,
-            R_SWEEP,
-            OUTLIER_PROB,
-            OUTLIER_VOLUME,
-            obj_idx_hypotheses=[gt_idx],
-            num_batches=NUM_BATCHES
+            obj_idx_hypotheses=[gt_idx]
         )
         results.append(hypotheses_over_time)
 

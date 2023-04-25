@@ -10,26 +10,25 @@ import jax3dp3 as j
 
 from c2f_scripts import *
 
-DATASET_FILENAME = "rgbd_annotated.npz"  # npz file
+DATASET_FILENAME = "dataset_0.npz"  # npz file
 DATASET_FILE = os.path.join(j.utils.get_assets_dir(), f"datasets/{DATASET_FILENAME}")
+DATA = np.load(DATASET_FILE, allow_pickle=True)
 
 # TODO: move these to utils
 def load_data(scene_idx):
-    scenes_data = np.load(DATASET_FILE, allow_pickle=True)
-    rgbd_img, gt_idx, gt_pose = scenes_data['rgbd_idx_pose'][scene_idx]
+    rgbd_img = DATA['rgbds'][scene_idx]
+    gt_pose = DATA['poses'][scene_idx]
+    gt_name = str(DATA['name'])
+    gt_idx = int(DATA['id'])
 
-    # filter 
-    rgbd_img.rgb[rgbd_img.segmentation == 0,:] = 255.0
-    rgbd_img.depth[rgbd_img.segmentation == 0] = 10.0
-    
     # sanity check
+    assert len(np.unique(rgbd_img.segmentation[rgbd_img.segmentation != 0])) == 1, "Single object dataset should contain one unique nonzero segmentation ID"
     if gt_idx not in rgbd_img.segmentation:
-        raise ValueError("single object dataset should contain RGBD objects with gt object id in segmentation")
-    
-    return (rgbd_img, gt_idx, gt_pose)
+        rgbd_img.segmentation[rgbd_img.segmentation != 0] = gt_idx 
+    return (rgbd_img, gt_idx, jnp.asarray(gt_pose))
 
 def setup_renderer():
-    sample_rgbd, _, _ = load_data(0) 
+    sample_rgbd = DATA['rgbds'][0]
 
     ## setup intrinsics and renderer
     intrinsics = j.camera.scale_camera_parameters(sample_rgbd.intrinsics, 0.3)
@@ -83,16 +82,14 @@ if __name__=='__main__':
 
     # choose testing scene
     for test_idx in range(4):
-    # test_idx = 1
+        ## load data, visualize gt
         image, gt_idx, gt_pose = load_data(test_idx)
         j.viz.get_depth_image(image.depth).save(f"scene_{test_idx}_gt.png")
         rendered = renderer.render_single_object(gt_pose, gt_idx)  
-        rendered -= jnp.min(rendered)  # to make minimum 0
-        viz = j.viz.get_depth_image(rendered[:,:,2], max=jnp.max(rendered[:,:,2])+0.5)
-        viz = j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width)
-        viz.save(f"scene_{test_idx}_gt_depth.png")
+        viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.5)
+        j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width).save(f"scene_{test_idx}_gt_depth.png")
 
-        seg_id = 0  # single object scene  # TODO check that kubric seg is 0 for obj
+        ## run c2f
         c2f_results = run_c2f(renderer, image, scheds, infer_id=False, infer_contact=False, viz=True)
         c2f_results = c2f_results[0]  # single-segment, single-object
         
