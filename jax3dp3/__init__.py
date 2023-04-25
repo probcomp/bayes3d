@@ -9,7 +9,6 @@ from . import scene_graph
 from . import ycb_loader
 from . import occlusion
 from . import meshcat
-from . import o3d_viz
 from . import kubric_interface
 # from . import physics
 from . import cosypose_utils
@@ -20,3 +19,6 @@ from .likelihood import *
 from .online import *
 from .camera import *
 from .viz import *
+
+from . import o3d_viz
+

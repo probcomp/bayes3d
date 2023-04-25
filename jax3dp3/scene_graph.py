@@ -61,6 +61,7 @@ def pose_from_contact_and_face_params(
 
 
 pose_from_contact_and_face_params_parallel_jit = jax.jit(jax.vmap(pose_from_contact_and_face_params, in_axes=(0, 0, None, None)))
+pose_from_contact_and_face_params_multiobject_jit = jax.jit(jax.vmap(pose_from_contact_and_face_params, in_axes=(0, 0, 0, None)))
 
 
 def get_contact_plane(
