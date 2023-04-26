@@ -15,7 +15,7 @@ intrinsics = j.Intrinsics(
     width=300,
     fx=200.0, fy=200.0,
     cx=150.0, cy=150.0,
-    near=0.001, far=50.0
+    near=0.001, far=6.0
 )
 
 renderer = j.Renderer(intrinsics)
@@ -83,15 +83,16 @@ print ("FPS:", gt_poses.shape[0] / (end - start))
 viz_images = []
 max_depth = 10.0
 for i in range(gt_images.shape[0]):
-    gt_img = j.viz.get_depth_image(gt_images[i,:,:,2], max=max_depth)
+    gt_img = j.viz.get_depth_image(gt_images[i,:,:,2])
     rendered_image = renderer.render_single_object(pose_estimates_over_time[i], 0)
-    rendered_img = j.viz.get_depth_image(rendered_image[:,:,2], max=max_depth)
+    rendered_img = j.viz.get_depth_image(rendered_image[:,:,2])
     viz_images.append(
         j.viz.multi_panel(
-            [gt_img, rendered_img],
-            ["Ground Truth", "Inferred Reconstruction"],
+            [gt_img, rendered_img, j.overlay_image(gt_img, rendered_img)],
+            ["Ground Truth", "Inferred Reconstruction", "Overlay"],
         )
     )
-j.viz.make_gif_from_pil_images(viz_images,"test.gif")
+j.make_gif(viz_images, "test.gif")
+
 
 from IPython import embed; embed()

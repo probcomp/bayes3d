@@ -62,7 +62,7 @@ class RGBD(object):
 
 
 class Renderer(object):
-    def __init__(self, intrinsics, num_layers=1024):
+    def __init__(self, intrinsics, num_layers=2048):
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
         self.proj_list = list(jax3dp3.camera.open_gl_projection_matrix(
@@ -113,19 +113,51 @@ class Renderer(object):
 
     def render_single_object(self, pose, idx):
         images_torch = self.render_to_torch(pose[None, None, :, :], [idx])
-        return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+        images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+        images_jnp_2 = jnp.concatenate(
+            [
+                j.t3d.unproject_depth_jit(images_jnp[:,:,2], self.intrinsics),
+                images_jnp[:,:,3:]
+            ],
+            axis=-1
+        )
+        return images_jnp_2
 
     def render_parallel(self, poses, idx):
         images_torch = self.render_to_torch(poses[None, :, :, :], [idx])
-        return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+        images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+        images_jnp_2 = jnp.concatenate(
+            [
+                j.t3d.unproject_depth_vmap_jit(images_jnp[:,:,:,2], self.intrinsics),
+                images_jnp[:,:,:,3:]
+            ],
+            axis=-1
+        )
+        return images_jnp_2
 
     def render_multiobject(self, poses, indices):
         images_torch = self.render_to_torch(poses[:, None, :, :], indices)
-        return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+        images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+        images_jnp_2 = jnp.concatenate(
+            [
+                j.t3d.unproject_depth_jit(images_jnp[:,:,2], self.intrinsics),
+                images_jnp[:,:,3:]
+            ],
+            axis=-1
+        )
+        return images_jnp_2
 
     def render_multiobject_parallel(self, poses, indices, on_object=0):
         images_torch = self.render_to_torch(poses, indices, on_object=on_object)
-        return jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+        images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+        images_jnp_2 = jnp.concatenate(
+            [
+                j.t3d.unproject_depth_vmap_jit(images_jnp[:,:,:,2], self.intrinsics),
+                images_jnp[:,:,:,3:]
+            ],
+            axis=-1
+        )
+        return images_jnp_2
 
 def render_point_cloud(point_cloud, intrinsics, pixel_smudge=0):
     transformed_cloud = point_cloud
