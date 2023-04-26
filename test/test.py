@@ -11,10 +11,10 @@ import trimesh
 import os
 
 intrinsics = j.Intrinsics(
-    height=200,
+    height=300,
     width=300,
     fx=200.0, fy=200.0,
-    cx=150.0, cy=100.0,
+    cx=150.0, cy=150.0,
     near=0.001, far=6.0
 )
 
