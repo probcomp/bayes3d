@@ -201,34 +201,17 @@ def rotation_matrix_to_quaternion(matrix):
     )
     return q * 0.5 / jnp.sqrt(t)
 
-
-def unproject_depth(
-    depth_in,
-    intrinsics,
-):
-    depth = jnp.array(depth_in)
+def unproject_depth(depth, intrinsics):
     mask = (depth < intrinsics.far) * (depth > intrinsics.near)
     depth = depth * mask + intrinsics.far * (1.0 - mask)
-    K = jnp.array(
-        [
-            [intrinsics.fx, 0.0, intrinsics.cx],
-            [0.0, intrinsics.fy, intrinsics.cy],
-            [0.0, 0.0, 1.0],
-        ]
-    )
-    vu = jnp.mgrid[: depth.shape[0], : depth.shape[1]]
-    depth_for_uv = depth[vu[0], vu[1]]
-    full_vec = jnp.stack(
-        [vu[1] * depth_for_uv, vu[0] * depth_for_uv, depth_for_uv], axis=0
-    )
-    coords_in_camera = jnp.moveaxis(
-        jnp.einsum('ij,j...->i...', jnp.linalg.inv(K), full_vec), 0, -1
-    )
-    return coords_in_camera
+    y, x = jnp.mgrid[: depth.shape[0], : depth.shape[1]]
+    x = (x - intrinsics.cx) / intrinsics.fx
+    y = (y - intrinsics.cy) / intrinsics.fy
+    point_cloud_image = jnp.stack([x, y, jnp.ones_like(x)], axis=-1) * depth[:, :, None]
+    return point_cloud_image
 
 unproject_depth_jit = jax.jit(unproject_depth)
 unproject_depth_vmap_jit = jax.jit(jax.vmap(unproject_depth, in_axes=(0,None)))
-
 
 def transform_from_pos_target_up(pos, target, up):
     z = target- pos
