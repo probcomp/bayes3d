@@ -140,10 +140,9 @@ def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsiz
     )
 
     drawer = ImageDraw.Draw(dst)
-    font_bottom = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), bottom_fontsize)
-    font_label = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), label_fontsize)
-    font_title = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "DMSans-Regular.ttf"), title_fontsize)
-
+    font_bottom = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "IBMPlexSerif-Regular.ttf"), bottom_fontsize)
+    font_label = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "IBMPlexSerif-Regular.ttf"), label_fontsize)
+    font_title = ImageFont.truetype(os.path.join(jax3dp3.utils.get_assets_dir(), "fonts", "IBMPlexSerif-Regular.ttf"), title_fontsize)
 
     bottom_border = 0
     title_border = 0
