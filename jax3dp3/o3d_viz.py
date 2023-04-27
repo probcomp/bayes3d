@@ -118,9 +118,10 @@ class O3DVis(object):
         self.render.scene.camera.look_at(center, eye, up)
         img = np.array(self.render.render_to_image())
         img = j.add_rgba_dimension(img)
+        depth = np.array(viz.render.render_to_depth_image(z_in_view_space=True))
 
         # img = img.at[(img[:,:,:3].sum(-1)) > 255, -1].set(0.0)
-        return img
+        return rgb,img
 
     def make_camera(self, intrinsics, pose, size):
         cx = intrinsics.cx

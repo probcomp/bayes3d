@@ -74,7 +74,7 @@ transform_image_zeros_parallel_jit = jax.jit(jax.vmap(transform_image_zeros, in_
 
 
 class Renderer(object):
-    def __init__(self, intrinsics, num_layers=2048):
+    def __init__(self, intrinsics, num_layers=512):
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
         self.proj_list = list(jax3dp3.camera.open_gl_projection_matrix(
