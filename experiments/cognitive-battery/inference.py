@@ -1,14 +1,12 @@
 import os
 import warnings
 from glob import glob
+from typing import Tuple
 
 import cog_utils as utils
 import config
-import jax.numpy as jnp
 import sklearn.metrics as skm
 from model import model
-
-from typing import Tuple
 
 warnings.filterwarnings("ignore")
 
@@ -46,11 +44,11 @@ if __name__ == "__main__":
     video_paths = [f"{DATA_PREFIX}/{experiment}_data/videos/{condition}/36"]
 
     n = len(video_paths)
-    preds, labels = jnp.empty(n), jnp.empty(n)
+    preds, labels = [], []
     for i, video_path in enumerate(video_paths):
         pred, label = run_inference(experiment, video_path)
-        preds[i] = pred
-        labels[i] = label
+        preds.append(pred)
+        labels.append(label)
 
     for m in metrics:
         metric_value = metrics[m](labels, preds)

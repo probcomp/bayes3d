@@ -122,10 +122,21 @@ def make_unfiform_grid(n, d):
     # n: the minimum and maximum position delta on each dimension (x, y, z).
     return jax3dp3.make_translation_grid_enumeration(-d, -d, -d, d, d, d, n, n, n)
 
-    def prior(new_pose, prev_poses):
+    def prior(new_pose, prev_poses, ewma_alpha=0.15):
         new_pose = new_pose[:3, 3]
+        new_pose = new_pose.at[1].set(jnp.minimum(new_pose[1], config.table_y))
+
+        # for gravity, prior is to move downwards
         gravity_shift = jnp.array([0.0, config.gravity_shift_prior, 0.0])
-        velocity_shift = jnp.diff(prev_poses[:, :3, 3], axis=0).mean(axis=0)
+
+        # for velocity, use exponentially-weighted moving average
+        poses_diffs = jnp.diff(prev_poses[:, :3, 3], axis=0)
+        velocity_shift = jnp.array(
+            [
+                (p * (ewma_alpha * (1 - ewma_alpha) ** i))
+                for i, p in enumerate(poses_diffs[::-1])
+            ]
+        ).sum(axis=0)
 
         prev_pose = prev_poses[-1][:3, 3]
         prior_shifts = gravity_shift + velocity_shift

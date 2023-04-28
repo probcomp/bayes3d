@@ -12,7 +12,7 @@ class Config:
 
     # Enumerative tracking
     iterations_per_step = 1
-    num_past_poses = 3
+    num_past_poses = 6
     grid_n = 7
     grid_deltas = [0.15, 0.1, 0.05]
 
@@ -25,6 +25,7 @@ class swap_config(Config):
     scene = "swap"
     receptacle_name = "mug"
     start_t = 11
+    table_y = 0.5
 
 
 class gravity_config(Config):
@@ -32,6 +33,7 @@ class gravity_config(Config):
     receptacle_name = "bowl"
     start_t = 36
     num_steps = 50
+    table_y = 0.5
 
 
 CONFIG_MAP = {c.scene: c for c in {swap_config, gravity_config}}
