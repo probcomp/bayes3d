@@ -1,5 +1,9 @@
 #!/bin/bash
 
+mkdir -p assets/tum
+wget http://www.doc.ic.ac.uk/~ahanda/living_room_traj1_frei_png.tar.gz -P assets/tum
+tar -xf assets/tum/living_room_traj1_frei_png.tar.gz -C assets/tum
+
 export BOP_SITE=https://bop.felk.cvut.cz/media/data/bop_datasets
 mkdir -p assets/bop
 mkdir -p assets/ycb_video_models
@@ -25,3 +29,4 @@ file_name="ycb_video_models.zip"
 gdown --id "${file_id}" -O "${file_name}"
 unzip "${file_name}" -d assets/ycb_video_models
 rm "${file_name}"
+
