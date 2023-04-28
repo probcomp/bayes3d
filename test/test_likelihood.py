@@ -10,7 +10,9 @@ rendered_seg = jnp.ones((H,W))
 r_array = jnp.linspace(0.01, 0.1,100)
 outlier_array = jnp.linspace(0.01, 0.1,100)
 
-j.threedp3_likelihood(obs, rendered, rendered_seg, jnp.array([0.1, 0.2]), 0.1, 0.1)
+j.threedp3_likelihood_multi_r(
+    obs, rendered, rendered_seg, jnp.array([0.1, 0.2]), 0.1, 0.1
+)
 
 
 

@@ -10,26 +10,40 @@ FILTER_SIZE = 3
 @functools.partial(
     jnp.vectorize,
     signature='(m)->()',
-    excluded=(1,2,3,4,5,),
+    excluded=(1,2,3,4,5,6,7),
 )
 def gausssian_mixture_per_pixel_multi_r(
     ij,
-    data_xyz: jnp.ndarray,
+    observed_xyz: jnp.ndarray,
     model_xyz_padded: jnp.ndarray,
     r_padded: jnp.ndarray,
-    num_mixture_components, 
+    num_mixture_components,
+    outlier_prob,
+    outlier_volume,
     filter_size: int,
 ):
-    dists = data_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz_padded, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
+    dists = observed_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz_padded, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
     r = jax.lax.dynamic_slice(r_padded, (ij[0], ij[1],), (2*filter_size + 1, 2*filter_size + 1,))
-    prob = ((jax.scipy.stats.norm.pdf(dists, loc=0, scale=jnp.sqrt(r)[...,None])).prod(-1) / num_mixture_components).sum()
-    return prob
+    log_prob_per_mixture_component = (
+        jax.scipy.stats.norm.logpdf(dists, loc=0, scale=jnp.sqrt(r)[...,None]).sum(-1) - 
+        jnp.log(num_mixture_components)
+    )
+    log_prob = jax.scipy.special.logsumexp(
+        log_prob_per_mixture_component,
+        b=(1.0 - outlier_prob)
+    )
+    log_prob_with_outlier_model = jax.scipy.special.logsumexp(
+        jnp.array([log_prob, jnp.log(outlier_prob)-jnp.log(outlier_volume)])
+    )
+    return log_prob_with_outlier_model
 
-def gaussian_mixture_image_multi_r(
+def threedp3_likelihood_multi_r(
     observed_xyz: jnp.ndarray,
     rendered_xyz: jnp.ndarray,
-    rendered_seg: jnp.ndarray,
-    r_array
+    rendered_seg,
+    r_array,
+    outlier_prob,
+    outlier_volume,
 ):
     filter_size = FILTER_SIZE
     num_mixture_components = observed_xyz.shape[1] * observed_xyz.shape[0]
@@ -40,31 +54,20 @@ def gaussian_mixture_image_multi_r(
     )
 
     r = r_array[jnp.abs(rendered_seg[..., None] - jnp.arange(len(r_array))).argmin(-1)]
-    r_padded =  jax.lax.pad(r,
-        1e-10, 
+    r_padded =  jax.lax.pad(
+        r,
+        1e-10,
         ((filter_size,filter_size,0,),(filter_size,filter_size,0,),)
     )
 
     jj, ii = jnp.meshgrid(jnp.arange(observed_xyz.shape[1]), jnp.arange(observed_xyz.shape[0]))
     indices = jnp.stack([ii,jj],axis=-1)
-    probs = gausssian_mixture_per_pixel_multi_r(
+    log_probs = gausssian_mixture_per_pixel_multi_r(
         indices, observed_xyz, rendered_xyz_padded,
-        r_padded, num_mixture_components, filter_size)
-    return probs
-
-gaussian_mixture_image_multi_r_jit = jax.jit(gaussian_mixture_image_multi_r)
-
-def threedp3_likelihood_multi_r(
-    observed_xyz: jnp.ndarray,
-    rendered_xyz: jnp.ndarray,
-    rendered_seg,
-    r_array,
-    outlier_prob,
-    outlier_volume,
-):
-    probs = gaussian_mixture_image_multi_r(observed_xyz, rendered_xyz, rendered_seg, r_array)
-    probs_with_outlier_model = probs * (1.0 - outlier_prob)  + outlier_prob / outlier_volume
-    return jnp.log(probs_with_outlier_model).sum()  
+        r_padded, num_mixture_components, 
+        outlier_prob, outlier_volume, filter_size
+    )
+    return log_probs
 
 threedp3_likelihood_multi_r_parallel = jax.vmap(threedp3_likelihood_multi_r, in_axes=(None, 0, 0, None, None, None))
 threedp3_likelihood_multi_r_parallel_jit = jax.jit(threedp3_likelihood_multi_r_parallel)
@@ -92,12 +95,12 @@ threedp3_likelihood_multi_r_full_hierarchical_bayes_jit = jax.jit(threedp3_likel
 )
 def gausssian_mixture_per_pixel(
     ij,
-    data_xyz: jnp.ndarray,
+    observed_xyz: jnp.ndarray,
     model_xyz: jnp.ndarray,
     filter_size: int,
     r
 ):
-    dists = data_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
+    dists = observed_xyz[ij[0], ij[1], :3] - jax.lax.dynamic_slice(model_xyz, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
     probs = (jax.scipy.stats.norm.pdf(dists, loc=0, scale=jnp.sqrt(r))).prod(-1).sum()
     return probs
 
