@@ -1,6 +1,7 @@
 import open3d as o3d
 import numpy as np
 import jax3dp3 as j
+import jax.numpy as jnp
 
 def trimesh_to_o3d_triangle_mesh(trimesh_mesh):
     mesh = o3d.geometry.TriangleMesh()
@@ -117,11 +118,10 @@ class O3DVis(object):
         up = -np.array(camera_pose[:3,1])
         self.render.scene.camera.look_at(center, eye, up)
         img = np.array(self.render.render_to_image())
-        img = j.add_rgba_dimension(img)
-        depth = np.array(viz.render.render_to_depth_image(z_in_view_space=True))
+        rgb = j.add_rgba_dimension(img)
+        depth = jnp.array(self.render.render_to_depth_image(z_in_view_space=True))
 
-        # img = img.at[(img[:,:,:3].sum(-1)) > 255, -1].set(0.0)
-        return rgb,img
+        return j.RGBD(rgb, depth, camera_pose, intrinsics)
 
     def make_camera(self, intrinsics, pose, size):
         cx = intrinsics.cx
