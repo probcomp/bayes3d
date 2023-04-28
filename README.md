@@ -28,10 +28,12 @@ nvcc --version
 cat /usr/local/cuda/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
 ```
 
-<!-- Add the following to `~/.bashrc`
+Add this to bashrc
 ```
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
+
+<!-- Add the following to `~/.bashrc`
 
 Install additional libraries and restart to apply changes
 ```
