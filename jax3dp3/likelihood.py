@@ -37,7 +37,7 @@ def gausssian_mixture_per_pixel_multi_r(
     )
     return log_prob_with_outlier_model
 
-def threedp3_likelihood_multi_r(
+def threedp3_likelihood_multi_r_per_pixel(
     observed_xyz: jnp.ndarray,
     rendered_xyz: jnp.ndarray,
     rendered_seg,
@@ -68,6 +68,20 @@ def threedp3_likelihood_multi_r(
         outlier_prob, outlier_volume, filter_size
     )
     return log_probs
+    
+
+def threedp3_likelihood_multi_r(
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    rendered_seg,
+    r_array,
+    outlier_prob,
+    outlier_volume,
+):
+    log_probs_per_pixel = threedp3_likelihood_multi_r_per_pixel(
+        observed_xyz, rendered_xyz, rendered_seg, r_array, outlier_prob, outlier_volume
+    )
+    return log_probs_per_pixel.sum()
 
 threedp3_likelihood_multi_r_parallel = jax.vmap(threedp3_likelihood_multi_r, in_axes=(None, 0, 0, None, None, None))
 threedp3_likelihood_multi_r_parallel_jit = jax.jit(threedp3_likelihood_multi_r_parallel)
