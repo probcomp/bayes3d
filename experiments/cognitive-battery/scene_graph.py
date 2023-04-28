@@ -26,10 +26,11 @@ class BoundingBox:
         return jnp.all(other_bbox.maxs > (self.maxs - threshold)) and jnp.all(
             other_bbox.mins < (self.mins + threshold)
         )
-    
+
     def move(self, vector):
         self.mins += vector
         self.maxs += vector
+
 
 class SceneObject:
     def __init__(self, mesh_name, bbox, transform):

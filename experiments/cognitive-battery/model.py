@@ -178,7 +178,6 @@ def scorer(rendered_image, gt, r=0.1, op=0.005, ov=0.5):
         gt_image = jnp.array(coord_images[t])
         for _ in range(config.iterations_per_step):
             for i in range(n_objects):
-                
                 # Check for occlusion
                 if i == reward_idx:
                     occluded = utils.check_occlusion(
