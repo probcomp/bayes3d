@@ -6,14 +6,11 @@ import jax3dp3
 import jax3dp3 as j
 import jax3dp3.transforms_3d as t3d
 import numpy as np
+import heapq
 
-R_SWEEP = jnp.array([0.02])
-OUTLIER_PROB=0.1
-OUTLIER_VOLUME=1.0
-
-####################
+####################################################################################
 # Scheduling functions
-####################
+####################################################################################
 
 def make_schedules_contact_params(grid_widths, rotation_angle_widths, grid_params):
     ## version of make_schedules with angle range reduction based on previous iter
@@ -72,7 +69,11 @@ def score_poses_batched(
     obj_idx,
     obs_point_cloud_image,
     obs_point_cloud_image_complement,
-    pose_proposals
+    pose_proposals,
+    r_sweep,
+    outlier_prob,
+    outlier_volume,
+    filter_size
 ):
     all_weights = None
     batches = jnp.array_split(pose_proposals, pose_proposals.shape[0] // 2000)
@@ -82,18 +83,19 @@ def score_poses_batched(
         rendered_depth = render[...,2]
         rendered_point_cloud_images = j.t3d.unproject_depth_vmap_jit(rendered_depth, renderer.intrinsics)
 
-        R_SWEEP = jnp.array([0.02])
-        OUTLIER_PROB=jnp.array([0.1])
-        OUTLIER_VOLUME=1.0
-
-        weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
-            obs_point_cloud_image, rendered_point_cloud_images, R_SWEEP, OUTLIER_PROB, OUTLIER_VOLUME
+        weights = jax3dp3.threedp3_likelihood_parallel_jit(
+            obs_point_cloud_image, rendered_point_cloud_images, 
+            r_sweep, outlier_prob, outlier_volume, filter_size
         )
+        # weights = jax3dp3.threedp3_likelihood_parallel_jit(
+        #     obs_point_cloud_image, rendered_point_cloud_images, 
+        #     r_sweep, outlier_prob, outlier_volume
+        # )
 
         if all_weights == None:
             all_weights = weights
         else:
-            all_weights = jnp.hstack((all_weights, weights))
+            all_weights = jnp.hstack((1, weights))
 
         print(f"batch {batch_idx} complete")
 
@@ -140,10 +142,11 @@ def get_probabilites(hypotheses):
     normalized_scores = jax3dp3.utils.normalize_log_scores(scores)
     return normalized_scores
 
+top_k_jit = jax.jit(jax.lax.top_k, static_argnums=(1,))
 
-#################
+#################################################################################
 # c2f main functions
-#################
+#################################################################################
 
 def c2f_contact_parameters(
     renderer,
@@ -226,31 +229,33 @@ def c2f_full_pose(
     obs_point_cloud_image_masked,
     obs_point_cloud_image_complement,
     sched,
-    obj_idx_hypotheses=None
+    r_sweep,
+    outlier_prob,
+    outlier_volume,
+    filter_size,
+    obj_idx_hypotheses=None,
+    top_k=1  # top_k per id hypothesis (by default 1 for known identity)
 ):
     print("Entering full pose-only coarse to fine")
-    best_weight = -jnp.inf
 
     center = jnp.mean(obs_point_cloud_image[obs_point_cloud_image[:,:,2]< renderer.intrinsics.far],axis=0)
     
     pose_init = t3d.transform_from_pos(center)
 
     # Setup object id hypotheses; default is every model loaded into the renderer
-    hypotheses = []
+    hypotheses = []; heapq.heapify(hypotheses)
+
     if obj_idx_hypotheses is None:  
         obj_idx_hypotheses = jnp.arange(len(renderer.meshes))
     for obj_idx in obj_idx_hypotheses:
-        hypotheses += [(-jnp.inf, obj_idx, pose_init)]
+        hypotheses.append((-1, -jnp.inf, obj_idx, pose_init,))  # to sort highest-weight to lowest
     hypotheses_over_time = []
 
-    for c2f_iter in range(len(sched)):
+    for c2f_iter in range(0, len(sched)):
         pose_sweep_delta = sched[c2f_iter]
-        new_hypotheses = []
 
-        for hyp in hypotheses:
-            old_score = hyp[0]
-            obj_idx = hyp[1]
-            pose_hyp = hyp[2]
+        for _ in range(len(hypotheses)):
+            _, old_score, obj_idx, pose_hyp = hypotheses[0]   # best from previous iter (dont pop here for performance gain)
             new_pose_proposals = jnp.einsum('ij,ajk->aik', pose_hyp, pose_sweep_delta)
             
             weights = score_poses_batched(
@@ -258,25 +263,33 @@ def c2f_full_pose(
                                 obj_idx,
                                 obs_point_cloud_image,
                                 obs_point_cloud_image_complement,
-                                new_pose_proposals
+                                new_pose_proposals,
+                                r_sweep=r_sweep,
+                                outlier_prob=outlier_prob,
+                                outlier_volume=outlier_volume,
+                                filter_size=filter_size
                             )
 
-            r_idx, best_idx = jnp.unravel_index(weights.argmax(), weights.shape)            
-            new_hypotheses.append(
-                (
-                    weights[r_idx, best_idx],
-                    obj_idx,
-                    new_pose_proposals[best_idx],
-                )
-            )
+            # best_idx = jnp.unravel_index(weights.argmax(), weights.shape)  
+            best_weights, indices = top_k_jit(weights, top_k)         
+            best_proposals = new_pose_proposals[indices]
 
-            # render if new best found
-            if weights.max() > best_weight:
-                best_weight = weights.max()
-                gt_idx, best_pose = obj_idx, new_pose_proposals[best_idx]
-                rendered = renderer.render_single_object(best_pose, gt_idx)  
+            print("best_weights ", best_weights)
+            for top_id, (new_score, new_pose_hyp) in enumerate(zip(best_weights, best_proposals)):
+                from IPython import embed; embed()
+                heapq.heappush(hypotheses, (c2f_iter, float(new_score), obj_idx, new_pose_hyp,))
+                heapq.heappushpop(hypotheses, (c2f_iter, old_score, obj_idx, pose_hyp,))  # ** also push the "parent" prediction to heap 
+
+                # viz
+                rendered = renderer.render_single_object(new_pose_hyp, obj_idx)  
                 viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.5)
-                viz.save(f"_best_pred_{c2f_iter}.png")       
+                viz.save(f"_best_pred_{c2f_iter}_{top_id}.png")       
+
+            # maintain min particles invariance (TODO: check behavior when `r` evolves per c2f step; may need to reevaluate old)
+            for _ in range(top_k):
+                heapq.heappop(hypotheses)
+
+            new_hypotheses = [x for x in hypotheses]
 
         hypotheses_over_time.append(new_hypotheses)
         hypotheses = new_hypotheses
@@ -292,7 +305,7 @@ def c2f_occlusion_viz(
     segmentation_image,
     camera_params
 ):
-    (h,w,fx,fy,cx,cy, near, far) = camerax_params
+    (h,w,fx,fy,cx,cy, near, far) = camera_params
     rgb_viz = jax3dp3.viz.resize_image(jax3dp3.viz.get_rgb_image(rgb_original, 255.0), h,w)
     all_images_overlayed = jax3dp3.render_multiobject(pose_proposals, [obj_idx for _ in range(pose_proposals.shape[0])])
     enumeration_viz_all = jax3dp3.viz.get_depth_image(all_images_overlayed[:,:,2], max=far)
