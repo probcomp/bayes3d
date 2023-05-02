@@ -66,12 +66,12 @@ pose_estimates_over_time = []
 for gt_image in gt_images:
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, translation_deltas)
     rendered_images = renderer.render_parallel(proposals, 0)
-    weights_new = j.threedp3_likelihood_parallel_jit(gt_image, rendered_images, 0.05, 0.1, 10**3)
+    weights_new = j.threedp3_likelihood_parallel_jit(gt_image, rendered_images, 0.05, 0.1, 10**3, 3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, rotation_deltas)
     rendered_images = renderer.render_parallel(proposals, 0)
-    weights_new = j.threedp3_likelihood_parallel_jit(gt_image, rendered_images, 0.05, 0.1, 10**3)
+    weights_new = j.threedp3_likelihood_parallel_jit(gt_image, rendered_images, 0.05, 0.1, 10**3, 3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     pose_estimates_over_time.append(pose_estimate)

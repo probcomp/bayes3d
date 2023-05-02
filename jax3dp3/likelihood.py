@@ -90,14 +90,14 @@ threedp3_likelihood_multi_r_jit = jax.jit(
     threedp3_likelihood_multi_r, static_argnames=('filter_size',)
 )
 threedp3_likelihood_multi_r_parallel_jit = jax.jit(
-    jax.vmap(threedp3_likelihood_multi_r, in_axes=(None, 0, 0, None, None, None)),
+    jax.vmap(threedp3_likelihood_multi_r, in_axes=(None, 0, 0, None, None, None, None)),
     static_argnames=('filter_size',)
 )
-threedp3_likelihood_multi_r_full_hierarchical_bayes = jax.jit(jax.vmap(jax.vmap(jax.vmap(
+threedp3_likelihood_multi_r_full_hierarchical_bayes_jit = jax.jit(jax.vmap(jax.vmap(jax.vmap(
         threedp3_likelihood_multi_r,
-       in_axes=(None, None, None, None, 0, None)),
-       in_axes=(None, None, None, 0, None, None)),
-       in_axes=(None, 0, 0, None, None, None)
+       in_axes=(None, None, None, None, 0, None, None)),
+       in_axes=(None, None, None, 0, None, None, None)),
+       in_axes=(None, 0, 0, None, None, None, None)
 ), static_argnames=('filter_size',)
 )
 
@@ -174,6 +174,6 @@ threedp3_likelihood_parallel_jit = jax.jit(jax.vmap(
 threedp3_likelihood_with_r_parallel_jit = jax.jit(
     jax.vmap(jax.vmap(
         threedp3_likelihood,
-        in_axes=(None, 0, None, None, None)),
-        in_axes=(None, None, 0, None, None)),
+        in_axes=(None, 0, None, None, None, None)),
+        in_axes=(None, None, 0, None, None, None)),
 )
