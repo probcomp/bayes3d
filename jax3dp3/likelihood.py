@@ -168,7 +168,7 @@ def threedp3_likelihood(
 
 threedp3_likelihood_jit = jax.jit(threedp3_likelihood,static_argnames=('filter_size',))
 threedp3_likelihood_parallel_jit = jax.jit(jax.vmap(
-    threedp3_likelihood, in_axes=(None, 0, None, None, None))
+    threedp3_likelihood, in_axes=(None, 0, None, None, None, None))
     ,static_argnames=('filter_size',)
 )
 threedp3_likelihood_with_r_parallel_jit = jax.jit(

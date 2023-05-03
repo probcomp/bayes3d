@@ -64,6 +64,7 @@ def batch_split(proposals, num_batches):
     print(f"{num_batches} batches with batchsize {len(proposals) // num_batches}")
     return jnp.array_split(proposals, num_batches)
 
+
 def score_poses_batched(
     renderer,
     obj_idx,
@@ -87,19 +88,14 @@ def score_poses_batched(
             obs_point_cloud_image, rendered_point_cloud_images, 
             r_sweep, outlier_prob, outlier_volume, filter_size
         )
-        # weights = jax3dp3.threedp3_likelihood_parallel_jit(
-        #     obs_point_cloud_image, rendered_point_cloud_images, 
-        #     r_sweep, outlier_prob, outlier_volume
-        # )
 
-        if all_weights == None:
-            all_weights = weights
+        if all_weights is None:
+            all_weights = weights 
         else:
-            all_weights = jnp.hstack((1, weights))
+            all_weights = jnp.hstack((all_weights, weights))
 
         print(f"batch {batch_idx} complete")
 
-    # from IPython import embed; embed()
     return all_weights
 
 def score_contact_parameters(
@@ -143,6 +139,7 @@ def get_probabilites(hypotheses):
     return normalized_scores
 
 top_k_jit = jax.jit(jax.lax.top_k, static_argnums=(1,))
+
 
 #################################################################################
 # c2f main functions
@@ -239,7 +236,6 @@ def c2f_full_pose(
     print("Entering full pose-only coarse to fine")
 
     center = jnp.mean(obs_point_cloud_image[obs_point_cloud_image[:,:,2]< renderer.intrinsics.far],axis=0)
-    
     pose_init = t3d.transform_from_pos(center)
 
     # Setup object id hypotheses; default is every model loaded into the renderer
@@ -248,14 +244,16 @@ def c2f_full_pose(
     if obj_idx_hypotheses is None:  
         obj_idx_hypotheses = jnp.arange(len(renderer.meshes))
     for obj_idx in obj_idx_hypotheses:
-        hypotheses.append((-1, -jnp.inf, obj_idx, pose_init,))  # to sort highest-weight to lowest
+        hypotheses.append((-1, jnp.inf, obj_idx, pose_init,))  # min heap; negative weights to sort highest-weight to lowest
     hypotheses_over_time = []
 
     for c2f_iter in range(0, len(sched)):
         pose_sweep_delta = sched[c2f_iter]
-
-        for _ in range(len(hypotheses)):
-            _, old_score, obj_idx, pose_hyp = hypotheses[0]   # best from previous iter (dont pop here for performance gain)
+        print("==============CURRENT C2F ITER ================", c2f_iter )
+        # from IPython import embed; embed()
+        num_existing_particles = len(hypotheses)  # 1 for first round, top_k subsequently
+        for ip in range(num_existing_particles):
+            prev_c2f_iter, old_score_neg, obj_idx, pose_hyp = hypotheses[0]   # best from previous iter (dont pop here for performance gain)
             new_pose_proposals = jnp.einsum('ij,ajk->aik', pose_hyp, pose_sweep_delta)
             
             weights = score_poses_batched(
@@ -269,30 +267,28 @@ def c2f_full_pose(
                                 outlier_volume=outlier_volume,
                                 filter_size=filter_size
                             )
-
-            # best_idx = jnp.unravel_index(weights.argmax(), weights.shape)  
             best_weights, indices = top_k_jit(weights, top_k)         
             best_proposals = new_pose_proposals[indices]
 
             print("best_weights ", best_weights)
+
+            # Rearrange heap
+            heapq.heappushpop(hypotheses, (c2f_iter, old_score_neg, obj_idx, pose_hyp,))  # ** re-push the "parent" prediction to heap 
             for top_id, (new_score, new_pose_hyp) in enumerate(zip(best_weights, best_proposals)):
-                from IPython import embed; embed()
-                heapq.heappush(hypotheses, (c2f_iter, float(new_score), obj_idx, new_pose_hyp,))
-                heapq.heappushpop(hypotheses, (c2f_iter, old_score, obj_idx, pose_hyp,))  # ** also push the "parent" prediction to heap 
+                new_score_neg = -float(new_score)
+                heapq.heappush(hypotheses, (c2f_iter, new_score_neg - np.random.rand()*1e-6, obj_idx, new_pose_hyp,))
+                # # viz
+                # if top_id == 0:
+                #     rendered = renderer.render_single_object(new_pose_hyp, obj_idx)  
+                #     viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.1)
+                #     viz.save(f"_best_pred_{c2f_iter}_{ip}.png")       
 
-                # viz
-                rendered = renderer.render_single_object(new_pose_hyp, obj_idx)  
-                viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.5)
-                viz.save(f"_best_pred_{c2f_iter}_{top_id}.png")       
+        # maintain top-k particles (from whole experiment)
+        # (TODO: check behavior when `r` evolves per c2f step; may need to reevaluate prev-iter hyp with new `r`)        
+        hypotheses = heapq.nsmallest(top_k, hypotheses)   # largest score (smallest negative score)
+        heapq.heapify(hypotheses)
 
-            # maintain min particles invariance (TODO: check behavior when `r` evolves per c2f step; may need to reevaluate old)
-            for _ in range(top_k):
-                heapq.heappop(hypotheses)
-
-            new_hypotheses = [x for x in hypotheses]
-
-        hypotheses_over_time.append(new_hypotheses)
-        hypotheses = new_hypotheses
+        hypotheses_over_time.append([(-neg_score, obj_idx, pose) for (iter, neg_score, obj_idx, pose) in hypotheses])
     return hypotheses_over_time
 
 def c2f_occlusion_viz(

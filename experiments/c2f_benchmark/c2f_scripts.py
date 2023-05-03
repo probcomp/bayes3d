@@ -7,10 +7,10 @@ import jax
 import jax.numpy as jnp
 
 
-R_SWEEP = jnp.array([0.02])
+R_SWEEP = jnp.array([0.03])
 OUTLIER_PROB=0.1
-OUTLIER_VOLUME=1.0
-NUM_BATCHES=45*5
+OUTLIER_VOLUME = 1000.0**3
+FILTER_SIZE=3
 
 def run_grid(seg_id, sched, r_overlap_check=0.06, r_final = 0.07, viz=True):
     raise NotImplementedError("implement")
@@ -55,7 +55,7 @@ def run_c2f_id_and_contact(renderer, image:RGBD, contact_plane_pose_in_cam_frame
 
     return results
 
-def run_c2f_full_pose_only(renderer, image:RGBD, scheds):
+def run_c2f_full_pose_only(renderer, image:RGBD, scheds, particles=1):
     """
     Run c2f for pose-only enumerative inference for object(s) with known ID/segmentation map
     """
@@ -85,7 +85,12 @@ def run_c2f_full_pose_only(renderer, image:RGBD, scheds):
             obs_point_cloud_image_masked,
             obs_point_cloud_image_complement,
             scheds,
-            obj_idx_hypotheses=[gt_idx]
+            r_sweep=R_SWEEP,
+            outlier_prob=OUTLIER_PROB,
+            outlier_volume=OUTLIER_VOLUME,
+            filter_size=FILTER_SIZE,
+            obj_idx_hypotheses=[gt_idx],
+            top_k=particles
         )
         results.append(hypotheses_over_time)
 
@@ -96,15 +101,15 @@ def run_c2f(renderer, image:RGBD,
             scheds, 
             infer_id=True, 
             infer_contact=True, 
-            viz=True):
+            particles=1):
     if infer_id and infer_contact:
-        results = run_c2f_id_and_contact(renderer, image, scheds)
+        results = run_c2f_id_and_contact(renderer, image, scheds, particles)
     if not infer_id and infer_contact:
-        results = run_c2f_contact_pose_only(renderer, image, scheds)
+        results = run_c2f_contact_pose_only(renderer, image, scheds, particles)
     if not infer_id and not infer_contact:
-        results = run_c2f_full_pose_only(renderer, image, scheds)
+        results = run_c2f_full_pose_only(renderer, image, scheds, particles)
     if infer_id and not infer_contact:
-        results = run_c2f_id_only(renderer, image, scheds)
+        results = run_c2f_id_only(renderer, image, scheds, particles)
     
     return results
     
