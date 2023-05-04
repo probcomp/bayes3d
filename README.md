@@ -25,6 +25,7 @@ python demo.py
 ```
 and view `demo.gif`
 
+![](assets/demo.gif)
 
 ## Assets
 
@@ -50,9 +51,9 @@ bash cosypose_setup.sh
 To test setup, run `test/test_cosypose.py`
 
 
-# Instance Setup
+## Instance Setup
 
-# Installing Cuda 11.7
+### Installing Cuda 11.7
 
 ```
 wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
@@ -65,7 +66,7 @@ sudo apt-get -y install cuda
 ```
 
 
-Installing cuDNN
+### Installing cuDNN
 In order to download cuDNN libraries, you need to go to https://developer.nvidia.com/cudnn and click on the Download cuDNN button. The webpage will ask you to login into the NVIDIA developer account. After logging in and accepting their terms and conditions, you should click on the following three links:
 
 sudo apt-get install libglu-dev
