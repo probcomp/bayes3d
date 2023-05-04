@@ -10,11 +10,10 @@ from . import ycb_loader
 from . import occlusion
 from . import meshcat
 from . import kubric_interface
-# from . import physics
-# from . import cosypose_utils
 
 from .enumerations import *
 from .renderer import *
+from .rgbd import *
 from .likelihood import *
 from .online import *
 from .camera import *
