@@ -1,7 +1,7 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-import jax3dp3 as j
+import bayes3d as j
 import trimesh
 import os
 import time

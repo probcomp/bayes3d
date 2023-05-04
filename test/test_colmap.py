@@ -1,5 +1,5 @@
 import pycolmap
-import jax3dp3 as j
+import bayes3d as j
 import os
 
 rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv")

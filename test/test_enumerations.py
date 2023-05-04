@@ -1,8 +1,8 @@
 import numpy as np 
 import jax
 import jax.numpy as jnp
-import jax3dp3.transforms_3d as t3d
-import jax3dp3 as j
+import bayes3d.transforms_3d as t3d
+import bayes3d as j
 import os
 from collections import namedtuple
 

@@ -1,5 +1,5 @@
 import os 
-import jax3dp3 as j
+import bayes3d as j
 import jax 
 import jax.numpy as jnp 
 import numpy as np

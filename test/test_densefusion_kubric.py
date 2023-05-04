@@ -10,12 +10,12 @@ import jax
 import jax.numpy as jnp
 import random
 import trimesh
-import jax3dp3.posecnn_densefusion
+import bayes3d.posecnn_densefusion
 import tools._init_paths
 from tools.test_images_utils import env_setup_posecnn, get_image_posecnn, run_posecnn, get_image_densefusion, env_setup_densefusion, run_DenseFusion
 from fcn.config import cfg, cfg_from_file
 
-import jax3dp3 as j
+import bayes3d as j
 
 
 densefusion = j.posecnn_densefusion.DenseFusion()

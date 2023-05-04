@@ -1,15 +1,15 @@
-import jax3dp3
-import jax3dp3 as j
+import bayes3d
+import bayes3d as j
 import trimesh
-import jax3dp3.transforms_3d as t3d
-import jax3dp3.pybullet_utils
+import bayes3d.transforms_3d as t3d
+import bayes3d.pybullet_utils
 import jax.numpy as jnp
 import os
 import pybullet as p
 import trimesh
 import numpy as np
 
-jax3dp3.setup_visualizer()
+bayes3d.setup_visualizer()
 
 h, w, fx,fy, cx,cy = (
     300,
@@ -62,7 +62,7 @@ obj_pose = t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), -jnp.pi/4 -
 
 gt_depth =  np.load("data.npz")["depth"]
 camera_params = (h,w,fx,fy,cx,cy,near,far)
-state = jax3dp3.OnlineJax3DP3()
+state = bayes3d.OnlineJax3DP3()
 state.start_renderer(camera_params)
 state.add_trimesh(mesh,"1")
 
@@ -72,7 +72,7 @@ obs_point_cloud_image = state.process_depth_to_point_cloud_image(gt_depth)
 
 segmentation_image = 1.0 * (gt_depth > 0.0)
 segmentation_id = 1.0
-obs_image_masked, obs_image_complement = jax3dp3.get_image_masked_and_complement(
+obs_image_masked, obs_image_complement = bayes3d.get_image_masked_and_complement(
     obs_point_cloud_image, segmentation_image, segmentation_id, far
 )
 
@@ -87,16 +87,16 @@ translations = j.enumerations.make_translation_grid_enumeration(
 pose_proposals = jnp.einsum("aij,bjk->abik", rotations, translations).reshape(-1, 4, 4)
 
 # get best pose proposal
-rendered_object_images = jax3dp3.render_parallel(t3d.inverse_pose(camera_pose) @ pose_proposals, 0)[...,:3]
-rendered_images = jax3dp3.splice_in_object_parallel(rendered_object_images, obs_image_complement)
+rendered_object_images = bayes3d.render_parallel(t3d.inverse_pose(camera_pose) @ pose_proposals, 0)[...,:3]
+rendered_images = bayes3d.splice_in_object_parallel(rendered_object_images, obs_image_complement)
 
 r_sweep = jnp.array([0.02])
 outlier_prob=0.1
 outlier_volume=1.0
-weights = jax3dp3.threedp3_likelihood_with_r_parallel_jit(
+weights = bayes3d.threedp3_likelihood_with_r_parallel_jit(
     obs_point_cloud_image, rendered_images, r_sweep, outlier_prob, outlier_volume
 )[0,:]
-probabilities = jax3dp3.utils.normalize_log_scores(weights)
+probabilities = bayes3d.utils.normalize_log_scores(weights)
 print(probabilities.sort())
 
 
@@ -108,7 +108,7 @@ alternate_camera_pose = t3d.transform_from_rot_and_pos(
     t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]), - jnp.pi/2 - jnp.pi/2), 
     jnp.array([0.0, 0.0, 0.2])
 )
-rendered_object_images = jax3dp3.render_parallel(t3d.inverse_pose(alternate_camera_pose) @ pose_proposals, 0)[order[:NUM],:,:,2]
+rendered_object_images = bayes3d.render_parallel(t3d.inverse_pose(alternate_camera_pose) @ pose_proposals, 0)[order[:NUM],:,:,2]
 
 
 images = []

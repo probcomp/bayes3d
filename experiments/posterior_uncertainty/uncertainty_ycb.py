@@ -1,7 +1,7 @@
 
-import jax3dp3 as j 
+import bayes3d as j 
 import trimesh
-import jax3dp3.transforms_3d as t3d
+import bayes3d.transforms_3d as t3d
 import jax.numpy as jnp
 import os
 import numpy as np
@@ -203,7 +203,7 @@ j.get_rgb_image(transparent).save("transparent.png")
 #         mesh_path
 #     )
 
-# import jax3dp3.kubric_interface
+# import bayes3d.kubric_interface
 # rgb, seg, depth = jax3dp3.kubric_interface.render_kubric([mesh_paths[obj_id]], 
 #     [
 #         jnp.array([obj_pose @offset_poses[obj_id]])

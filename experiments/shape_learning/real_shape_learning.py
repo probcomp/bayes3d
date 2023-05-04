@@ -5,8 +5,8 @@ import jax.numpy as jnp
 import trimesh
 import time
 import pickle
-import jax3dp3.transforms_3d as t3d
-import jax3dp3 as j
+import bayes3d.transforms_3d as t3d
+import bayes3d as j
 from dataclasses import dataclass
 import sys
 import warnings
@@ -29,9 +29,9 @@ image = images[0]
 
 from IPython import embed; embed()
 
-import jax3dp3.segment_scene
+import bayes3d.segment_scene
 obs_point_cloud_image = j.t3d.unproject_depth(image.depth, image.intrinsics)
-segmentation_image, mask, viz = jax3dp3.segment_scene.segment_scene(
+segmentation_image, mask, viz = bayes3d.segment_scene.segment_scene(
     image.rgb,
     obs_point_cloud_image,
     image.intrinsics

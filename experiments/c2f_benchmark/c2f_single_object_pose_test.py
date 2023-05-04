@@ -2,8 +2,8 @@ import numpy as np
 import os
 import jax.numpy as jnp
 import time
-import jax3dp3.transforms_3d as t3d
-import jax3dp3 as j
+import bayes3d.transforms_3d as t3d
+import bayes3d as j
 
 from c2f_scripts import *
 

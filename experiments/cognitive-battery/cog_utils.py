@@ -5,8 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-import jax3dp3
-from jax3dp3 import Renderer
+import bayes3d
+from bayes3d import Renderer
 
 
 def get_object_transforms(obj_name: str, init_transform: jnp.ndarray) -> jnp.ndarray:
@@ -44,7 +44,7 @@ def get_object_transforms(obj_name: str, init_transform: jnp.ndarray) -> jnp.nda
 
 def get_camera_intrinsics(
     width: float, height: float, fov: float, near: float = 0.001, far: float = 50.0
-) -> jax3dp3.Intrinsics:
+) -> bayes3d.Intrinsics:
     """
     Recovers the camera intrinsics details given image and capture parameters.
     """
@@ -55,7 +55,7 @@ def get_camera_intrinsics(
     fov_x = 2 * np.arctan(aspect_ratio * np.tan(fov_y / 2.0))
     fx = cx / np.tan(fov_x / 2.0)
     fy = cy / np.tan(fov_y / 2.0)
-    return jax3dp3.Intrinsics(height, width, fx, fy, cx, cy, near, far)
+    return bayes3d.Intrinsics(height, width, fx, fy, cx, cy, near, far)
 
 
 def find_best_mesh(

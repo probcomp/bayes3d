@@ -5,8 +5,8 @@ import jax.numpy as jnp
 import trimesh
 import time
 import pickle
-import jax3dp3.transforms_3d as t3d
-import jax3dp3 as j
+import bayes3d.transforms_3d as t3d
+import bayes3d as j
 import open3d as o3d
 
 j.meshcat.setup_visualizer()

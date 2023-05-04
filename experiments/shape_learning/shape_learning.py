@@ -7,8 +7,8 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 
-import jax3dp3
-import jax3dp3.transforms_3d as t3d
+import bayes3d
+import bayes3d.transforms_3d as t3d
 import matplotlib.pyplot as plt
 
 
@@ -25,7 +25,7 @@ obj_number = 4
 def get_obj_cloud_from_img(img_id, obj_number):
 
     # process image
-    test_img = jax3dp3.ycb_loader.get_test_img(scene_id, img_id, os.environ["YCB_DIR"])
+    test_img = bayes3d.ycb_loader.get_test_img(scene_id, img_id, os.environ["YCB_DIR"])
     depth_data = test_img.get_depth_image()
 
     segmentation_data = test_img.get_segmentation_image() 
@@ -77,9 +77,9 @@ for cloud in all_cloud_list:
 plt.savefig("cloud.png")
 
 
-jax3dp3.meshcat.setup_visualizer()
+bayes3d.meshcat.setup_visualizer()
 
-jax3dp3.meshcat.show_cloud("cloud", all_cloud / 100.0)
+bayes3d.meshcat.show_cloud("cloud", all_cloud / 100.0)
 
 from IPython import embed; embed()
 
@@ -93,12 +93,12 @@ mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
     pcd, o3d.utility.DoubleVector([radius, radius*2.0]))
 tri_mesh = trimesh.Trimesh(np.asarray(mesh.vertices), np.asarray(mesh.triangles),
             vertex_normals=np.asarray(mesh.vertex_normals))
-jax3dp3.meshcat.show_trimesh("obj", jax3dp3.mesh.scale_mesh(tri_mesh, 0.1))
+bayes3d.meshcat.show_trimesh("obj", bayes3d.mesh.scale_mesh(tri_mesh, 0.1))
 # jax3dp3.meshcat.clear()
-jax3dp3.meshcat.VISUALIZER.delete()
+bayes3d.meshcat.VISUALIZER.delete()
 
 
 
-bbox = jax3dp3.utils.aabb(cloud)
+bbox = bayes3d.utils.aabb(cloud)
 
 from IPython import embed; embed()

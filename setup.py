@@ -3,24 +3,15 @@ import subprocess
 import os
 
 setuptools.setup(
-    name='jax3dp3',
+    name='bayes3d',
     version='1.0.0',
-    package_data={
-        'jax3dp3': [
+    package_data={  
+        'bayes3d': [
             'nvdiffrast/common/*.h',
             'nvdiffrast/common/*.inl',
             'nvdiffrast/common/*.cu',
             'nvdiffrast/common/*.cpp',
-            'nvdiffrast/common/cudaraster/*.hpp',
-            'nvdiffrast/common/cudaraster/impl/*.cpp',
-            'nvdiffrast/common/cudaraster/impl/*.hpp',
-            'nvdiffrast/common/cudaraster/impl/*.inl',
-            'nvdiffrast/common/cudaraster/impl/*.cu',
             'nvdiffrast/lib/*.h',
-            'nvdiffrast/torch/*.h',
-            'nvdiffrast/torch/*.inl',
-            'nvdiffrast/torch/*.cpp',
-            'nvdiffrast/torch/*.cu',
         ] + (['nvdiffrast/lib/*.lib'] if os.name == 'nt' else [])
     },
     include_package_data=True,

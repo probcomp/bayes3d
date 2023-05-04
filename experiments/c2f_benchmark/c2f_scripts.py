@@ -1,6 +1,6 @@
-import jax3dp3.transforms_3d as t3d
-from jax3dp3.renderer import RGBD
-import jax3dp3 as j
+import bayes3d.transforms_3d as t3d
+from bayes3d.renderer import RGBD
+import bayes3d as j
 import time
 import numpy as np
 import jax

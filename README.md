@@ -1,45 +1,21 @@
-# Jax3DP3
+# Bayes3D
 
 
 ## Setup
 
 Setup virtualenv and install dependencies:
 ```
-conda create -n jax python=3.8
-conda activate jax
+conda create -n bayes3d python=3.8
+conda activate bayes3d
 pip install -r requirements.txt
-
-# Installs the wheel compatible with Cuda >= 11.4 and cudnn >= 8.2
 pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
-# Installs the wheel compatible with Cuda >= 11.1 and cudnn >= 8.0.5
-pip install "jax[cuda11_cudnn805]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
 python setup.py develop
 ```
 
-After running the setup script, make sure to **restart the terminal** to apply changes.
-
-Using a *Deep Learning AMI GPU PyTorch 1.13.1 (Ubuntu 20.04) 20230309* instance of AWS comes with CUDA 11.7 and the proper CuDNN version. 
-
-Use these commands to identify Cuda and CuDNN versions:
-```
-nvcc --version
-cat /usr/local/cuda/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
-```
-
-Add this to bashrc
+Add this to `~/.bashrc`
 ```
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
-
-<!-- Add the following to `~/.bashrc`
-
-Install additional libraries and restart to apply changes
-```
-sudo apt-get install libegl1-mesa-dev
-sudo apt-get install libglu1-mesa-dev
-``` -->
 
 ## Test
 
@@ -71,3 +47,26 @@ bash cosypose_setup.sh
 ```
 
 To test setup, run `test/test_cosypose.py`
+
+
+# Instance Setup
+
+# Installing Cuda 11.7
+
+```
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+wget https://developer.download.nvidia.com/compute/cuda/11.7.0/local_installers/cuda-repo-ubuntu2004-11-7-local_11.7.0-515.43.04-1_amd64.deb
+sudo dpkg -i cuda-repo-ubuntu2004-11-7-local_11.7.0-515.43.04-1_amd64.deb
+sudo cp /var/cuda-repo-ubuntu2004-11-7-local/cuda-*-keyring.gpg /usr/share/keyrings/
+sudo apt-get update
+sudo apt-get -y install cuda
+```
+
+
+Installing cuDNN
+In order to download cuDNN libraries, you need to go to https://developer.nvidia.com/cudnn and click on the Download cuDNN button. The webpage will ask you to login into the NVIDIA developer account. After logging in and accepting their terms and conditions, you should click on the following three links:
+
+sudo apt-get install libglu-dev
+
+sudo apt-get remove libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev

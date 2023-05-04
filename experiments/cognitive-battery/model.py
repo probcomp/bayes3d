@@ -8,9 +8,9 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-import jax3dp3
-from jax3dp3.transforms_3d import transform_from_pos, unproject_depth
-from jax3dp3.viz import get_depth_image, make_gif_from_pil_images, multi_panel
+import bayes3d
+from bayes3d.transforms_3d import transform_from_pos, unproject_depth
+from bayes3d.viz import get_depth_image, make_gif_from_pil_images, multi_panel
 
 from collections import deque
 
@@ -24,7 +24,7 @@ height = 300
 fov = 90
 
 intrinsics = utils.get_camera_intrinsics(width, height, fov)
-renderer = jax3dp3.Renderer(intrinsics=intrinsics)
+renderer = bayes3d.Renderer(intrinsics=intrinsics)
 
 # Loading RGB images, depths, and segmentation maps
 rgb_images, depth_images, seg_maps = [], [], []
@@ -127,7 +127,7 @@ init_poses = jnp.array(init_poses)
 def make_unfiform_grid(n, d):
     # d: number of enumerated proposals on each dimension (x, y, z).
     # n: the minimum and maximum position delta on each dimension (x, y, z).
-    return jax3dp3.make_translation_grid_enumeration(-d, -d, -d, d, d, d, n, n, n)
+    return bayes3d.make_translation_grid_enumeration(-d, -d, -d, d, d, d, n, n, n)
 
 
 # Prior model
@@ -152,7 +152,7 @@ def scorer(rendered_image, gt, r=0.1, op=0.005, ov=0.5):
     # r: radius
     # op: outlier probability
     # ov: outlier volume
-    weight = jax3dp3.likelihood.threedp3_likelihood(gt, rendered_image, r, op, ov)
+    weight = bayes3d.likelihood.threedp3_likelihood(gt, rendered_image, r, op, ov)
     return weight
 
 

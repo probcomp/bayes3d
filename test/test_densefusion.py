@@ -5,16 +5,16 @@ import pickle
 import torch 
 import numpy as np
 import random
-import jax3dp3.posecnn_densefusion
+import bayes3d.posecnn_densefusion
 
-import jax3dp3 as j
+import bayes3d as j
 
 
 bop_ycb_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv")
 rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('48', '1', bop_ycb_dir)
 
-import jax3dp3.posecnn_densefusion
-densefusion = jax3dp3.posecnn_densefusion.DenseFusion()
+import bayes3d.posecnn_densefusion
+densefusion = bayes3d.posecnn_densefusion.DenseFusion()
 results = densefusion.get_densefusion_results(rgbd.rgb, rgbd.depth, rgbd.intrinsics, scene_name="1")
 print(results)
 

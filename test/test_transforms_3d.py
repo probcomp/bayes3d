@@ -1,4 +1,4 @@
-from jax3dp3.transforms_3d import transform_from_axis_angle
+from bayes3d.transforms_3d import transform_from_axis_angle
 import jax.numpy as jnp
 from scipy.spatial.transform import Rotation as R
 import numpy as np

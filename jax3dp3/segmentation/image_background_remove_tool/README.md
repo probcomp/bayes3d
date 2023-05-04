@@ -1,1 +1,0 @@
-See description of CarveKit source repo here(https://github.com/OPHoperHPO/image-background-remove-tool)

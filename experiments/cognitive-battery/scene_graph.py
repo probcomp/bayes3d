@@ -2,7 +2,7 @@
 
 
 import jax.numpy as jnp
-from jax3dp3.transforms_3d import transform_from_pos
+from bayes3d.transforms_3d import transform_from_pos
 
 
 class BoundingBox:

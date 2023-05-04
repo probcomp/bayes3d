@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-import jax3dp3 as j
+import bayes3d as j
 import trimesh
 import os
 import numpy as np
@@ -65,7 +65,7 @@ seg = rgbds[T].segmentation
 depth = rgbds[T].depth
 j.get_rgb_image(rgb).save("rgb.png")
 
-# import jax3dp3.posecnn_densefusion
+# import bayes3d.posecnn_densefusion
 # densefusion = j.posecnn_densefusion.DenseFusion()
 # results = densefusion.get_densefusion_results(rgbd.rgb, rgbd.depth, rgbd.intrinsics, scene_name="1")
 # print(results)

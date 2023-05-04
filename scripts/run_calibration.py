@@ -14,8 +14,8 @@ import jax.numpy as jnp
 import trimesh
 import time
 import pickle
-import jax3dp3.transforms_3d as t3d
-import jax3dp3
+import bayes3d.transforms_3d as t3d
+import bayes3d
 from dataclasses import dataclass
 import sys
 import warnings
@@ -23,27 +23,27 @@ import pybullet_planning
 import cv2
 import collections
 import heapq
-import jax3dp3
+import bayes3d
 
 
 sys.path.extend(["/home/nishadgothoskar/ptamp/pybullet_planning"])
 sys.path.extend(["/home/nishadgothoskar/ptamp"])
 warnings.filterwarnings("ignore")
 
-test_pkl_file = os.path.join(jax3dp3.utils.get_assets_dir(),"sample_imgs/tag.pkl")
+test_pkl_file = os.path.join(bayes3d.utils.get_assets_dir(),"sample_imgs/tag.pkl")
 file = open(test_pkl_file,'rb')
 camera_images = pickle.load(file)
 
 observations = [
-    jax3dp3.Jax3DP3Observation.construct_from_aidan_dict(d) for d in camera_images
+    bayes3d.Jax3DP3Observation.construct_from_aidan_dict(d) for d in camera_images
 ]
 
 rgb_viz = []
 for obs in observations:
     rgb_viz.append(
-        jax3dp3.viz.get_rgb_image(obs.rgb, 255.0)
+        bayes3d.viz.get_rgb_image(obs.rgb, 255.0)
     )
-jax3dp3.viz.multi_panel(rgb_viz).save("rgb.png")
+bayes3d.viz.multi_panel(rgb_viz).save("rgb.png")
 
 aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
 board = cv2.aruco.CharucoBoard((7, 9), 0.024, 0.016, aruco_dict)
@@ -62,12 +62,12 @@ for observation in observations:
         charuco_corners, charuco_ids
     )
     images.append(
-        jax3dp3.viz.get_rgb_image(new_frame, 255.0)
+        bayes3d.viz.get_rgb_image(new_frame, 255.0)
     )
 
     corners_all.append(charuco_corners)
     ids_all.append(charuco_ids)
-jax3dp3.viz.multi_panel(images).save("detect.png")
+bayes3d.viz.multi_panel(images).save("detect.png")
 
 image_size = gray.shape[::-1]
 calibration, cameraMatrix, distCoeffs, rvecs, tvecs = cv2.aruco.calibrateCameraCharuco(
@@ -81,7 +81,7 @@ calibration, cameraMatrix, distCoeffs, rvecs, tvecs = cv2.aruco.calibrateCameraC
 fx,fy,cx,cy = cameraMatrix[0,0], cameraMatrix[1,1],  cameraMatrix[0,2],  cameraMatrix[1,2]
 
 
-jax3dp3.setup_visualizer()
+bayes3d.setup_visualizer()
 
 board_poses = []
 for (rvec, tvec) in zip(rvecs, tvecs):
@@ -92,10 +92,10 @@ board_poses = jnp.array(board_poses)
 camera_poses = jnp.array(camera_poses)
 
 for (i,p) in enumerate(board_poses):
-    jax3dp3.show_pose(f"a{i}", t3d.inverse_pose(p))
+    bayes3d.show_pose(f"a{i}", t3d.inverse_pose(p))
 
 for (i,p) in enumerate(camera_poses):
-    jax3dp3.show_pose(f"b{i}", p)
+    bayes3d.show_pose(f"b{i}", p)
 
 clouds = []
 for (cam_pose, observation) in zip(camera_poses, observations):
@@ -106,9 +106,9 @@ for (cam_pose, observation) in zip(camera_poses, observations):
     ))
 import distinctipy        
 colors = distinctipy.get_colors(len(clouds), pastel_factor=0.2)
-jax3dp3.clear()
+bayes3d.clear()
 for i in range(len(clouds)):
-    jax3dp3.show_cloud(f"{i}", clouds[i]*3.0, color=np.array(colors[i]))
+    bayes3d.show_cloud(f"{i}", clouds[i]*3.0, color=np.array(colors[i]))
 
 
 Rot, trans = cv2.calibrateHandEye(
@@ -132,14 +132,14 @@ for (cam_pose, observation) in zip(camera_poses, observations):
     ))
 import distinctipy        
 colors = distinctipy.get_colors(len(clouds), pastel_factor=0.2)
-jax3dp3.clear()
+bayes3d.clear()
 for i in range(len(clouds)):
-    jax3dp3.show_cloud(f"{i}", clouds[i]*3.0, color=np.array(colors[i]))
+    bayes3d.show_cloud(f"{i}", clouds[i]*3.0, color=np.array(colors[i]))
 
 print("Cam in Gripper")
 print(cam_in_gripper)
 
-camera_data_file = os.path.join(jax3dp3.utils.get_assets_dir(),"camera_data.pkl")
+camera_data_file = os.path.join(bayes3d.utils.get_assets_dir(),"camera_data.pkl")
 pickle.dump((cam_in_gripper, (fx,fy,cx,cy)), open(camera_data_file,"wb"))
 
 

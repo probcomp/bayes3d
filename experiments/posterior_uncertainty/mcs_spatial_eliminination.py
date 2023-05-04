@@ -1,7 +1,7 @@
 
 import pickle as pkl
-import jax3dp3 as j
-import jax3dp3.transforms_3d as t3d
+import bayes3d as j
+import bayes3d.transforms_3d as t3d
 import os
 import trimesh
 import jax.numpy as jnp
