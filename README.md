@@ -21,9 +21,10 @@ export XLA_PYTHON_CLIENT_PREALLOCATE=false
 
 To test successful setup run:
 ```
-python test/test.py
+python demo.py
 ```
-and view `test.gif`
+and view `demo.gif`
+
 
 ## Assets
 
