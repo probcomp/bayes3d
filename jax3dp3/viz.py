@@ -160,10 +160,9 @@ def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsiz
             _, _, text_w, text_h = drawer.textbbox((0, 0), msg, font=font_label)
             label_border = max(text_h, label_border)
 
-    bottom_border += 10 
-    title_border += 50 
-    label_border += 50 
-
+    bottom_border += 5 
+    title_border += 5
+    label_border += 5 
 
     dst = Image.new(
         "RGBA", (sum_of_widths+ (num_images - 1) * middle_width, h + title_border + label_border + bottom_border), (255, 255, 255, 255)
