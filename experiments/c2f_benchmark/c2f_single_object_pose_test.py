@@ -87,9 +87,10 @@ def test_scene(dataset_idx, test_idx, particles=1):
     print(gt_pose)
     j.viz.get_depth_image(image.depth).save(f"{RESULTS_IMGS_DIR}/dataset_{dataset_idx}_scene_{test_idx}_gt.png")
     rendered = renderer.render_single_object(gt_pose, gt_idx)  
-    viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.1)
+    viz = j.viz.get_depth_image(rendered[:,:,2], max=1.0)
     viz.save(f"_gt_depth.png")
     j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width).save(f"{RESULTS_IMGS_DIR}/dataset_{dataset_idx}_scene_{test_idx}_gt_depth.png")
+
 
     ## run c2f
     c2f_results = run_c2f(renderer, image, scheds, infer_id=False, infer_contact=False, particles=particles)
@@ -98,13 +99,38 @@ def test_scene(dataset_idx, test_idx, particles=1):
     print("gt:", gt_pose)
     c2f_iter = len(c2f_results)
     c2f_result = c2f_results[c2f_iter-1]  # TODO cleanup dimensions
-    _, gt_idx, best_pose = c2f_result[0]  # results are sorted highest-to-lowest weight
-    print(best_pose)
+    for _iter in range(c2f_iter):
+        c2f_result = c2f_results[_iter]
+        _, gt_idx, best_pose = c2f_result[0]  # results are sorted highest-to-lowest weight
+        print(best_pose)
 
-    rendered = renderer.render_single_object(best_pose, gt_idx)  
-    viz = j.viz.get_depth_image(rendered[:,:,2], min=jnp.min(rendered), max=jnp.max(rendered[:,:,2])+0.1)
-    viz = j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width)
-    viz.save(f"{RESULTS_IMGS_DIR}/dataset_{dataset_idx}_scene_{test_idx}_best_pred.png")
+        rendered = renderer.render_single_object(best_pose, gt_idx)  
+        viz = j.viz.get_depth_image(rendered[:,:,2], max=1.0)
+        viz = j.viz.resize_image(viz, image.intrinsics.height, image.intrinsics.width)
+        viz.save(f"{RESULTS_IMGS_DIR}/dataset_{dataset_idx}_scene_{test_idx}_best_pred.png")
+
+        rerendered_images = [
+            renderer.render_single_object(hypo[-1],13) for hypo in c2f_result
+        ]
+        images = [
+            j.get_depth_image(img[:,:,2]) for img in rerendered_images
+        ]
+
+        gt_images = [
+            j.get_depth_image(renderer.render_single_object(jnp.array(gt_pose), 13)[:,:,2], min=-0.1, max=2) for _ in rerendered_images
+        ]
+
+        render_stack = j.hstack_images(images)
+        gt_stack = j.hstack_images(gt_images)
+        overlay_stack = j.overlay_image(render_stack, gt_stack, alpha=0.3)
+
+        render_stack.save(f"render_stack_{_iter}.png")
+        gt_stack.save(f"gt_stack_{_iter}.png")
+        overlay_stack.save(f"overlay_{_iter}.png")
+
+        print(gt_pose - c2f_result[0][-1])
+        print(j.utils.normalize_log_scores(np.array([hypo[0] for hypo in c2f_result])))
+    from IPython import embed; embed()
 
     return c2f_results
     
@@ -116,8 +142,11 @@ def test_dataset(dataset_idx, particles=1, save=True):
     for test_idx in range(num_scenes_in_dataset):
         print(f"#### Starting scene {test_idx}/{num_scenes_in_dataset} ####")
 
-        c2f_results = test_scene(dataset_idx, test_idx, particles=particles)
-        dataset_results.append(c2f_results)
+        try:
+            c2f_results = test_scene(dataset_idx, test_idx, particles=particles)
+            dataset_results.append(c2f_results)
+        except AssertionError:  # bad data
+            continue
 
     if save:
         ## Save whole dataset results
@@ -153,10 +182,10 @@ if __name__=='__main__':
     print("setup renderer ", end-start)
 
     # configure c2f
-    grid_widths = [0.1, 0.05, 0.03, 0.01]
-    rot_angle_widths = [jnp.pi, jnp.pi, jnp.pi/1.5, jnp.pi/2.5]
-    sphere_angle_widths = [jnp.pi, jnp.pi/6, jnp.pi/7, jnp.pi/8]
-    grid_params =  [(3,3,3,75*5,61), (3,3,3,45,21),(3,3,3,45,21),(3,3,3,45,21)]  # (num_x, num_y, num_z, num_fib_sphere, num_planar_angle)
+    grid_widths = [0.1, 0.05, 0.03, 0.03, 0.01, 0.05]
+    rot_angle_widths = [jnp.pi, jnp.pi, jnp.pi/1.5, 0.000001, jnp.pi/2.5, 0.0000001]
+    sphere_angle_widths = [jnp.pi, jnp.pi/6, jnp.pi/7, 0.000001, jnp.pi/8, 0.0000001]
+    grid_params =  [(3,3,3,75*5,61), (3,3,3,45,21),(3,3,3,45,21), (11,11,11,1,1), (3,3,3,45,21),(11,11,11,1,1)]  # (num_x, num_y, num_z, num_fib_sphere, num_planar_angle)
     scheds = j.c2f.make_schedules(
         grid_widths=grid_widths, 
         angle_widths=rot_angle_widths, 
@@ -164,15 +193,12 @@ if __name__=='__main__':
         full_pose=True, 
         sphere_angle_widths=sphere_angle_widths
     )
-
+    from IPython import embed; embed()
     # run test
-    for dataset_idx in range(NUM_DATASET):
-        c2f_results = test_dataset(dataset_idx, particles=NUM_PARTICLES)
+    # for dataset_idx in range(1, NUM_DATASET):
+    #     c2f_results = test_dataset(dataset_idx, particles=NUM_PARTICLES)
     
-    # c2f_results = test_scene(0, 2, particles=NUM_PARTICLES)
+    c2f_results = test_scene(0, 4, particles=NUM_PARTICLES)
     # # c2f_results = test_scene(0, 4, particles=NUM_PARTICLES)
-
-
-    
 
     from IPython import embed; embed()

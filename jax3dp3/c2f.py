@@ -77,7 +77,7 @@ def score_poses_batched(
     filter_size
 ):
     all_weights = None
-    batches = jnp.array_split(pose_proposals, pose_proposals.shape[0] // 2000)
+    batches = jnp.array_split(pose_proposals, np.ceil(pose_proposals.shape[0] / 1000).astype(int))
 
     for batch_idx, pose_proposals_batch in enumerate(batches):
         render = renderer.render_parallel(pose_proposals_batch, obj_idx)
