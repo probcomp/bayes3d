@@ -7,7 +7,6 @@ import copy
 import open3d as o3d
 
 
-
 viz_intrinsics = j.Intrinsics(
     1000,1000,
     1000.0,

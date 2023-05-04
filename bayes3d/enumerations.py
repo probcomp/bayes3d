@@ -96,7 +96,7 @@ def make_translation_grid_enumeration_2d(min_x,min_y, max_x, max_y, num_x,num_y)
     return deltas
 
 
-def make_grid_enumeration(min_x,min_y,min_z, min_rotation_angle, 
+def make_pose_grid_enumeration(min_x,min_y,min_z, min_rotation_angle, 
                         max_x,max_y,max_z, max_rotation_angle,
                         num_x,num_y,num_z, 
                         fibonacci_sphere_points, num_planar_angle_points, 
@@ -105,3 +105,14 @@ def make_grid_enumeration(min_x,min_y,min_z, min_rotation_angle,
     translations = make_translation_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x,num_y,num_z)
     all_proposals = jnp.einsum("aij,bjk->abik", rotations, translations).reshape(-1, 4, 4)
     return all_proposals
+
+
+def enumerate_contact_and_face_parameters(min_x,min_y,min_angle, max_x, max_y, max_angle, num_x, num_y, num_angle, faces):
+    contact_params_sweep = make_translation_grid_enumeration_3d(
+        min_x,min_y, min_angle,
+        max_x, max_y, max_angle,
+        num_x, num_y, num_angle
+    )
+    contact_params_sweep_extended = jnp.tile(contact_params_sweep, (faces.shape[0],1))
+    face_params_sweep = jnp.repeat(faces, contact_params_sweep.shape[0])
+    return contact_params_sweep_extended, face_params_sweep

@@ -15,7 +15,6 @@ from .enumerations import *
 from .renderer import *
 from .rgbd import *
 from .likelihood import *
-from .online import *
 from .camera import *
 from .viz import *
 
