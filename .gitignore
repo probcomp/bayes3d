@@ -16,3 +16,4 @@ experiments/3dnel/threednel
 */.ipynb_checkpoints/*
 assets/sam/*
 assets/tum/*
+.vscode/*
