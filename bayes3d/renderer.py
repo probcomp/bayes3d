@@ -21,17 +21,16 @@ def transform_image_zeros(image_jnp, intrinsics):
 transform_image_zeros_jit = jax.jit(transform_image_zeros)
 transform_image_zeros_parallel_jit = jax.jit(jax.vmap(transform_image_zeros, in_axes=(0,None)))
 
-
 class Renderer(object):
-    def __init__(self, intrinsics, num_layers=512):
+    def __init__(self, intrinsics, num_layers=1024):
         self.intrinsics = intrinsics
-        self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
         self.proj_list = list(bayes3d.camera.open_gl_projection_matrix(
             intrinsics.height, intrinsics.width, intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy, intrinsics.near, intrinsics.far
         ).reshape(-1))
 
-        dr._get_plugin(gl=True).setup(
-            self.renderer_env.cpp_wrapper,
+        self.module = dr._get_plugin(gl=True)
+        
+        self.module.setup(
             intrinsics.height, intrinsics.width, num_layers
         )
 
@@ -39,9 +38,7 @@ class Renderer(object):
         self.mesh_names =[]
         self.model_box_dims = jnp.zeros((0,3))
 
-    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None):
-        mesh = trimesh.load(mesh_filename, force=force)
-        self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor)
+
 
     def add_mesh(self, mesh, mesh_name=None, scaling_factor=1.0):
         
@@ -62,14 +59,19 @@ class Renderer(object):
         vertices = np.array(mesh.vertices)
         vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)
         triangles = np.array(mesh.faces)
-        dr._get_plugin(gl=True).load_vertices_fwd(
-            self.renderer_env.cpp_wrapper, torch.tensor(vertices.astype("f"), device='cuda'),
+        self.module.load_vertices_fwd(
+            torch.tensor(vertices.astype("f"), device='cuda'),
             torch.tensor(triangles.astype(np.int32), device='cuda'),
         )
 
+
+    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None):
+        mesh = trimesh.load(mesh_filename, force=force)
+        self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor)
+
     def render_to_torch(self, poses, idx, on_object=0):
         poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(poses))
-        images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(self.renderer_env.cpp_wrapper, poses_torch, self.proj_list, idx, on_object)
+        images_torch = self.module.rasterize_fwd_gl(poses_torch, self.proj_list, idx, on_object)
         return images_torch
 
     def render_single_object(self, pose, idx):

@@ -238,52 +238,32 @@ void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s)
 }
 
 
-
-RasterizeGLStateWrapper::RasterizeGLStateWrapper(bool enableDB, bool automatic_, int cudaDeviceIdx_)
-{
-    pState = new RasterizeGLState();
-    automatic = automatic_;
-    cudaDeviceIdx = cudaDeviceIdx_;
-    memset(pState, 0, sizeof(RasterizeGLState));
-    pState->enableDB = enableDB ? 1 : 0;
-    rasterizeInitGLContext(NVDR_CTX_PARAMS, *pState, cudaDeviceIdx_);
-    releaseGLContext();
-}
-
-RasterizeGLStateWrapper::~RasterizeGLStateWrapper(void)
-{
-    setGLContext(pState->glctx);
-    rasterizeReleaseBuffers(NVDR_CTX_PARAMS, *pState);
-    releaseGLContext();
-    destroyGLContext(pState->glctx);
-    delete pState;
-}
-
-void RasterizeGLStateWrapper::setContext(void)
-{
-    setGLContext(pState->glctx);
-}
-
-void RasterizeGLStateWrapper::releaseContext(void)
-{
-    releaseGLContext();
-}
+RasterizeGLState* state;
 
 //------------------------------------------------------------------------
 // Forward op (OpenGL).
 
 void threedp3_likelihood(float *pos, float *latent_points, float *likelihoods, float *obs_image, float r, int width, int height, int depth);
 
-void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width, int num_layers)
+void setup(int height, int width, int num_layers)
 {
+    bool enableDB = false;
+    state = new RasterizeGLState();
+    memset(state, 0, sizeof(RasterizeGLState));
+    state->enableDB = enableDB ? 1 : 0;
+    int cudaDeviceIdx_ = 0;
+    rasterizeInitGLContext(NVDR_CTX_PARAMS, *state, cudaDeviceIdx_);
+    releaseGLContext();
 
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-    RasterizeGLState& s = *stateWrapper.pState;
+    RasterizeGLState& s = *state;
     s.model_counter = 0;
     s.img_width = width;
     s.img_height = height;
     s.num_layers = num_layers;
+
+    bool automatic = true;
 
     // std::cout << "" << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
 
@@ -296,7 +276,7 @@ void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width, int num
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
 
     // Set the GL context unless manual context.
-    if (stateWrapper.automatic)
+    if (automatic)
         setGLContext(s.glctx);
 
     // Resize all buffers.
@@ -347,11 +327,11 @@ void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width, int num
     return;
 }
 
-void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri)
+void load_vertices_fwd(torch::Tensor pos, torch::Tensor tri)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-    RasterizeGLState& s = *stateWrapper.pState;
+    RasterizeGLState& s = *state;
 
     // Check inputs.
     NVDR_CHECK_DEVICE(pos, tri);
@@ -360,7 +340,7 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
     NVDR_CHECK_I32(tri);
 
     // Check that GL context was created for the correct GPU.
-    NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
+    // NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
 
     // Determine number of outputs
 
@@ -374,7 +354,8 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
     int triCount = 3 * tri.size(0);
 
     // Set the GL context unless manual context.
-    if (stateWrapper.automatic)
+    bool automatic = true;
+    if (automatic)
         setGLContext(s.glctx);
 
 
@@ -432,7 +413,7 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
     s.model_counter = s.model_counter + 1;
 }
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices, int on_object)
+torch::Tensor rasterize_fwd_gl(torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices, int on_object)
 {
     NVDR_CHECK_DEVICE(pose);
     NVDR_CHECK_CONTIGUOUS(pose);
@@ -442,10 +423,10 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
 
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-    RasterizeGLState& s = *stateWrapper.pState;
+    RasterizeGLState& s = *state;
 
     // Set the GL context unless manual context.
-    if (stateWrapper.automatic)
+    if (true)
         setGLContext(s.glctx);
 
 
@@ -453,7 +434,7 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     uint num_images = pose.size(1);
 
     // Set the GL context unless manual context.
-    if (stateWrapper.automatic)
+    if (true)
         setGLContext(s.glctx);
 
     NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
@@ -527,19 +508,161 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     }
 
     // Done. Release GL context and return.
-    if (stateWrapper.automatic)
+    if (true)
         releaseGLContext();
 
     return output_torch_tensor;
 }
 
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    // State classes.
-    pybind11::class_<RasterizeGLStateWrapper>(m, "RasterizeGLStateWrapper").def(pybind11::init<bool, bool, int>())
-        .def("set_context",     &RasterizeGLStateWrapper::setContext)
-        .def("release_context", &RasterizeGLStateWrapper::releaseContext);
 
-    // Ops.
+
+torch::Tensor rasterize_fwd_gl_jax(torch::Tensor pose)
+{
+
+    const std::vector<float>& proj{1.3333333333333335,
+        0.0,
+        0.0033333333333332993,
+        0.0,
+        0.0,
+        1.3333333333333335,
+        0.0033333333333332993,
+        0.0,
+        0.0,
+        0.0,
+        1.0000400008000159,
+        -0.0020000400008000157,
+        0.0,
+        0.0,
+        1.0,
+        0.0
+    };
+    
+    const std::vector<int> indices{0};
+     
+    int on_object = 0;
+
+    NVDR_CHECK_DEVICE(pose);
+    NVDR_CHECK_CONTIGUOUS(pose);
+    NVDR_CHECK_F32(pose);
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    RasterizeGLState& s = *state;
+
+    // Set the GL context unless manual context.
+    if (true)
+        setGLContext(s.glctx);
+
+
+    uint num_objects = pose.size(0);
+    uint num_images = pose.size(1);
+
+    // Set the GL context unless manual context.
+    if (true)
+        setGLContext(s.glctx);
+
+    NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
+    glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
+    glUniform1i(2, on_object);
+
+    // Copy color buffers to output tensors.
+    cudaArray_t array = 0;
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, s.cudaColorBuffer, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
+
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
+    cudaArray_t pose_array = 0;
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+
+    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::Tensor output_torch_tensor = torch::empty({num_images, s.img_height, s.img_width,4}, opts);
+
+    const float* posePtr = pose.data_ptr<float>(); 
+    for(int start_pose_idx=0; start_pose_idx < num_images; start_pose_idx+=s.num_layers)
+    {
+        int poses_on_this_iter = std::min(num_images-start_pose_idx, s.num_layers);
+        // Set viewport, clear color buffer(s) and depth/stencil buffer.
+        NVDR_CHECK_GL_ERROR(glViewport(0, 0, s.img_width, s.img_height));
+        NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
+
+        for(int object_idx=0; object_idx < indices.size(); object_idx++){
+            NVDR_CHECK_GL_ERROR(glBindVertexArray(s.glVAOs[indices[object_idx]]));
+            std::vector<GLDrawCmd> drawCmdBuffer(poses_on_this_iter);
+            for (int i=0; i < poses_on_this_iter; i++)
+            {
+                GLDrawCmd& cmd = drawCmdBuffer[i];
+                cmd.firstIndex    = 0;
+                cmd.count         = s.triCounts[indices[object_idx]];
+                cmd.baseVertex    = 0;
+                cmd.baseInstance  = 0;
+                cmd.instanceCount = 1;
+            }
+
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(pose_array, 0, 0, posePtr + num_images*16*object_idx + start_pose_idx*16, poses_on_this_iter*16*sizeof(float), cudaMemcpyDeviceToDevice));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+            glUniform1f(1, object_idx+1.0);
+            
+            NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], poses_on_this_iter, sizeof(GLDrawCmd)));
+        } 
+
+
+
+        // Draw!
+
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, s.cudaColorBuffer, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
+        cudaMemcpy3DParms p = {0};
+        p.srcArray = array;
+        p.dstPtr.ptr = output_torch_tensor.data_ptr<float>() + start_pose_idx*s.img_height*s.img_width*4;
+        p.dstPtr.pitch = s.img_width * 4 * sizeof(float);
+        p.dstPtr.xsize = s.img_width;
+        p.dstPtr.ysize = s.img_height;
+        p.extent.width = s.img_width;
+        p.extent.height = s.img_height;
+        p.extent.depth = poses_on_this_iter;
+        p.kind = cudaMemcpyDeviceToDevice;
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3D(&p));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
+    }
+
+    // Done. Release GL context and return.
+    if (true)
+        releaseGLContext();
+
+    return output_torch_tensor;
+}
+
+// template <typename T> pybind11::bytes PackDescriptor(const T &descriptor) {
+//   return pybind11::bytes(PackDescriptorAsString(descriptor));
+// }
+
+// template <typename T> pybind11::capsule EncapsulateFunction(T *fn) {
+//   return pybind11::capsule(bit_cast<void *>(fn), "xla._CUSTOM_CALL_TARGET");
+// }
+
+// void rms_backward_affine(cudaStream_t stream, void **buffers,
+//                          const char *opaque, std::size_t opaque_len){
+//     std::cout << "backward affine" << std::endl;
+// }
+
+// pybind11::dict RMSNormRegistrations() {
+//   pybind11::dict dict;
+//   dict["rms_forward_affine_mixed_dtype"] =
+//       gpu_ops::EncapsulateFunction(gpu_ops::rms_forward_affine_mixed_dtypes);
+//   dict["rms_backward_affine"] =
+//       gpu_ops::EncapsulateFunction(gpu_ops::rms_backward_affine);
+//   return dict;
+// }
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("setup", &setup, "rasterize forward op (opengl)");
     m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
     m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");

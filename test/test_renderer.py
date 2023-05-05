@@ -20,7 +20,6 @@ r = 0.1
 outlier_prob = 0.01
 
 max_depth = 15.0
-
 renderer.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/cube.obj"))
 renderer.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/sphere.obj"))
 

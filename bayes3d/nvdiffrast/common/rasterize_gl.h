@@ -21,7 +21,7 @@
 struct RasterizeGLState // Must be initializable by memset to zero.
 {
     int                     width;              // Allocated frame buffer width.
-    int                     height;             // Allocated frame buffer height.
+    int                     height;             // Allocated framep buffer height.
     int                     depth;              // Allocated frame buffer depth.
     int                     img_width;              // Allocated frame buffer depth.
     int                     img_height;              // Allocated frame buffer depth.
