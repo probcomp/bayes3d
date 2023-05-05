@@ -42,7 +42,7 @@ def threedp3_likelihood_multi_r_per_pixel(
     outlier_volume,
     filter_size
 ):
-    num_mixture_components = observed_xyz.shape[1] * observed_xyz.shape[0]
+    num_mixture_components =  (2*filter_size + 1)**2
 
     rendered_xyz_padded = jax.lax.pad(rendered_xyz[...,:3],
         -100.0, 
@@ -140,7 +140,7 @@ def threedp3_likelihood_per_pixel(
     outlier_volume,
     filter_size
 ):
-    num_mixture_components = observed_xyz.shape[1] * observed_xyz.shape[0]
+    num_mixture_components = (2*filter_size + 1)**2
 
     rendered_xyz_padded = jax.lax.pad(rendered_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
     jj, ii = jnp.meshgrid(jnp.arange(observed_xyz.shape[1]), jnp.arange(observed_xyz.shape[0]))

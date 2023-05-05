@@ -3,12 +3,13 @@ from . import c2f
 from . import mesh
 from . import utils
 from . import distributions
-from .meshcat import *
-
+from . import ycb_loader
 from . import scene_graph
+
 from .enumerations import *
 from .renderer import *
 from .rgbd import *
 from .likelihood import *
 from .camera import *
 from .viz import *
+from .meshcat import *
