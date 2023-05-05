@@ -141,6 +141,7 @@ def threedp3_likelihood_per_pixel(
     filter_size
 ):
     num_mixture_components = observed_xyz.shape[1] * observed_xyz.shape[0]
+
     rendered_xyz_padded = jax.lax.pad(rendered_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
     jj, ii = jnp.meshgrid(jnp.arange(observed_xyz.shape[1]), jnp.arange(observed_xyz.shape[0]))
     indices = jnp.stack([ii,jj],axis=-1)
