@@ -12,4 +12,4 @@ from .rgbd import *
 from .likelihood import *
 from .camera import *
 from .viz import *
-from .meshcat import *
+from .meshcatviz import *
