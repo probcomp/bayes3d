@@ -5,7 +5,6 @@ import bayes3d as j
 import jax
 import jax.numpy as jnp
 from itertools import product
-import open3d as o3d
 
 def center_mesh(mesh, return_pose=False):
     _, pose = j.utils.aabb(mesh.vertices)
@@ -56,6 +55,7 @@ def make_alpha_mesh_from_point_cloud(
     point_cloud,
     alpha
 ):
+    import open3d as o3d
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(np.array(point_cloud))
     learned_mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pcd, alpha)

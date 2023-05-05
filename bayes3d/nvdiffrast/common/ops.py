@@ -61,14 +61,9 @@ def _get_plugin(gl=False):
             'common.cpp',
             'glutil.cpp',
             'rasterize_gl.cpp',
-            'likelihood.cu',
         ]
     else:
         source_files = [
-            '../common/cudaraster/impl/Buffer.cpp',
-            '../common/cudaraster/impl/CudaRaster.cpp',
-            '../common/cudaraster/impl/RasterImpl.cu',
-            '../common/cudaraster/impl/RasterImpl.cpp',
             '../common/common.cpp',
             '../common/rasterize.cu',
             '../common/interpolate.cu',

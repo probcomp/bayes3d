@@ -29,7 +29,7 @@ class Renderer(object):
         self.proj_list = list(bayes3d.camera.open_gl_projection_matrix(
             intrinsics.height, intrinsics.width, intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy, intrinsics.near, intrinsics.far
         ).reshape(-1))
-        
+
         dr._get_plugin(gl=True).setup(
             self.renderer_env.cpp_wrapper,
             intrinsics.height, intrinsics.width, num_layers
