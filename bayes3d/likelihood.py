@@ -42,7 +42,7 @@ def threedp3_likelihood_multi_r_per_pixel(
     outlier_volume,
     filter_size
 ):
-    num_mixture_components =  (2*filter_size + 1)**2
+    num_mixture_components =   observed_xyz.shape[0] * observed_xyz.shape[1]
 
     rendered_xyz_padded = jax.lax.pad(rendered_xyz[...,:3],
         -100.0, 
@@ -140,7 +140,7 @@ def threedp3_likelihood_per_pixel(
     outlier_volume,
     filter_size
 ):
-    num_mixture_components = (2*filter_size + 1)**2
+    num_mixture_components = observed_xyz.shape[0] * observed_xyz.shape[1]
 
     rendered_xyz_padded = jax.lax.pad(rendered_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
     jj, ii = jnp.meshgrid(jnp.arange(observed_xyz.shape[1]), jnp.arange(observed_xyz.shape[0]))
@@ -152,6 +152,8 @@ def threedp3_likelihood_per_pixel(
     )
     probabilities_with_outlier_model = probabilities * (1.0 - outlier_prob)  + outlier_prob / outlier_volume
     return jnp.log(probabilities_with_outlier_model)
+
+threedp3_likelihood_per_pixel_jit = jax.jit(threedp3_likelihood_per_pixel, static_argnames=('filter_size',))
 
 def threedp3_likelihood(
     observed_xyz: jnp.ndarray,
@@ -172,9 +174,10 @@ threedp3_likelihood_parallel_jit = jax.jit(jax.vmap(
     threedp3_likelihood, in_axes=(None, 0, None, None, None, None))
     ,static_argnames=('filter_size',)
 )
-threedp3_likelihood_with_r_parallel_jit = jax.jit(
-    jax.vmap(jax.vmap(
+threedp3_likelihood_per_pixel_jit = jax.jit(threedp3_likelihood_per_pixel, static_argnames=('filter_size',))
+threedp3_likelihood_full_hierarchical_bayes_jit = jax.jit(jax.vmap(jax.vmap(jax.vmap(
         threedp3_likelihood,
-        in_axes=(None, 0, None, None, None, None)),
-        in_axes=(None, None, 0, None, None, None)),
-)
+       in_axes=(None, None, None, 0, None, None)),
+       in_axes=(None, None, 0, None, None, None)),
+       in_axes=(None, 0, None, None, None, None)
+), static_argnames=('filter_size',))
