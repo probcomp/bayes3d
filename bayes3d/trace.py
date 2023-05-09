@@ -13,7 +13,7 @@ class Trace:
     observation: jnp.ndarray
 
     def __str__(self):
-        print(f"variance: {self.variance} outlier_prob: {self.outlier_prob} outlier_volume: {self.outlier_volume}\n ids: {self.ids} poses: {self.poses}")
+        return f"variance: {self.variance} outlier_prob: {self.outlier_prob} outlier_volume: {self.outlier_volume}\n ids: {self.ids} poses: {self.poses}"
 
 
 def render_image(trace, renderer):
@@ -64,6 +64,16 @@ class Traces:
     outlier_volume: float
     observation: jnp.ndarray
 
+    def __getitem__(self, key):
+        assert len(key) == 3
+        return Trace(
+            self.all_poses[:, key[0]],
+            self.ids,
+            self.all_variances[key[1]],
+            self.all_outlier_prob[key[2]],
+            self.outlier_volume,
+            self.observation
+        )
 
 def render_images(traces, renderer):
     reconstruction = renderer.render_multiobject_parallel(
