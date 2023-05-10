@@ -12,6 +12,11 @@ pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases
 python setup.py develop
 ```
 
+To get additional model assets:
+```
+bash download.sh
+```
+
 Add this to `~/.bashrc`
 ```
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
@@ -26,19 +31,6 @@ python demo.py
 and view `demo.gif`
 
 ![](assets/demo.gif)
-
-## Assets
-
-Get additional model and data assets by running
-```
-pip install -r requirements.txt
-bash download.sh
-```
-
-<!-- ```
-sudo apt install libeigen3-dev
-sudo ln -s /usr/include/eigen3/Eigen /usr/include/Eigen -->
-
 
 # CosyPose Setup
 
