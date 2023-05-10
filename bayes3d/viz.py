@@ -36,6 +36,10 @@ def make_gif_from_pil_images(images, filename):
         loop=0,
     )
 
+def load_image_from_file(filename):
+    return Image(filename)
+
+
 def get_depth_image(image, min=None, max=None, cmap=None):
     if cmap is None:
         cmap = plt.get_cmap('turbo')

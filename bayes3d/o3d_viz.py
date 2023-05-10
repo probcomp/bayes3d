@@ -89,6 +89,7 @@ class O3DVis(object):
 
     def make_mesh_from_file(self, filename, pose, scaling_factor=1.0):
         mesh = o3d.io.read_triangle_model(filename)
+        mesh.meshes[0].mesh.scale(scaling_factor, np.array([0.0, 0.0, 0.0]))
         mesh.meshes[0].mesh.transform(pose)
         self.render.scene.add_model(f"{self.counter}", mesh)
         self.counter+=1
