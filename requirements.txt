@@ -24,4 +24,3 @@ pickle5
 zmq
 gdown
 tqdm
-xformers
