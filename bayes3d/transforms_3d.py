@@ -227,3 +227,52 @@ def transform_from_pos_target_up(pos, target, up):
         x.reshape(-1,1),y.reshape(-1,1),z.reshape(-1,1)
     ])
     return transform_from_rot_and_pos(R, pos)
+
+
+def interpolate_between_two_poses(pose_start, pose_end, time):
+    """
+    Interpolates between pose_start and pose_end.
+            Parameters:
+                    pose_start (jnp.ndarray): Start pose, 4x4 transformation matrix
+                    pose_end (jnp.ndarray): End pose, 4x4 transformation matrix
+                    time (float): Time between 0.0 and 1.0
+            Returns:
+                    pose_interpolated (jnp.ndarray): Interpolated pose, 4x4 transformation matrix
+    """
+    # [
+    #     R t
+    #     0 1
+    # ]
+    # TODO: Implement this function.
+    # TODO: Unit test that shows pose_start, pose_end, and the end pose.
+    # See test/test_meshcat.py for how to visualize a pose using b.show_pose.
+    return pose_start
+
+def sparsify_point_cloud(point_cloud, min_distance):
+    """
+    Select a subset of points from a point cloud that are at least min_distance apart.
+            Parameters:
+                    point_cloud (jnp.ndarray): 3D point cloud, Nx3.
+                    min_distance (float): Desired minimum distance between points.
+            Returns:
+                    subsampled_point_cloud (jnp.ndarray)
+    """
+    # TODO: Implement this function.
+    # TODO: Unit test that shows the orginal and sparsified clouds.
+    # See test/test_meshcat.py for how to visualize point clouds using b.show_cloud.
+    return point_cloud
+
+def perspective_n_point(point_cloud, pixel_coordinates):
+    """
+        Given 3D coordinates of points and the locations of the points (pixel coordinates)
+        in the image, estimate the pose of the camera.
+            Parameters:
+                    point_cloud (jnp.ndarray): 3D point cloud, Nx3.
+                    pixel_coordinates (float): Pixel coordinates of the points in the image, Nx2.
+            Returns:
+                    camera_pose (jnp.ndarray): Estimated camera pose
+    """
+    # TODO: Implement this function.
+    # TODO: Unit test that shows the correct pose being inferred.
+    return jnp.eye(4)
+
