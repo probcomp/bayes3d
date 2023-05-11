@@ -1,16 +1,17 @@
 import bayes3d.camera
 import bayes3d as j
+import bayes3d as b
 import bayes3d.transforms_3d as t3d
 import numpy as np
 import jax.numpy as jnp
 
 class RGBD(object):
     def __init__(self, rgb, depth, camera_pose, intrinsics, segmentation=None):
-        self.intrinsics = intrinsics
         self.rgb = rgb
         self.depth = depth
         self.camera_pose = camera_pose
-        self.segmentation = segmentation
+        self.intrinsics = intrinsics
+        self.segmentation  = segmentation
 
     def construct_from_camera_image(camera_image, near=0.001, far=5.0):
         depth = np.array(camera_image.depthPixels)
@@ -53,3 +54,9 @@ class RGBD(object):
         seg_final = seg_final_flat.reshape(seg.shape[:2])
         observation = RGBD(rgb, depth, jnp.eye(4), intrinsics, seg_final)
         return observation
+
+def scale_rgbd(rgbd, scaling_factor=1.0):
+    rgb = b.utils.scale(rgbd.rgb, scaling_factor)
+    depth= b.utils.scale(rgbd.depth, scaling_factor)
+    intrinsics = b.camera.scale_camera_parameters(rgbd.intrinsics, scaling_factor)
+    return RGBD(rgb, depth, rgbd.camera_pose, intrinsics, rgbd.segmentation)
