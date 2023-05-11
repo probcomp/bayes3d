@@ -8,11 +8,19 @@ Setup virtualenv and install dependencies:
 conda create -n bayes3d python=3.8
 conda activate bayes3d
 pip install -r requirements.txt
-pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 python setup.py develop
 ```
 
-To get additional model assets:
+Install JAX:
+```
+# GPU
+pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+# CPU
+pip install jax jaxlib
+```
+
+To get assets:
 ```
 bash download.sh
 ```
