@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import jax
 import numpy as np
 import jax.dlpack
+from tqdm import tqdm
 
 def transform_image_zeros(image_jnp, intrinsics):
     image_jnp_2 = jnp.concatenate(
