@@ -1,5 +1,6 @@
 import bayes3d.nvdiffrast.common as dr
 import torch
+from torch.utils import dlpack
 import bayes3d.camera
 import bayes3d as j
 import bayes3d.transforms_3d as t3d
