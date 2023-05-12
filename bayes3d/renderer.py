@@ -1,3 +1,6 @@
+from typing import Tuple
+
+import functools
 import bayes3d.nvdiffrast.common as dr
 import torch
 from torch.utils import dlpack
@@ -7,8 +10,14 @@ import bayes3d.transforms_3d as t3d
 import trimesh
 import jax.numpy as jnp
 import jax
+from jax import core, dtypes
+from jax.abstract_arrays import ShapedArray
+from jax.interpreters import mlir, xla
+from jax.lib import xla_client
 import numpy as np
 import jax.dlpack
+from jaxlib.hlo_helpers import custom_call
+
 
 def transform_image_zeros(image_jnp, intrinsics):
     image_jnp_2 = jnp.concatenate(
@@ -23,18 +32,212 @@ transform_image_zeros_jit = jax.jit(transform_image_zeros)
 transform_image_zeros_parallel_jit = jax.jit(jax.vmap(transform_image_zeros, in_axes=(0,None)))
 
 
+
+@functools.lru_cache
+def _register_custom_calls():
+    for _name, _value in dr._get_plugin(gl=True).registrations().items():
+        # print('REGISTER:', _name)
+        xla_client.register_custom_call_target(_name, _value, platform="gpu")
+
+
+@functools.lru_cache(maxsize=None)
+def build_setup_primitive(r: "Renderer", h, w, num_layers):
+    _register_custom_calls()
+    # print('build_setup_primitive')
+    
+    # For JIT compilation we need a function to evaluate the shape and dtype of the
+    # outputs of our op for some given inputs
+    def _setup_abstract():
+        # print('setup abstract eval')
+        dtype = dtypes.canonicalize_dtype(np.float32)
+        return [ShapedArray((), dtype), ShapedArray((), dtype)]
+
+    # Provide an MLIR "lowering" of the load_vertices primitive.
+    def _setup_lowering(ctx):
+        # print('lowering setup!')
+
+        opaque = dr._get_plugin(gl=True).build_setup_descriptor(
+            r.renderer_env.cpp_wrapper, h, w, num_layers)
+
+        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(np.dtype(np.float32)))
+        op_name = "jax_setup"
+        return custom_call(
+            op_name,
+            # Output types
+            out_types=[scalar_dummy, scalar_dummy],
+            # The inputs:
+            operands=[],
+            # Layout specification:
+            operand_layouts=[],
+            result_layouts=[(), ()],
+            # GPU specific additional data
+            backend_config=opaque
+        )
+
+    # *********************************************
+    # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
+    # *********************************************
+    _prim = core.Primitive(f"setup__{id(r)}")
+    _prim.multiple_results = True
+    _prim.def_impl(functools.partial(xla.apply_primitive, _prim))
+    _prim.def_abstract_eval(_setup_abstract)
+
+    # Connect the XLA translation rules for JIT compilation
+    mlir.register_lowering(_prim, _setup_lowering, platform="gpu")
+    
+    return _prim
+
+
+@functools.lru_cache(maxsize=None)
+def build_load_vertices_primitive(r: "Renderer"):
+    _register_custom_calls()
+    # print('build_load_vertices_primitive')
+    
+    # For JIT compilation we need a function to evaluate the shape and dtype of the
+    # outputs of our op for some given inputs
+    def _load_vertices_abstract(vertices, triangles):
+        # print('load_vertices abstract eval:', vertices, triangles)
+        dtype = dtypes.canonicalize_dtype(np.float32)
+        return [ShapedArray((), dtype), ShapedArray((), dtype)]
+
+    # Provide an MLIR "lowering" of the load_vertices primitive.
+    def _load_vertices_lowering(ctx, vertices, triangles):
+        # print('lowering load_vertices!')
+        # Extract the numpy type of the inputs
+        vertices_aval, triangles_aval = ctx.avals_in
+
+        if np.dtype(vertices_aval.dtype) != np.float32:
+            raise NotImplementedError(f"Unsupported vertices dtype {np_dtype}")
+        if np.dtype(triangles_aval.dtype) != np.int32:
+            raise NotImplementedError(f"Unsupported triangles dtype {np_dtype}")
+
+        opaque = dr._get_plugin(gl=True).build_load_vertices_descriptor(
+            r.renderer_env.cpp_wrapper, vertices_aval.shape[0], triangles_aval.shape[0])
+
+        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(np.dtype(np.float32)))
+        op_name = "jax_load_vertices"
+        return custom_call(
+            op_name,
+            # Output types
+            out_types=[scalar_dummy, scalar_dummy],
+            # The inputs:
+            operands=[vertices, triangles],
+            # Layout specification:
+            operand_layouts=[(1, 0), (1, 0)],
+            result_layouts=[(), ()],
+            # GPU specific additional data
+            backend_config=opaque
+        )
+
+    # *********************************************
+    # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
+    # *********************************************
+    _prim = core.Primitive(f"load_vertices__{id(r)}")
+    _prim.multiple_results = True
+    _prim.def_impl(functools.partial(xla.apply_primitive, _prim))
+    _prim.def_abstract_eval(_load_vertices_abstract)
+
+    # Connect the XLA translation rules for JIT compilation
+    mlir.register_lowering(_prim, _load_vertices_lowering, platform="gpu")
+    
+    return _prim
+
+
+@functools.lru_cache(maxsize=None)
+def build_render_primitive(r: "Renderer", indices: Tuple[int], on_object: int = 0):
+    _register_custom_calls()
+    # print('build_render_primitive:', indices, on_object)
+    
+    # For JIT compilation we need a function to evaluate the shape and dtype of the
+    # outputs of our op for some given inputs
+    def _render_abstract(poses):
+        # print('render abstract eval:', poses)
+        num_images = poses.shape[1]
+        dtype = dtypes.canonicalize_dtype(poses.dtype)
+        return [ShapedArray((num_images, r.intrinsics.height, r.intrinsics.width, 4), dtype),
+                ShapedArray((), dtype)]
+
+    # Provide an MLIR "lowering" of the render primitive.
+    def _render_lowering(ctx, poses):
+
+        # print('render lowering!')
+        
+        # Extract the numpy type of the inputs
+        poses_aval, = ctx.avals_in
+        if poses_aval.ndim != 4:
+            raise NotImplementedError(f"Only 4D inputs supported: got {poses.shape}")
+
+        np_dtype = np.dtype(poses_aval.dtype)
+        if np_dtype != np.float32:
+            raise NotImplementedError(f"Unsupported dtype {np_dtype}")
+
+        num_images = poses_aval.shape[1]
+        shp_dtype = mlir.ir.RankedTensorType.get(
+            [num_images, r.intrinsics.height, r.intrinsics.width, 4],
+            mlir.dtype_to_ir_type(poses_aval.dtype))
+        layout = (3, 2, 1, 0)
+
+        num_objects = poses_aval.shape[0]
+        if num_objects > 32:
+            raise NotImplementedError(f"Custom call supports max of 32 objects, currently.")
+        opaque = dr._get_plugin(gl=True).build_rasterize_descriptor(r.renderer_env.cpp_wrapper,
+                                                                    r.proj_list,
+                                                                    indices,
+                                                                    num_objects,
+                                                                    poses_aval.shape[1],
+                                                                    on_object)
+
+        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(poses_aval.dtype))
+        op_name = "jax_rasterize_fwd_gl"
+        return custom_call(
+            op_name,
+            # Output types
+            out_types=[shp_dtype, scalar_dummy],
+            # The inputs:
+            operands=[poses],
+            # Layout specification:
+            operand_layouts=[layout],
+            result_layouts=[layout, ()],
+            # GPU specific additional data
+            backend_config=opaque
+        )
+
+    # *********************************************
+    # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
+    # *********************************************
+    _render_prim = core.Primitive(
+        f"render__{id(r)}__{on_object}__{'_'.join(map(str, indices))}")
+    _render_prim.multiple_results = True
+    _render_prim.def_impl(functools.partial(xla.apply_primitive, _render_prim))
+    _render_prim.def_abstract_eval(_render_abstract)
+
+    # Connect the XLA translation rules for JIT compilation
+    mlir.register_lowering(_render_prim, _render_lowering, platform="gpu")
+    
+    return _render_prim
+
+
+CUSTOM_CALLS = False
+
+
 class Renderer(object):
     def __init__(self, intrinsics, num_layers=512):
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
         self.proj_list = list(bayes3d.camera.open_gl_projection_matrix(
-            intrinsics.height, intrinsics.width, intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy, intrinsics.near, intrinsics.far
+            intrinsics.height, intrinsics.width, 
+            intrinsics.fx, intrinsics.fy, 
+            intrinsics.cx, intrinsics.cy, 
+            intrinsics.near, intrinsics.far
         ).reshape(-1))
 
-        dr._get_plugin(gl=True).setup(
-            self.renderer_env.cpp_wrapper,
-            intrinsics.height, intrinsics.width, num_layers
-        )
+        if not CUSTOM_CALLS:
+            dr._get_plugin(gl=True).setup(
+                self.renderer_env.cpp_wrapper,
+                intrinsics.height, intrinsics.width, num_layers
+            )
+        else:
+            build_setup_primitive(self,intrinsics.height, intrinsics.width, num_layers).bind()
 
         self.meshes =[]
         self.mesh_names =[]
@@ -63,36 +266,58 @@ class Renderer(object):
         vertices = np.array(mesh.vertices)
         vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)
         triangles = np.array(mesh.faces)
-        dr._get_plugin(gl=True).load_vertices_fwd(
-            self.renderer_env.cpp_wrapper, torch.tensor(vertices.astype("f"), device='cuda'),
-            torch.tensor(triangles.astype(np.int32), device='cuda'),
-        )
+        if CUSTOM_CALLS:
+            prim = build_load_vertices_primitive(self)
+            prim.bind(jnp.float32(vertices), jnp.int32(triangles))
+        else:
+            dr._get_plugin(gl=True).load_vertices_fwd(
+                self.renderer_env.cpp_wrapper, 
+                torch.tensor(vertices.astype("f"), device='cuda'),
+                torch.tensor(triangles.astype(np.int32), device='cuda'),
+            )
 
     def render_to_torch(self, poses, idx, on_object=0):
         poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(poses))
-        images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(self.renderer_env.cpp_wrapper, poses_torch, self.proj_list, idx, on_object)
+        images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(
+            self.renderer_env.cpp_wrapper, poses_torch, self.proj_list, idx, on_object)
         return images_torch
-
+    
+    def render_jax(self, poses, idx, on_object=0):
+        prim = build_render_primitive(self, tuple(idx), int(on_object))
+        return prim.bind(poses)[0]
+        
     def render_single_object(self, pose, idx):
-        images_torch = self.render_to_torch(pose[None, None, :, :], [idx])
-        images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+        if not CUSTOM_CALLS:
+            images_torch = self.render_to_torch(pose[None, None, :, :], [idx])
+            images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+        else:
+            images_jnp = self.render_jax(pose[None, None, :, :], [idx])[0]
         return transform_image_zeros_jit(images_jnp, self.intrinsics)
 
     def render_parallel(self, poses, idx):
-        images_torch = self.render_to_torch(poses[None, :, :, :], [idx])
-        images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+        if not CUSTOM_CALLS:
+            images_torch = self.render_to_torch(poses[None, :, :, :], [idx])
+            images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+        else:
+            images_jnp = self.render_jax(poses[None, :, :, :], [idx])
         return transform_image_zeros_parallel_jit(images_jnp, self.intrinsics)
 
 
     def render_multiobject(self, poses, indices):
-        images_torch = self.render_to_torch(poses[:, None, :, :], indices)
-        images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+        if not CUSTOM_CALLS:
+            images_torch = self.render_to_torch(poses[:, None, :, :], indices)
+            images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
+        else:
+            images_jnp = self.render_jax(poses[:, None, :, :], indices)[0]
         return transform_image_zeros_jit(images_jnp, self.intrinsics)
 
 
     def render_multiobject_parallel(self, poses, indices, on_object=0):
-        images_torch = self.render_to_torch(poses, indices, on_object=on_object)
-        images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+        if not CUSTOM_CALLS:
+            images_torch = self.render_to_torch(poses, indices, on_object=on_object)
+            images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
+        else:
+            images_jnp = self.render_jax(poses, indices, on_object=on_object)
         return transform_image_zeros_parallel_jit(images_jnp, self.intrinsics)
 
 def render_point_cloud(point_cloud, intrinsics, pixel_smudge=0):

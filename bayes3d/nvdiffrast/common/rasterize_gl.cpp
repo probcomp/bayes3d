@@ -274,11 +274,11 @@ void RasterizeGLStateWrapper::releaseContext(void)
 
 void threedp3_likelihood(float *pos, float *latent_points, float *likelihoods, float *obs_image, float r, int width, int height, int depth);
 
-void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width, int num_layers)
+void _setup(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, int height, int width, int num_layers)
 {
 
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    // cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
     s.model_counter = 0;
     s.img_width = width;
@@ -347,10 +347,27 @@ void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width, int num
     return;
 }
 
-void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri)
+void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width, int num_layers)
+{
+    _setup(at::cuda::getCurrentCUDAStream(), stateWrapper, height, width, num_layers);
+}
+
+
+void jax_setup(cudaStream_t stream,
+               void **buffers,
+               const char *opaque, std::size_t opaque_len) {
+    const SetUpCustomCallDescriptor &d = 
+        *UnpackDescriptor<SetUpCustomCallDescriptor>(opaque, opaque_len);
+    RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
+    _setup(stream, stateWrapper, d.height, d.width, d.num_layers);
+}
+
+
+void _load_vertices_fwd(cudaStream_t stream, 
+                        RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    // cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
 
     // Check inputs.
@@ -432,7 +449,33 @@ void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos,
     s.model_counter = s.model_counter + 1;
 }
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices, int on_object)
+void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri)
+{
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    return _load_vertices_fwd(stream, stateWrapper, pos, tri);
+}
+
+void jax_load_vertices(cudaStream_t stream,
+                       void **buffers,
+                       const char *opaque, std::size_t opaque_len)
+{
+    const LoadVerticesCustomCallDescriptor &d = 
+        *UnpackDescriptor<LoadVerticesCustomCallDescriptor>(opaque, opaque_len);
+    RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
+    // std::cerr << "load_vertices: " << d.num_vertices << "," << d.num_triangles << "\n";
+    torch::Tensor pos = torch::from_blob(
+        buffers[0], {d.num_vertices, 4}, /*strides=*/{4, 1}, 
+        std::function<void(void*)>([](void*){}), 
+        torch::dtype(torch::kFloat32).device(torch::kCUDA));
+    torch::Tensor tri = torch::from_blob(
+        buffers[1], {d.num_triangles, 3}, /*strides=*/{3, 1}, 
+        std::function<void(void*)>([](void*){}), 
+        torch::dtype(torch::kInt32).device(torch::kCUDA));
+    _load_vertices_fwd(stream, stateWrapper, pos, tri);
+}
+
+
+torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices, int on_object, void* out = nullptr)
 {
     NVDR_CHECK_DEVICE(pose);
     NVDR_CHECK_CONTIGUOUS(pose);
@@ -441,7 +484,6 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     auto start = std::chrono::high_resolution_clock::now();
 
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
 
     // Set the GL context unless manual context.
@@ -473,8 +515,18 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
 
     // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
+    torch::Tensor output_torch_tensor;
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    torch::Tensor output_torch_tensor = torch::empty({num_images, s.img_height, s.img_width,4}, opts);
+    if (out == nullptr) {
+        output_torch_tensor = torch::empty({num_images, s.img_height, s.img_width,4}, opts);
+    } else {
+        output_torch_tensor = torch::from_blob(
+            out,
+            {num_images, s.img_height, s.img_width, 4}, 
+            /*strides=*/{s.img_height * s.img_width * 4, s.img_width * 4, 4, 1}, 
+            /*deleter=*/[](void*){},
+            opts);
+    }
 
     const float* posePtr = pose.data_ptr<float>(); 
     for(int start_pose_idx=0; start_pose_idx < num_images; start_pose_idx+=s.num_layers)
@@ -533,6 +585,53 @@ torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper,  torch::Te
     return output_torch_tensor;
 }
 
+
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices, int on_object) {
+    return _rasterize_fwd_gl(at::cuda::getCurrentCUDAStream(), stateWrapper, pose, proj, indices, on_object, nullptr);
+}
+
+
+void jax_rasterize_fwd_gl(cudaStream_t stream,
+                          void **buffers,
+                          const char *opaque, std::size_t opaque_len) {
+
+    const RasterizeCustomCallDescriptor &d = 
+        *UnpackDescriptor<RasterizeCustomCallDescriptor>(opaque, opaque_len);
+    RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
+
+    void *pose = buffers[0];
+    void *out = buffers[1];
+    auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
+    _rasterize_fwd_gl(stream,
+                      stateWrapper,
+                      /*pose=*/torch::from_blob(
+                          pose,
+                          {d.num_objects, d.num_images, 4, 4},
+                          /*stride=*/{d.num_images * 16, 16, 4, 1},
+                          /*deleter=*/std::function<void(void*)>([](void*){}),
+                          opts),
+                      /*proj=*/std::vector<float>(d.proj, d.proj + 16),
+                      /*indices=*/std::vector<int>(d.indices, d.indices + d.num_objects),
+                      /*on_object=*/d.on_object,
+                      /*out=*/out);
+}
+
+
+template <typename T>
+pybind11::capsule EncapsulateFunction(T* fn) {
+  return pybind11::capsule((void*)fn, "xla._CUSTOM_CALL_TARGET");
+}
+
+pybind11::dict Registrations() {
+  pybind11::dict dict;
+  dict["jax_setup"] = EncapsulateFunction(jax_setup);
+  dict["jax_load_vertices"] = EncapsulateFunction(jax_load_vertices);
+  dict["jax_rasterize_fwd_gl"] = EncapsulateFunction(jax_rasterize_fwd_gl);
+  return dict;
+}
+
+
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // State classes.
     pybind11::class_<RasterizeGLStateWrapper>(m, "RasterizeGLStateWrapper").def(pybind11::init<bool, bool, int>())
@@ -543,8 +642,43 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("setup", &setup, "rasterize forward op (opengl)");
     m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
     m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
+    m.def("registrations", &Registrations, "custom call registrations");
+    m.def("build_setup_descriptor",
+          [](RasterizeGLStateWrapper& stateWrapper,
+             int h, int w, int num_layers) {
+              // std::cout << h << " " << w << " " << num_layers << "\n";
+              return PackDescriptor(SetUpCustomCallDescriptor{&stateWrapper, h, w, num_layers});
+          });
+    m.def("build_load_vertices_descriptor",
+          [](RasterizeGLStateWrapper& stateWrapper,
+             long num_vertices,
+             long num_triangles) {
+              return PackDescriptor(
+                  LoadVerticesCustomCallDescriptor{&stateWrapper, num_vertices, num_triangles});
+          });
+    m.def("build_rasterize_descriptor",
+          [](RasterizeGLStateWrapper& stateWrapper,
+             std::vector<float>& proj,
+             std::vector<int> indices,
+             int num_objects,
+             int num_images,
+             int on_object) {
+              RasterizeCustomCallDescriptor d;
+              d.gl_state_wrapper = &stateWrapper;
+              // NVDR_CHECK(proj.size() == 4 * 4);
+              std::copy(proj.begin(), proj.end(), d.proj);
+              // NVDR_CHECK(num_objects <= 128);
+              std::copy(indices.begin(), indices.begin() + num_objects, d.indices);
+              d.on_object = on_object;
+              d.num_objects = num_objects;
+              d.num_images = num_images;
+              return PackDescriptor(d);
+          });
 }
 
 //------------------------------------------------------------------------
+
+
+
 
 

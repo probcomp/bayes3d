@@ -51,7 +51,7 @@ print("gt_poses.shape", gt_poses.shape)
 
 gt_images = renderer.render_parallel(gt_poses,0)
 print("gt_images.shape", gt_images.shape)
-print((gt_images[0,:,:,-1] > 0 ).sum())
+print("non-zero D-channel pixels in img 0:", (gt_images[0,:,:,-1] > 0 ).sum())
 
 translation_deltas = j.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
 key = jax.random.PRNGKey(3)
