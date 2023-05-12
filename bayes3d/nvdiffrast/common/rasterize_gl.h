@@ -77,7 +77,7 @@ struct LoadVerticesCustomCallDescriptor {
 struct RasterizeCustomCallDescriptor {
     RasterizeGLStateWrapper* gl_state_wrapper;
     float proj[16];
-    int indices[128];
+    int indices[32];
     int num_objects;
     int num_images;
     int on_object;

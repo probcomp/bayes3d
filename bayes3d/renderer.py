@@ -217,7 +217,7 @@ def build_render_primitive(r: "Renderer", indices: Tuple[int], on_object: int = 
     return _render_prim
 
 
-CUSTOM_CALLS = False
+CUSTOM_CALLS = True
 
 
 class Renderer(object):
