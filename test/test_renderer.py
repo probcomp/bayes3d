@@ -2,6 +2,7 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 import bayes3d as j
+import bayes3d as b
 import trimesh
 import os
 import time
@@ -64,6 +65,8 @@ segmentation_viz = j.get_depth_image(multiobject_scene_parallel_img[-1,:,:,3], m
 j.multi_panel(
     [single_image_viz, parallel_images_viz, multiobject_viz, multiobject_parallel_viz, segmentation_viz]
 ).save("test_renderer.png")
+
+
 
 from IPython import embed; embed()
 
