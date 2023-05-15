@@ -126,7 +126,7 @@ def gausssian_mixture_vectorize(
         jax.lax.dynamic_slice(rendered_xyz_padded, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
     )
     probability = jax.scipy.special.logsumexp(
-        jax.scipy.stats.norm.pdf(
+        jax.scipy.stats.norm.logpdf(
             distances,
             loc=0.0,
             scale=jnp.sqrt(variance)
