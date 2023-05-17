@@ -39,7 +39,7 @@ def score_trace(trace, renderer, filter_size=3, mask=None):
         )
         return (p*mask).sum()
 
-def viz_trace_meshcat(trace, renderer):
+def viz_trace_meshcat(trace, renderer, colors=None):
     b.clear()
     key = jax.random.PRNGKey(10)
     b.show_cloud("1", trace.observation.reshape(-1,3))
@@ -47,8 +47,8 @@ def viz_trace_meshcat(trace, renderer):
     #     key, trace.observation[:,:,:3].reshape(-1,3), jnp.eye(3)*trace.variance
     # )
     # b.show_cloud("2", noisy_point_cloud_image.reshape(-1,3), color=b.RED)
-
-    colors = b.viz.distinct_colors(10)
+    if colors is None:
+        colors = b.viz.distinct_colors(max(10, len(trace.ids)))
     for i in range(len(trace.ids)):
         b.show_trimesh(f"obj_{i}", renderer.meshes[trace.ids[i]],color=colors[i])
         b.set_pose(f"obj_{i}", trace.poses[i])
