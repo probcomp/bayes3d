@@ -144,47 +144,50 @@ def build_load_vertices_primitive(r: "Renderer"):
 
 
 @functools.lru_cache(maxsize=None)
-def build_render_primitive(r: "Renderer", indices: Tuple[int], on_object: int = 0):
+def build_render_primitive(r: "Renderer", on_object: int = 0):
     _register_custom_calls()
-    # print('build_render_primitive:', indices, on_object)
+    # print('build_render_primitive:', on_object)
     
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
-    def _render_abstract(poses):
+    def _render_abstract(poses, indices):
         # print('render abstract eval:', poses)
         num_images = poses.shape[1]
+        if poses.shape[0] != indices.shape[0]:
+            raise ValueError(f"Mismatched #objects: {poses.shape}, {indices.shape}")
         dtype = dtypes.canonicalize_dtype(poses.dtype)
         return [ShapedArray((num_images, r.intrinsics.height, r.intrinsics.width, 4), dtype),
                 ShapedArray((), dtype)]
 
     # Provide an MLIR "lowering" of the render primitive.
-    def _render_lowering(ctx, poses):
+    def _render_lowering(ctx, poses, indices):
 
         # print('render lowering!')
         
         # Extract the numpy type of the inputs
-        poses_aval, = ctx.avals_in
+        poses_aval, indices_aval = ctx.avals_in
         if poses_aval.ndim != 4:
-            raise NotImplementedError(f"Only 4D inputs supported: got {poses.shape}")
+            raise NotImplementedError(f"Only 4D inputs supported: got {poses_aval.shape}")
+        if indices_aval.ndim != 1:
+            raise NotImplementedError(f"Only 1D inputs supported: got {indices_aval.shape}")
 
         np_dtype = np.dtype(poses_aval.dtype)
         if np_dtype != np.float32:
-            raise NotImplementedError(f"Unsupported dtype {np_dtype}")
+            raise NotImplementedError(f"Unsupported poses dtype {np_dtype}")
+        if np.dtype(indices_aval.dtype) != np.int32:
+            raise NotImplementedError(f"Unsupported indices dtype {indices_aval.dtype}")
 
-        num_images = poses_aval.shape[1]
-        shp_dtype = mlir.ir.RankedTensorType.get(
+        num_objects, num_images = poses_aval.shape[:2]
+        out_shp_dtype = mlir.ir.RankedTensorType.get(
             [num_images, r.intrinsics.height, r.intrinsics.width, 4],
             mlir.dtype_to_ir_type(poses_aval.dtype))
-        layout = (3, 2, 1, 0)
 
-        num_objects = poses_aval.shape[0]
-        if num_objects > 32:
-            raise NotImplementedError(f"Custom call supports max of 32 objects, currently.")
+        if num_objects != indices_aval.shape[0]:
+            raise ValueError("Mismatched #objects in poses vs indices: "
+                             f"{num_objects} vs {indices_aval.shape[0]}")
         opaque = dr._get_plugin(gl=True).build_rasterize_descriptor(r.renderer_env.cpp_wrapper,
                                                                     r.proj_list,
-                                                                    indices,
-                                                                    num_objects,
-                                                                    poses_aval.shape[1],
+                                                                    [num_objects, num_images],
                                                                     on_object)
 
         scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(poses_aval.dtype))
@@ -192,12 +195,12 @@ def build_render_primitive(r: "Renderer", indices: Tuple[int], on_object: int = 
         return custom_call(
             op_name,
             # Output types
-            out_types=[shp_dtype, scalar_dummy],
+            out_types=[out_shp_dtype, scalar_dummy],
             # The inputs:
-            operands=[poses],
+            operands=[poses, indices],
             # Layout specification:
-            operand_layouts=[layout],
-            result_layouts=[layout, ()],
+            operand_layouts=[(3, 2, 1, 0), (0,)],
+            result_layouts=[(3, 2, 1, 0), ()],
             # GPU specific additional data
             backend_config=opaque
         )
@@ -206,7 +209,7 @@ def build_render_primitive(r: "Renderer", indices: Tuple[int], on_object: int = 
     # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
     # *********************************************
     _render_prim = core.Primitive(
-        f"render__{id(r)}__{on_object}__{'_'.join(map(str, indices))}")
+        f"render__{id(r)}__{on_object}")
     _render_prim.multiple_results = True
     _render_prim.def_impl(functools.partial(xla.apply_primitive, _render_prim))
     _render_prim.def_abstract_eval(_render_abstract)
@@ -283,8 +286,10 @@ class Renderer(object):
         return images_torch
     
     def render_jax(self, poses, idx, on_object=0):
-        prim = build_render_primitive(self, tuple(idx), int(on_object))
-        return prim.bind(poses)[0]
+        poses = jnp.float32(poses)
+        idx = jnp.int32(idx)
+        prim = build_render_primitive(self, int(on_object))
+        return prim.bind(poses, idx)[0]
         
     def render_single_object(self, pose, idx):
         if not CUSTOM_CALLS:

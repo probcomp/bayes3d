@@ -19,6 +19,7 @@ intrinsics = j.Intrinsics(
 )
 
 renderer = j.Renderer(intrinsics)
+renderer.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/diamond.obj"))
 renderer.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/cube.obj"))
 
 num_frames = 60
@@ -49,7 +50,7 @@ print("gt_poses.shape", gt_poses.shape)
 
 
 
-gt_images = renderer.render_parallel(gt_poses,0)
+gt_images = renderer.render_parallel(gt_poses, 1)
 print("gt_images.shape", gt_images.shape)
 print("non-zero D-channel pixels in img 0:", (gt_images[0,:,:,-1] > 0 ).sum())
 
@@ -65,12 +66,12 @@ start = time.time()
 pose_estimates_over_time = []
 for gt_image in gt_images:
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, translation_deltas)
-    rendered_images = renderer.render_parallel(proposals, 0)
+    rendered_images = renderer.render_parallel(proposals, 1)
     weights_new = j.threedp3_likelihood_parallel_jit(gt_image, rendered_images, 0.05, 0.1, 10**3, 3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, rotation_deltas)
-    rendered_images = renderer.render_parallel(proposals, 0)
+    rendered_images = renderer.render_parallel(proposals, 1)
     weights_new = j.threedp3_likelihood_parallel_jit(gt_image, rendered_images, 0.05, 0.1, 10**3, 3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
@@ -84,7 +85,7 @@ viz_images = []
 max_depth = 10.0
 for i in range(gt_images.shape[0]):
     gt_img = j.viz.get_depth_image(gt_images[i,:,:,2])
-    rendered_image = renderer.render_single_object(pose_estimates_over_time[i], 0)
+    rendered_image = renderer.render_single_object(pose_estimates_over_time[i], 1)
     rendered_img = j.viz.get_depth_image(rendered_image[:,:,2])
     viz_images.append(
         j.viz.multi_panel(

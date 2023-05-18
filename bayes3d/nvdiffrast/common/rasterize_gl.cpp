@@ -475,7 +475,7 @@ void jax_load_vertices(cudaStream_t stream,
 }
 
 
-torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices, int on_object, void* out = nullptr)
+torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int>& indices, int on_object, void* out = nullptr)
 {
     NVDR_CHECK_DEVICE(pose);
     NVDR_CHECK_CONTIGUOUS(pose);
@@ -586,7 +586,7 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
 }
 
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int> indices, int on_object) {
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int>& indices, int on_object) {
     return _rasterize_fwd_gl(at::cuda::getCurrentCUDAStream(), stateWrapper, pose, proj, indices, on_object, nullptr);
 }
 
@@ -600,8 +600,19 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
 
     void *pose = buffers[0];
-    void *out = buffers[1];
+    void *obj_idx = buffers[1];
+    void *out = buffers[2];
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
+    std::vector<int> indices;
+    indices.resize(d.num_objects);
+    auto indices_cpu = torch::from_blob(
+        obj_idx,
+        {d.num_objects},
+        /*stride=*/{1},
+        /*deleter=*/std::function<void(void*)>([](void*){}),
+        torch::dtype(torch::kInt32).device(torch::kCUDA)
+    ).to(torch::kCPU);
+    std::memcpy(&indices[0], indices_cpu.data_ptr<int>(), d.num_objects * sizeof(int));
     _rasterize_fwd_gl(stream,
                       stateWrapper,
                       /*pose=*/torch::from_blob(
@@ -611,7 +622,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
                           /*deleter=*/std::function<void(void*)>([](void*){}),
                           opts),
                       /*proj=*/std::vector<float>(d.proj, d.proj + 16),
-                      /*indices=*/std::vector<int>(d.indices, d.indices + d.num_objects),
+                      /*indices=*/indices,
                       /*on_object=*/d.on_object,
                       /*out=*/out);
 }
@@ -659,19 +670,15 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("build_rasterize_descriptor",
           [](RasterizeGLStateWrapper& stateWrapper,
              std::vector<float>& proj,
-             std::vector<int> indices,
-             int num_objects,
-             int num_images,
+             std::vector<int> objs_images,
              int on_object) {
               RasterizeCustomCallDescriptor d;
               d.gl_state_wrapper = &stateWrapper;
               // NVDR_CHECK(proj.size() == 4 * 4);
               std::copy(proj.begin(), proj.end(), d.proj);
-              // NVDR_CHECK(num_objects <= 128);
-              std::copy(indices.begin(), indices.begin() + num_objects, d.indices);
               d.on_object = on_object;
-              d.num_objects = num_objects;
-              d.num_images = num_images;
+              d.num_objects = objs_images[0];
+              d.num_images = objs_images[1];
               return PackDescriptor(d);
           });
 }
