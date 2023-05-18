@@ -55,7 +55,7 @@ class RGBD(object):
         observation = RGBD(rgb, depth, jnp.eye(4), intrinsics, seg_final)
         return observation
 
-def scale_rgbd(rgbd, scaling_factor=1.0):
+def scale_rgbd(rgbd, scaling_factor):
     rgb = b.utils.scale(rgbd.rgb, scaling_factor)
     depth= b.utils.scale(rgbd.depth, scaling_factor)
     intrinsics = b.camera.scale_camera_parameters(rgbd.intrinsics, scaling_factor)
