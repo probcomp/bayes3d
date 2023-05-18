@@ -23,6 +23,7 @@ def vmf(key, concentration):
     return jnp.vstack(
         [jnp.hstack([rot_matrix, translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
     )
+vmf_jit = jax.jit(vmf)
 
 def gaussian_vmf_cov(key, covar, concentration):
     translation = tfp.distributions.MultivariateNormalFullCovariance(jnp.zeros(3), covar).sample(seed=key)
