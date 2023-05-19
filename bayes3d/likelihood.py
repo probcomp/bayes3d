@@ -126,7 +126,7 @@ def gausssian_mixture_vectorize(
         jax.lax.dynamic_slice(rendered_xyz_padded, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
     )
     probability = jax.scipy.special.logsumexp(
-        jax.scipy.stats.norm.pdf(
+        jax.scipy.stats.norm.logpdf(
             distances,
             loc=0.0,
             scale=jnp.sqrt(variance)
@@ -182,3 +182,90 @@ threedp3_likelihood_full_hierarchical_bayes_jit = jax.jit(jax.vmap(jax.vmap(jax.
        in_axes=(None, None, 0, None, None, None)),
        in_axes=(None, 0, None, None, None, None)
 ), static_argnames=('filter_size',))
+
+
+
+############################################################################################################
+
+
+@functools.partial(
+    jnp.vectorize,
+    signature='(m)->()',
+    excluded=(1,2,3,4,5,6,7,),
+)
+def gausssian_mixture_depth_image_vectorize(
+    ij,
+    observed_xyz: jnp.ndarray,
+    rendered_xyz_padded: jnp.ndarray,
+    variance,
+    num_mixture_components,
+    outlier_prob: float,
+    outlier_volume: float,
+    filter_size: int,
+):
+    # This is a (filter_size, filter_size, 3) dimesnional array. It's the xyz for each point
+    latent_points = jax.lax.dynamic_slice(rendered_xyz_padded, (ij[0], ij[1], 0), (2*filter_size + 1, 2*filter_size + 1, 3))
+    
+
+    xyz = observed_xyz[ij[0], ij[1], :3]
+    distance_along_ray = jnp.linalg.norm(xyz)
+    ray_unit_vector = xyz / distance_along_ray
+
+    distances_along_ray_for_latents = latent_points @ ray_unit_vector
+    point_along_ray_for_latents = distances_along_ray_for_latents[...,None] * ray_unit_vector
+
+    distance_from_ray = jnp.linalg.norm(latent_points - point_along_ray_for_latents, axis=-1)
+
+    mixture_component_weights= jax.scipy.stats.norm.logpdf(
+        distance_from_ray,
+        loc=0.0,
+        scale=jnp.sqrt(variance)
+    )
+    mixture_component_weights = mixture_component_weights - jax.scipy.special.logsumexp(mixture_component_weights)
+
+    # probabilities_under_each_gaussian is (filter_size, filter_size)
+    probabilities_under_each_gaussian = jax.scipy.stats.norm.logpdf(
+        distance_along_ray - distances_along_ray_for_latents,
+        loc=0.0,
+        scale=jnp.sqrt(variance)
+    ).sum(-1) + mixture_component_weights
+
+    probability =  jax.scipy.special.logsumexp(probabilities_under_each_gaussian)
+    return jnp.logaddexp(probability + jnp.log(1.0 - outlier_prob), jnp.log(outlier_prob) - jnp.log(outlier_volume))
+
+
+def threedp3_likelihood_depth_image_per_pixel(
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    variance,
+    outlier_prob,
+    outlier_volume,
+    filter_size
+):
+    num_mixture_components = observed_xyz.shape[0] * observed_xyz.shape[1]
+
+    rendered_xyz_padded = jax.lax.pad(rendered_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
+    jj, ii = jnp.meshgrid(jnp.arange(observed_xyz.shape[1]), jnp.arange(observed_xyz.shape[0]))
+    indices = jnp.stack([ii,jj],axis=-1)
+    log_probabilities = gausssian_mixture_vectorize(
+        indices, observed_xyz,
+        rendered_xyz_padded,
+        variance, num_mixture_components, outlier_prob, outlier_volume, filter_size
+    )
+    return log_probabilities
+
+threedp3_likelihood_per_pixel_jit = jax.jit(threedp3_likelihood_per_pixel, static_argnames=('filter_size',))
+
+def threedp3_likelihood_depth_image(
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    variance,
+    outlier_prob,
+    outlier_volume,
+    filter_size
+):
+    log_probabilities_per_pixel = threedp3_likelihood_per_pixel(
+        observed_xyz, rendered_xyz, variance,
+        outlier_prob, outlier_volume, filter_size
+    )
+    return log_probabilities_per_pixel.sum()

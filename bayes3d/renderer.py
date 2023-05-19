@@ -17,7 +17,7 @@ from jax.lib import xla_client
 import numpy as np
 import jax.dlpack
 from jaxlib.hlo_helpers import custom_call
-
+from tqdm import tqdm
 
 def transform_image_zeros(image_jnp, intrinsics):
     image_jnp_2 = jnp.concatenate(
