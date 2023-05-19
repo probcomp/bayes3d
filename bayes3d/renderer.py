@@ -6,6 +6,7 @@ import torch
 from torch.utils import dlpack
 import bayes3d.camera
 import bayes3d as j
+import bayes3d as b
 import bayes3d.transforms_3d as t3d
 import trimesh
 import jax.numpy as jnp
@@ -222,6 +223,9 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
 
 CUSTOM_CALLS = True
 
+def setup_renderer(intrinsics, num_layers=512):
+    b.RENDERER = Renderer(intrinsics, num_layers=num_layers)
+    
 
 class Renderer(object):
     def __init__(self, intrinsics, num_layers=512):

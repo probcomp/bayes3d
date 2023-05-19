@@ -65,5 +65,12 @@ j.multi_panel(
     [single_image_viz, parallel_images_viz, multiobject_viz, multiobject_parallel_viz, segmentation_viz]
 ).save("test_renderer.png")
 
+def f(poses, ids):
+    return renderer.render_multiobject_parallel(poses, ids)
+
+f_jit = jax.jit(f)
+imgs = f_jit(gt_poses_all, jnp.array([0,1]))
+
+
 from IPython import embed; embed()
 
