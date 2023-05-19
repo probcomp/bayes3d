@@ -48,7 +48,7 @@ for t in range(num_frames):
 gt_poses = jnp.stack(gt_poses)
 print("gt_poses.shape", gt_poses.shape)
 
-gt_images = b.RENDERER.render_multiobject_parallel(gt_poses[None, ...], jnp.array([0]))
+gt_images = jax.vmap(b.RENDERER.render_single_object, in_axes=(0, None))(gt_poses, jnp.int32(0))
 print("gt_images.shape", gt_images.shape)
 print("non-zero D-channel pixels in img 0:", (gt_images[0,:,:,-1] > 0 ).sum())
 
