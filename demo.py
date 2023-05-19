@@ -50,6 +50,7 @@ print("gt_poses.shape", gt_poses.shape)
 
 
 
+gt_images = jax.vmap(renderer.render_single_object, in_axes=(0, None))(gt_poses, jnp.int32(1))
 gt_images = renderer.render_parallel(gt_poses, 1)
 print("gt_images.shape", gt_images.shape)
 print("non-zero D-channel pixels in img 0:", (gt_images[0,:,:,-1] > 0 ).sum())

@@ -12,7 +12,7 @@ import jax.numpy as jnp
 import jax
 from jax import core, dtypes
 from jax.abstract_arrays import ShapedArray
-from jax.interpreters import mlir, xla
+from jax.interpreters import batching, mlir, xla
 from jax.lib import xla_client
 import numpy as np
 import jax.dlpack
@@ -32,6 +32,8 @@ transform_image_zeros_jit = jax.jit(transform_image_zeros)
 transform_image_zeros_parallel_jit = jax.jit(jax.vmap(transform_image_zeros, in_axes=(0,None)))
 
 
+# Useful reference for understanding the custom calls setup:
+#   https://github.com/dfm/extending-jax
 
 @functools.lru_cache
 def _register_custom_calls():
@@ -143,6 +145,11 @@ def build_load_vertices_primitive(r: "Renderer"):
     return _prim
 
 
+@functools.partial(jax.jit, static_argnums=(0, 3))
+def render_custom_call(r: "Renderer", poses, idx, on_object=0):
+    return build_render_primitive(r, int(on_object)).bind(poses, idx)
+
+
 @functools.lru_cache(maxsize=None)
 def build_render_primitive(r: "Renderer", on_object: int = 0):
     _register_custom_calls()
@@ -204,18 +211,54 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
             # GPU specific additional data
             backend_config=opaque
         )
+    
+    # ************************************
+    # *  SUPPORT FOR BATCHING WITH VMAP  *
+    # ************************************
+
+    # Our op already supports arbitrary dimensions so the batching rule is quite
+    # simple. The jax.lax.linalg module includes some example of more complicated
+    # batching rules if you need such a thing.
+    def _render_batch(args, axes):
+        poses, indices = args
+        print('batch!', poses.shape, indices.shape, axes)
+        if axes[1] is not None:
+            raise NotImplementedError("Batching on object indices is not yet supported.")
+        if axes[0] is None:
+            raise NotImplementedError("Must batch a dimension of poses.")
+        if poses.ndim != 5:
+            raise NotImplementedError("Underlying primitive must operate on 4D poses.")
+        # 4D pose shape is [num_objects, num_images, 4, 4].
+        orig_num_images = poses.shape[1]
+        num_batched = poses.shape[axes[0]]
+        new_num_images = num_batched * orig_num_images
+        # First, we will move the batched axis to be adjacent to num_images (axis 1).
+        poses = jnp.moveaxis(poses, axes[0], 1)
+        print('after moveaxis', poses.shape)
+        poses = poses.reshape(poses.shape[0], new_num_images, 4, 4)
+        if poses.shape[0] != indices.shape[0]:
+            raise ValueError(f"Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}")
+        if poses.shape[-2:] != (4, 4):
+            raise ValueError(f"Unexpected poses shape: {poses.shape}")
+        print('after reshape', poses.shape)
+        renders, dummy = render_custom_call(r, poses, indices, on_object=on_object)
+        print('renders', renders.shape)
+        renders = renders.reshape(num_batched, orig_num_images, *renders.shape[1:])
+        print('renders after reshape', renders.shape)
+        out_axes = (0,), (None,)
+        return (renders, dummy), out_axes
 
     # *********************************************
     # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
     # *********************************************
-    _render_prim = core.Primitive(
-        f"render__{id(r)}__{on_object}")
+    _render_prim = core.Primitive(f"render__{id(r)}__{on_object}")
     _render_prim.multiple_results = True
     _render_prim.def_impl(functools.partial(xla.apply_primitive, _render_prim))
     _render_prim.def_abstract_eval(_render_abstract)
 
     # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_render_prim, _render_lowering, platform="gpu")
+    batching.primitive_batchers[_render_prim] = _render_batch
     
     return _render_prim
 
@@ -288,15 +331,19 @@ class Renderer(object):
     def render_jax(self, poses, idx, on_object=0):
         poses = jnp.float32(poses)
         idx = jnp.int32(idx)
-        prim = build_render_primitive(self, int(on_object))
-        return prim.bind(poses, idx)[0]
+        res = render_custom_call(self, poses, idx, on_object)
+        print('render_jax: res =', res)
+        return res[0]
         
     def render_single_object(self, pose, idx):
         if not CUSTOM_CALLS:
             images_torch = self.render_to_torch(pose[None, None, :, :], [idx])
             images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
         else:
-            images_jnp = self.render_jax(pose[None, None, :, :], [idx])[0]
+            print('render_single_obj', pose.shape, idx)
+            images_jnp = self.render_jax(pose[None, None, :, :], [idx])
+            print('images shp', images_jnp.shape)
+            images_jnp = images_jnp[0]
         return transform_image_zeros_jit(images_jnp, self.intrinsics)
 
     def render_parallel(self, poses, idx):
