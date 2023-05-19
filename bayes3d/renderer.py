@@ -223,12 +223,12 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
 
 CUSTOM_CALLS = True
 
-def setup_renderer(intrinsics, num_layers=512):
-    b.RENDERER = Renderer(intrinsics, num_layers=num_layers)
+def setup_renderer(intrinsics, num_layers=1024):
+    b.RENDERER = _Renderer(intrinsics, num_layers=num_layers)
     
 
-class Renderer(object):
-    def __init__(self, intrinsics, num_layers=512):
+class _Renderer(object):
+    def __init__(self, intrinsics, num_layers=1024):
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
         self.proj_list = list(bayes3d.camera.open_gl_projection_matrix(
