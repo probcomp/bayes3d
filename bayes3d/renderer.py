@@ -205,10 +205,6 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
     # ************************************
     # *  SUPPORT FOR BATCHING WITH VMAP  *
     # ************************************
-
-    # Our op already supports arbitrary dimensions so the batching rule is quite
-    # simple. The jax.lax.linalg module includes some example of more complicated
-    # batching rules if you need such a thing.
     def _render_batch(args, axes):
         poses, indices = args
         if axes[1] is not None:
