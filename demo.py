@@ -10,6 +10,11 @@ import cv2
 import trimesh
 import os
 
+
+# Can be helpful for debugging:
+# jax.config.update('jax_enable_checks', True) 
+
+
 intrinsics = j.Intrinsics(
     height=300,
     width=300,

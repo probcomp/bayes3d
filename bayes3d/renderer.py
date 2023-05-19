@@ -38,25 +38,21 @@ transform_image_zeros_parallel_jit = jax.jit(jax.vmap(transform_image_zeros, in_
 @functools.lru_cache
 def _register_custom_calls():
     for _name, _value in dr._get_plugin(gl=True).registrations().items():
-        # print('REGISTER:', _name)
         xla_client.register_custom_call_target(_name, _value, platform="gpu")
 
 
 @functools.lru_cache(maxsize=None)
 def build_setup_primitive(r: "Renderer", h, w, num_layers):
     _register_custom_calls()
-    # print('build_setup_primitive')
     
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _setup_abstract():
-        # print('setup abstract eval')
         dtype = dtypes.canonicalize_dtype(np.float32)
         return [ShapedArray((), dtype), ShapedArray((), dtype)]
 
     # Provide an MLIR "lowering" of the load_vertices primitive.
     def _setup_lowering(ctx):
-        # print('lowering setup!')
 
         opaque = dr._get_plugin(gl=True).build_setup_descriptor(
             r.renderer_env.cpp_wrapper, h, w, num_layers)
@@ -93,18 +89,15 @@ def build_setup_primitive(r: "Renderer", h, w, num_layers):
 @functools.lru_cache(maxsize=None)
 def build_load_vertices_primitive(r: "Renderer"):
     _register_custom_calls()
-    # print('build_load_vertices_primitive')
     
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _load_vertices_abstract(vertices, triangles):
-        # print('load_vertices abstract eval:', vertices, triangles)
         dtype = dtypes.canonicalize_dtype(np.float32)
         return [ShapedArray((), dtype), ShapedArray((), dtype)]
 
     # Provide an MLIR "lowering" of the load_vertices primitive.
     def _load_vertices_lowering(ctx, vertices, triangles):
-        # print('lowering load_vertices!')
         # Extract the numpy type of the inputs
         vertices_aval, triangles_aval = ctx.avals_in
 
@@ -153,12 +146,10 @@ def render_custom_call(r: "Renderer", poses, idx, on_object=0):
 @functools.lru_cache(maxsize=None)
 def build_render_primitive(r: "Renderer", on_object: int = 0):
     _register_custom_calls()
-    # print('build_render_primitive:', on_object)
     
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _render_abstract(poses, indices):
-        # print('render abstract eval:', poses)
         num_images = poses.shape[1]
         if poses.shape[0] != indices.shape[0]:
             raise ValueError(f"Mismatched #objects: {poses.shape}, {indices.shape}")
@@ -169,8 +160,6 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
     # Provide an MLIR "lowering" of the render primitive.
     def _render_lowering(ctx, poses, indices):
 
-        # print('render lowering!')
-        
         # Extract the numpy type of the inputs
         poses_aval, indices_aval = ctx.avals_in
         if poses_aval.ndim != 4:
@@ -221,7 +210,6 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
     # batching rules if you need such a thing.
     def _render_batch(args, axes):
         poses, indices = args
-        print('batch!', poses.shape, indices.shape, axes)
         if axes[1] is not None:
             raise NotImplementedError("Batching on object indices is not yet supported.")
         if axes[0] is None:
@@ -234,18 +222,14 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
         new_num_images = num_batched * orig_num_images
         # First, we will move the batched axis to be adjacent to num_images (axis 1).
         poses = jnp.moveaxis(poses, axes[0], 1)
-        print('after moveaxis', poses.shape)
         poses = poses.reshape(poses.shape[0], new_num_images, 4, 4)
         if poses.shape[0] != indices.shape[0]:
             raise ValueError(f"Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}")
         if poses.shape[-2:] != (4, 4):
             raise ValueError(f"Unexpected poses shape: {poses.shape}")
-        print('after reshape', poses.shape)
         renders, dummy = render_custom_call(r, poses, indices, on_object=on_object)
-        print('renders', renders.shape)
         renders = renders.reshape(num_batched, orig_num_images, *renders.shape[1:])
-        print('renders after reshape', renders.shape)
-        out_axes = (0,), (None,)
+        out_axes = 0, None
         return (renders, dummy), out_axes
 
     # *********************************************
@@ -331,19 +315,14 @@ class Renderer(object):
     def render_jax(self, poses, idx, on_object=0):
         poses = jnp.float32(poses)
         idx = jnp.int32(idx)
-        res = render_custom_call(self, poses, idx, on_object)
-        print('render_jax: res =', res)
-        return res[0]
+        return render_custom_call(self, poses, idx, on_object)[0]
         
     def render_single_object(self, pose, idx):
         if not CUSTOM_CALLS:
             images_torch = self.render_to_torch(pose[None, None, :, :], [idx])
             images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
         else:
-            print('render_single_obj', pose.shape, idx)
-            images_jnp = self.render_jax(pose[None, None, :, :], [idx])
-            print('images shp', images_jnp.shape)
-            images_jnp = images_jnp[0]
+            images_jnp = self.render_jax(pose[None, None, :, :], [idx])[0]
         return transform_image_zeros_jit(images_jnp, self.intrinsics)
 
     def render_parallel(self, poses, idx):
