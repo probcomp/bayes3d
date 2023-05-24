@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import jax
 from jax import core, dtypes
 from jax.abstract_arrays import ShapedArray
-from jax.interpreters import mlir, xla
+from jax.interpreters import batching, mlir, xla
 from jax.lib import xla_client
 import numpy as np
 import jax.dlpack
@@ -33,29 +33,27 @@ transform_image_zeros_jit = jax.jit(transform_image_zeros)
 transform_image_zeros_parallel_jit = jax.jit(jax.vmap(transform_image_zeros, in_axes=(0,None)))
 
 
+# Useful reference for understanding the custom calls setup:
+#   https://github.com/dfm/extending-jax
 
 @functools.lru_cache
 def _register_custom_calls():
     for _name, _value in dr._get_plugin(gl=True).registrations().items():
-        # print('REGISTER:', _name)
         xla_client.register_custom_call_target(_name, _value, platform="gpu")
 
 
 @functools.lru_cache(maxsize=None)
 def build_setup_primitive(r: "Renderer", h, w, num_layers):
     _register_custom_calls()
-    # print('build_setup_primitive')
     
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _setup_abstract():
-        # print('setup abstract eval')
         dtype = dtypes.canonicalize_dtype(np.float32)
         return [ShapedArray((), dtype), ShapedArray((), dtype)]
 
     # Provide an MLIR "lowering" of the load_vertices primitive.
     def _setup_lowering(ctx):
-        # print('lowering setup!')
 
         opaque = dr._get_plugin(gl=True).build_setup_descriptor(
             r.renderer_env.cpp_wrapper, h, w, num_layers)
@@ -92,18 +90,15 @@ def build_setup_primitive(r: "Renderer", h, w, num_layers):
 @functools.lru_cache(maxsize=None)
 def build_load_vertices_primitive(r: "Renderer"):
     _register_custom_calls()
-    # print('build_load_vertices_primitive')
     
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _load_vertices_abstract(vertices, triangles):
-        # print('load_vertices abstract eval:', vertices, triangles)
         dtype = dtypes.canonicalize_dtype(np.float32)
         return [ShapedArray((), dtype), ShapedArray((), dtype)]
 
     # Provide an MLIR "lowering" of the load_vertices primitive.
     def _load_vertices_lowering(ctx, vertices, triangles):
-        # print('lowering load_vertices!')
         # Extract the numpy type of the inputs
         vertices_aval, triangles_aval = ctx.avals_in
 
@@ -144,15 +139,18 @@ def build_load_vertices_primitive(r: "Renderer"):
     return _prim
 
 
+@functools.partial(jax.jit, static_argnums=(0, 3))
+def render_custom_call(r: "Renderer", poses, idx, on_object=0):
+    return build_render_primitive(r, int(on_object)).bind(poses, idx)
+
+
 @functools.lru_cache(maxsize=None)
 def build_render_primitive(r: "Renderer", on_object: int = 0):
     _register_custom_calls()
-    # print('build_render_primitive:', on_object)
     
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _render_abstract(poses, indices):
-        # print('render abstract eval:', poses)
         num_images = poses.shape[1]
         if poses.shape[0] != indices.shape[0]:
             raise ValueError(f"Mismatched #objects: {poses.shape}, {indices.shape}")
@@ -163,8 +161,6 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
     # Provide an MLIR "lowering" of the render primitive.
     def _render_lowering(ctx, poses, indices):
 
-        # print('render lowering!')
-        
         # Extract the numpy type of the inputs
         poses_aval, indices_aval = ctx.avals_in
         if poses_aval.ndim != 4:
@@ -205,18 +201,45 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
             # GPU specific additional data
             backend_config=opaque
         )
+    
+    # ************************************
+    # *  SUPPORT FOR BATCHING WITH VMAP  *
+    # ************************************
+    def _render_batch(args, axes):
+        poses, indices = args
+        if axes[1] is not None:
+            raise NotImplementedError("Batching on object indices is not yet supported.")
+        if axes[0] is None:
+            raise NotImplementedError("Must batch a dimension of poses.")
+        if poses.ndim != 5:
+            raise NotImplementedError("Underlying primitive must operate on 4D poses.")
+        # 4D pose shape is [num_objects, num_images, 4, 4].
+        orig_num_images = poses.shape[1]
+        num_batched = poses.shape[axes[0]]
+        new_num_images = num_batched * orig_num_images
+        # First, we will move the batched axis to be adjacent to num_images (axis 1).
+        poses = jnp.moveaxis(poses, axes[0], 1)
+        poses = poses.reshape(poses.shape[0], new_num_images, 4, 4)
+        if poses.shape[0] != indices.shape[0]:
+            raise ValueError(f"Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}")
+        if poses.shape[-2:] != (4, 4):
+            raise ValueError(f"Unexpected poses shape: {poses.shape}")
+        renders, dummy = render_custom_call(r, poses, indices, on_object=on_object)
+        renders = renders.reshape(num_batched, orig_num_images, *renders.shape[1:])
+        out_axes = 0, None
+        return (renders, dummy), out_axes
 
     # *********************************************
     # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
     # *********************************************
-    _render_prim = core.Primitive(
-        f"render__{id(r)}__{on_object}")
+    _render_prim = core.Primitive(f"render__{id(r)}__{on_object}")
     _render_prim.multiple_results = True
     _render_prim.def_impl(functools.partial(xla.apply_primitive, _render_prim))
     _render_prim.def_abstract_eval(_render_abstract)
 
     # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_render_prim, _render_lowering, platform="gpu")
+    batching.primitive_batchers[_render_prim] = _render_batch
     
     return _render_prim
 
@@ -292,8 +315,7 @@ class _Renderer(object):
     def render_jax(self, poses, idx, on_object=0):
         poses = jnp.float32(poses)
         idx = jnp.int32(idx)
-        prim = build_render_primitive(self, int(on_object))
-        return prim.bind(poses, idx)[0]
+        return render_custom_call(self, poses, idx, on_object)[0]
         
     def render_single_object(self, pose, idx):
         if not CUSTOM_CALLS:
