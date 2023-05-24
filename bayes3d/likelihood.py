@@ -171,10 +171,12 @@ def threedp3_likelihood(
     return log_probabilities_per_pixel.sum()
 
 threedp3_likelihood_jit = jax.jit(threedp3_likelihood,static_argnames=('filter_size',))
+threedp3_likelihood_parallel = jax.vmap(threedp3_likelihood, in_axes=(None, 0, None, None, None, None))
 threedp3_likelihood_parallel_jit = jax.jit(jax.vmap(
     threedp3_likelihood, in_axes=(None, 0, None, None, None, None))
     ,static_argnames=('filter_size',)
 )
+
 threedp3_likelihood_per_pixel_jit = jax.jit(threedp3_likelihood_per_pixel, static_argnames=('filter_size',))
 threedp3_likelihood_full_hierarchical_bayes_jit = jax.jit(jax.vmap(jax.vmap(jax.vmap(
         threedp3_likelihood,
