@@ -15,11 +15,9 @@ MESHES_PATH = os.path.join(DATA_PREFIX, "{experiment}_data/meshes")
 
 metrics = {
     "accuracy": skm.accuracy_score,
-    "precision": lambda y_true, y_pred: skm.precision_score(
-        y_true, y_pred, average="macro"
-    ),
-    "recall": lambda y_true, y_pred: skm.recall_score(y_true, y_pred, average="macro"),
-    "f1": lambda y_true, y_pred: skm.f1_score(y_true, y_pred, average="macro"),
+    "precision": lambda yt, yp: skm.precision_score(yt, yp, average="macro"),
+    "recall": lambda yt, yp: skm.recall_score(yt, yp, average="macro"),
+    "f1": lambda yt, yp: skm.f1_score(yt, yp, average="macro"),
     "mae": skm.mean_absolute_error,
 }
 
@@ -40,8 +38,7 @@ def run_inference(experiment: str, video_path: str) -> Tuple[int, int]:
 if __name__ == "__main__":
     experiment = "gravity"
     condition = "train/1_tubes"
-    video_paths = glob(f"{DATA_PREFIX}/{experiment}_data/videos/{condition}/**")[:10]
-    video_paths = [f"{DATA_PREFIX}/{experiment}_data/videos/{condition}/36"]
+    video_paths = glob(f"{DATA_PREFIX}/{experiment}_data/videos/{condition}/**")
 
     n = len(video_paths)
     preds, labels = [], []

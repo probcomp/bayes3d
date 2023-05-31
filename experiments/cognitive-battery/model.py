@@ -114,13 +114,13 @@ def model(
 
     init_poses = jnp.array(init_poses)
 
-## Defining inference helper functions
+    ## Defining inference helper functions
 
-# Enumerating proposals
-def make_unfiform_grid(n, d):
-    # d: number of enumerated proposals on each dimension (x, y, z).
-    # n: the minimum and maximum position delta on each dimension (x, y, z).
-    return jax3dp3.make_translation_grid_enumeration(-d, -d, -d, d, d, d, n, n, n)
+    # Enumerating proposals
+    def make_unfiform_grid(n, d):
+        # d: number of enumerated proposals on each dimension (x, y, z).
+        # n: the minimum and maximum position delta on each dimension (x, y, z).
+        return bayes3d.make_translation_grid_enumeration(-d, -d, -d, d, d, d, n, n, n)
 
     def prior(new_pose, prev_poses, ewma_alpha=0.15):
         new_pose = new_pose[:3, 3]
@@ -149,14 +149,14 @@ def make_unfiform_grid(n, d):
 
     prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None)))
 
-# Liklelihood model
-def scorer(rendered_image, gt, r=0.1, op=0.005, ov=0.5):
-    # Liklihood parameters
-    # r: radius
-    # op: outlier probability
-    # ov: outlier volume
-    weight = jax3dp3.likelihood.threedp3_likelihood(gt, rendered_image, r, op, ov)
-    return weight
+    # Liklelihood model
+    def scorer(rendered_image, gt, r=0.1, op=0.005, ov=0.5):
+        # Liklihood parameters
+        # r: radius
+        # op: outlier probability
+        # ov: outlier volume
+        weight = bayes3d.likelihood.threedp3_likelihood(gt, rendered_image, r, op, ov)
+        return weight
 
     scorer_parallel = jax.jit(jax.vmap(scorer, in_axes=(0, None)))
 

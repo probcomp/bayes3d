@@ -6,9 +6,9 @@ import jax.numpy as jnp
 import numpy as np
 from PIL import Image
 
-import jax3dp3
-from jax3dp3.transforms_3d import transform_from_pos, unproject_depth
-from jax3dp3.viz import get_depth_image
+import bayes3d
+from bayes3d.transforms_3d import transform_from_pos, unproject_depth
+from bayes3d.viz import get_depth_image
 
 scene = "gravity"
 DATA_PREFIX = os.environ.get("JAX3DP3_DATA_PATH", "data/")
@@ -22,7 +22,7 @@ height = 300
 fov = 90
 
 intrinsics = utils.get_camera_intrinsics(width, height, fov)
-renderer = jax3dp3.Renderer(intrinsics=intrinsics)
+renderer = bayes3d.Renderer(intrinsics=intrinsics)
 
 rgb_images, depth_images, seg_maps = [], [], []
 rgb_images_pil = []
