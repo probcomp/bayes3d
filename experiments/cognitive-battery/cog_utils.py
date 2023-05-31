@@ -1,8 +1,10 @@
 import json
+import os
 from typing import List, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
+import yaml
 from scipy.spatial.transform import Rotation as R
 
 import bayes3d
@@ -74,8 +76,12 @@ def find_best_mesh(
         obj_transforms = get_object_transforms(meshes[m], obj_transform)
         for i, transform in enumerate(obj_transforms):
             rendered_image = renderer.render_single_object(transform, m)
-            scaling_factor = (rendered_image[:, :, 2] != 0.0).sum() / (depth[:, :, 2] != 0.0).sum()
-            scaling_factor = 1 / scaling_factor if scaling_factor < 1 else scaling_factor
+            scaling_factor = (rendered_image[:, :, 2] != 0.0).sum() / (
+                depth[:, :, 2] != 0.0
+            ).sum()
+            scaling_factor = (
+                1 / scaling_factor if scaling_factor < 1 else scaling_factor
+            )
             keep_points = (
                 jnp.sum(
                     jnp.logical_or(
@@ -186,3 +192,11 @@ def get_reward_idx(
     reward_mesh_idx = meshes.index(reward_mesh_name)
 
     return indices.index(reward_mesh_idx)
+
+
+def read_label(video_path: str, label_key: str = "final_location") -> int:
+    expt_stats_path = os.path.join(video_path, "human_readable/experiment_stats.yaml")
+    with open(expt_stats_path) as f:
+        expt_stats = yaml.safe_load(f)
+        label = expt_stats[label_key]
+    return label

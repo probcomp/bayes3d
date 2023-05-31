@@ -13,13 +13,14 @@ from jax3dp3.viz import get_depth_image, make_gif_from_pil_images, multi_panel
 
 import cog_utils as utils
 from collections import deque
+jax3dp3.nvdiffrast.common.set_log_level(0)
 
 class config:
     scene = "gravity"
     iterations_per_step = 1
     num_past_poses = 5
     grid_n = 7
-    grid_deltas = [0.1, 0.05, 0.25]
+    grid_deltas = [0.1, 0.05, 0.025]
     gravity_shift_prior = 0.05
     occlusion_threshold = 10
     num_steps = "auto"
@@ -158,8 +159,6 @@ def gravity_model(
     n_objects = init_poses.shape[0]
     reward_idx = utils.get_reward_idx(meshes, indices)
 
-    containment_relations = {}
-    objs_deltas = {}
     inferred_poses = []
     pose_estimates = init_poses.copy()
     past_poses = {i: deque([pose_estimates[i]]*config.num_past_poses) for i in range(pose_estimates.shape[0])}
@@ -167,22 +166,6 @@ def gravity_model(
         gt_image = jnp.array(coord_images[t])
         for _ in range(config.iterations_per_step):
             for i in range(n_objects):
-                if i in set(containment_relations.values()):
-                    continue
-
-                # Check for occlusion
-                if i == reward_idx:
-                    occluded = utils.check_occlusion(
-                        renderer, pose_estimates, indices, i
-                    )
-                    if occluded:
-                        containing_obj = utils.check_containment(
-                            renderer, pose_estimates, indices, i
-                        )
-                        if containing_obj is not None:
-                            containment_relations[containing_obj] = i
-                            continue
-
                 for d in config.grid_deltas:
                     translation_deltas = make_unfiform_grid(n=7, d=d)
                     translation_deltas_full = jnp.tile(
@@ -209,11 +192,6 @@ def gravity_model(
                 past_poses[i].append(pose_estimates[i])
                 if len(past_poses[i]) > config.num_past_poses:
                     past_poses[i].popleft()
-
-            for i, j in containment_relations.items():
-                i_delta_pose = past_poses[i][-1] - past_poses[i][-2]
-                new_pose_estimate = pose_estimates[j] + i_delta_pose
-                pose_estimates = pose_estimates.at[j].set(new_pose_estimate)
 
         inferred_poses.append(pose_estimates.copy())
 
