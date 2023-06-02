@@ -2,6 +2,9 @@ import pybullet as p
 import pybullet_data
 import imageio
 import numpy as np
+import pickle
+import os
+print(os.getcwd(), "this is the current working directory")
 
 # Initialize the PyBullet physics simulation
 p.connect(p.GUI)
@@ -29,12 +32,19 @@ sphere_shape2 = p.createCollisionShape(p.GEOM_SPHERE, radius=sphere_radius2)
 sphere_id2 = p.createMultiBody(sphere_mass2, sphere_shape2, basePosition=sphere_position2)
 p.resetBaseVelocity(sphere_id2, sphere_start_velocity2)
 
-# Array to store frames
+# Arrays for serialization 
 frames = []
+sphere_loc = []
+sphere_loc2 = []
 
 # Step through the simulation
 for i in range(100):
     p.stepSimulation()
+    # record positions of spheres
+    sphere_position1 = p.getBasePositionAndOrientation(sphere_id1)[0]
+    sphere_position2 = p.getBasePositionAndOrientation(sphere_id2)[0]
+    sphere_loc.append(sphere_position1)
+    sphere_loc2.append(sphere_position2)
     # save a frame every fifth 
     if i % 5 == 0:
         view_matrix = p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=[0, 0, 0], distance=5, yaw=0, pitch=-30, roll=0,
@@ -47,7 +57,11 @@ for i in range(100):
         rgb_array = rgb_array[:, :, :3]  # remove alpha channel
         frames.append(rgb_array)
 
-# Save GIF
-imageio.mimsave('simulation.gif', frames, 'GIF', fps=15)
+# Save GIF and serialize the sphere locations
+imageio.mimsave('balls-simulation.gif', frames, 'GIF', duration=1000 * (1/15))
+with open('sph_loc.pkl', 'wb') as f:
+    pickle.dump(sphere_loc, f)
+with open('sph_loc2.pkl', 'wb') as f:
+    pickle.dump(sphere_loc2, f)
 
 p.disconnect()
