@@ -8,8 +8,8 @@ import yaml
 from scipy.spatial.transform import Rotation as R
 
 import bayes3d
-from bayes3d import Renderer
-
+from bayes3d.renderer import _Renderer
+from bayes3d.viz import get_depth_image
 
 def get_object_transforms(obj_name: str, init_transform: jnp.ndarray) -> jnp.ndarray:
     """
@@ -61,7 +61,7 @@ def get_camera_intrinsics(
 
 
 def find_best_mesh(
-    renderer: Renderer,
+    renderer: _Renderer,
     meshes: List[str],
     obj_transform: jnp.ndarray,
     depth: jnp.ndarray,
@@ -76,7 +76,8 @@ def find_best_mesh(
         obj_transforms = get_object_transforms(meshes[m], obj_transform)
         for i, transform in enumerate(obj_transforms):
             rendered_image = renderer.render_single_object(transform, m)
-            scaling_factor = (rendered_image[:, :, 2] != 0.0).sum() / (
+            get_depth_image(rendered_image[:, :, 2], max=50).save(pp + f"{meshes[m]}_{i}.png")
+            scaling_factor = (rendered_image[:, :, 2] != rendered_image.max()).sum() / (
                 depth[:, :, 2] != 0.0
             ).sum()
             scaling_factor = (
@@ -85,8 +86,8 @@ def find_best_mesh(
             keep_points = (
                 jnp.sum(
                     jnp.logical_or(
-                        ((depth[:, :, 2] != 0.0) * (rendered_image[:, :, 2] == 0)),
-                        ((depth[:, :, 2] == 0.0) * (rendered_image[:, :, 2] != 0)),
+                        ((depth[:, :, 2] != 0.0) * (rendered_image[:, :, 2] == rendered_image.max())),
+                        ((depth[:, :, 2] == 0.0) * (rendered_image[:, :, 2] != rendered_image.max())),
                     )
                 )
                 * scaling_factor
@@ -98,7 +99,7 @@ def find_best_mesh(
 
 
 def check_occlusion(
-    renderer: Renderer,
+    renderer: _Renderer,
     pose_estimates: jnp.ndarray,
     indices: List[int],
     obj_idx: int,
@@ -119,7 +120,7 @@ def check_occlusion(
 
 
 def check_containment(
-    renderer: Renderer,
+    renderer: _Renderer,
     pose_estimates: jnp.ndarray,
     indices: List[int],
     obj_idx: int,
@@ -182,15 +183,10 @@ def full_translation_deltas_single(
 def get_reward_idx(
     meshes: List[str], indices: List[int], reward_mesh_name: str = "apple"
 ) -> int:
-    """
-    TODO
-    """
-    if not reward_mesh_name in meshes:
-        raise Exception(
-            f"Could not find mesh name {reward_mesh_name} in the meshes list."
-        )
+    assert (reward_mesh_name in meshes), f"Could not find mesh name {reward_mesh_name} in the meshes list."
     reward_mesh_idx = meshes.index(reward_mesh_name)
 
+    assert reward_mesh_idx in indices, "Could not locate the reward in the scene."
     return indices.index(reward_mesh_idx)
 
 

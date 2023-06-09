@@ -30,7 +30,8 @@ def model(
     num_frames = len(os.listdir(os.path.join(data_path, "frames")))
 
     intrinsics = utils.get_camera_intrinsics(config.width, config.height, config.fov)
-    renderer = bayes3d.Renderer(intrinsics=intrinsics)
+    bayes3d.setup_renderer(intrinsics)
+    renderer = bayes3d.RENDERER
 
     rgb_images, depth_images, seg_maps = [], [], []
     rgb_images_pil = []
@@ -150,12 +151,12 @@ def model(
     prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None)))
 
     # Liklelihood model
-    def scorer(rendered_image, gt, r=0.1, op=0.005, ov=0.5):
+    def scorer(rendered_image, gt, var=0.1, op=0.005, ov=0.5, fs=5):
         # Liklihood parameters
         # r: radius
         # op: outlier probability
         # ov: outlier volume
-        weight = bayes3d.likelihood.threedp3_likelihood(gt, rendered_image, r, op, ov)
+        weight = bayes3d.likelihood.threedp3_likelihood(gt, rendered_image, var, op, ov, fs)
         return weight
 
     scorer_parallel = jax.jit(jax.vmap(scorer, in_axes=(0, None)))
