@@ -32,22 +32,36 @@ def create_plane(position, orientation):
     return plane_id
 
 # o3d version
-def create_sphere(position, radius):
+def create_sphere_geom(position, radius):
     sphere = o3d.geometry.TriangleMesh.create_sphere(radius=radius)
-    sphere.translate(position)
+    sphere.compute_vertex_normals()
+    sphere.translate(position, relative=False)
     return sphere
 
-def create_cube(position, half_extents):
+def create_cube_geom(position, half_extents):
     cube = o3d.geometry.TriangleMesh.create_box(width=half_extents[0]*2, height=half_extents[1]*2, depth=half_extents[2]*2)
-    cube.translate(position)
+    cube.compute_vertex_normals()
+    cube.translate(position, relative=False)
     return cube
 
-#TODO: refactor to have more realistic lighitng 
 def draw_scene(sphere_data, wall_data, sphere_color=[0, 0, 1], wall_color=[1, 0, 0]):
-    sphere = create_sphere(sphere_data['positions'], sphere_data['radius'])
+    sphere = create_sphere_geom(sphere_data['positions'], sphere_data['radius'])
     sphere.paint_uniform_color(sphere_color)
-    wall = create_cube(wall_data['positions'], wall_data['half_extents'])
+    wall = create_cube_geom(wall_data['positions'], wall_data['half_extents'])
     wall.paint_uniform_color(wall_color)
-    o3d.visualization.draw_geometries([sphere, wall])
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(width=960, height=720, visible=False)  # Create an invisible window
+    vis.add_geometry(sphere)
+    vis.add_geometry(wall)
+    opt = vis.get_render_option()
+    opt.background_color = np.asarray([1, 1, 1])  # Set background color
+    # Capture the screen (no need to run the visualizer)
+    image = vis.capture_screen_float_buffer(do_render=True)
+    vis.destroy_window()
+    # Convert the floating point buffer to an image
+    image = np.array(image)
+    image *= 255
+    image = image.astype(np.uint8)
+    return image
 
 

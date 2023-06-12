@@ -1,11 +1,13 @@
 import pybullet as p
 import pybullet_data
 import imageio
-import pyb_gen
-import o3d_gen
+import os
+from pyb_gen import *
 import open3d as o3d
 import numpy as np
 
+# print present working directory
+print(os.getcwd())
 
 # 1. Pybullet Simulation w/ saved data (positions and orientations)
 #     a. Try with simple spheres first 
@@ -15,17 +17,26 @@ import numpy as np
 # 4. Save gif from open3d
 
 # create gif using o3d
+
+
+
+
 def create_gif(object_data, save_path='open3d_animation.gif'):
     frames = []
+    pos = 0 
     for sphere_pos, wall_pos in zip(object_data['sphere']['positions'], object_data['wall']['positions']):
-        sphere_data = object_data['sphere'].copy()
-        wall_data = object_data['wall'].copy()
-        sphere_data['positions'] = sphere_pos
-        wall_data['positions'] = wall_pos
-        image = draw_scene(sphere_data, wall_data)
-        frames.append(np.asarray(image))
+        # only save every fifth frame
+        pos +=1 
+        print(pos, "position number")
+        if pos % 5 == 0:
+            sphere_data = object_data['sphere'].copy()
+            wall_data = object_data['wall'].copy()
+            sphere_data['positions'] = sphere_pos
+            wall_data['positions'] = wall_pos
+            image = draw_scene(sphere_data, wall_data)
+            frames.append(image)
+            print('frame added')
     imageio.mimsave(save_path, frames, duration = (1000 * (1/15)))
-
 
 # function for returning object data from pybullet, returns object data 
 def physics_sim(vis=False):
@@ -40,14 +51,14 @@ def physics_sim(vis=False):
     wall_half_extents = [1, 0.2, 1]
     wall_position = [0, -1, 2]
     wall_orientation = p.getQuaternionFromEuler([0, 0, 0])
-    wall_id = pyb_gen.create_rectangle(wall_half_extents, wall_position, wall_orientation, [0, 0, 0])
+    wall_id = create_rectangle(wall_half_extents, wall_position, wall_orientation, [0, 0, 0])
 
     # Create the sphere
     sphere_radius = 0.5
     sphere_mass = 1
     sphere_position = [-5, -3, 1]
     sphere_start_velocity = [15, 0, 0]
-    sphere_id = pyb_gen.create_sphere(sphere_radius, sphere_mass, sphere_position, sphere_start_velocity)
+    sphere_id = create_sphere(sphere_radius, sphere_mass, sphere_position, sphere_start_velocity)
 
     # Arrays for serialization
     frames = []
@@ -64,7 +75,7 @@ def physics_sim(vis=False):
                 }
     
     # Step through the simulation
-    for i in range(150):
+    for i in range(100):
         p.stepSimulation()
         # record positions and orientations
         sphere_position, sphere_orientation = p.getBasePositionAndOrientation(sphere_id)
@@ -98,5 +109,5 @@ def physics_sim(vis=False):
     return object_data
 
 if __name__ == '__main__':
-    object_data = physics_sim()
+    object_data = physics_sim(vis=True)
     create_gif(object_data)
