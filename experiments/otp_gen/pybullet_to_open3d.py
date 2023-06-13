@@ -6,21 +6,6 @@ from pyb_gen import *
 import open3d as o3d
 import numpy as np
 
-# print present working directory
-print(os.getcwd())
-
-# 1. Pybullet Simulation w/ saved data (positions and orientations)
-#     a. Try with simple spheres first 
-#     b. Then try with more complex objects meshes, imported from meshes 
-# 2. Save gif from pybullet 
-# 3. create step by step sim using open3d 
-# 4. Save gif from open3d
-
-# create gif using o3d
-
-
-
-
 def create_gif(object_data, save_path='open3d_animation.gif'):
     frames = []
     pos = 0 
