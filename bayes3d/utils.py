@@ -4,6 +4,7 @@ from typing import Tuple
 import jax
 import cv2
 import bayes3d.transforms_3d as t3d
+import bayes3d as b
 import os
 import pyransac3d
 import sklearn.cluster
@@ -109,16 +110,20 @@ def bounding_box_lower_upper(dims, pose):
     lower_upper_moved = t3d.apply_transform(lower_upper, pose)
     return lower_upper_moved[0], lower_upper_moved[1]
 
-def find_plane(point_cloud, threshold):
-    plane = pyransac3d.Plane()
-    plane_eq, _ = plane.fit(point_cloud, threshold)#, maxIteration=20000)
+def plane_eq_to_plane_pose(plane_eq):
     plane_eq = np.array(plane_eq)
     plane_normal = np.array(plane_eq[:3])
     point_on_plane = plane_normal * -plane_eq[3]
     plane_x = np.cross(plane_normal, np.array([1.0, 0.0, 0.0]))
     plane_y = np.cross(plane_normal, plane_x)
     R = np.vstack([plane_x, plane_y, plane_normal]).T
-    plane_pose = t3d.transform_from_rot_and_pos(R, point_on_plane)
+    plane_pose = b.t3d.transform_from_rot_and_pos(R, point_on_plane)
+    return plane_pose
+
+def find_plane(point_cloud, threshold,  minPoints=100, maxIteration=1000):
+    plane = pyransac3d.Plane()
+    plane_eq, _ = plane.fit(point_cloud, threshold, minPoints=minPoints, maxIteration=maxIteration)
+    plane_pose = plane_eq_to_plane_pose(plane_eq)
     return plane_pose
 
 def get_bounding_box_z_axis_aligned(point_cloud):
