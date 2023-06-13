@@ -82,6 +82,6 @@ def c2f_iter_trace_contact_params(trace, init_contact_param, contact_param_delta
 
     ii,jj,kk = jnp.unravel_index(p.argmax(), p.shape)
     contact_param = contact_param_grid[ii]
-    return contact_param, traces[ii,jj,kk]
+    return contact_param, traces, traces[ii,jj,kk]
 
 c2f_iter_trace_contact_params_jit = jax.jit(c2f_iter_trace_contact_params)
