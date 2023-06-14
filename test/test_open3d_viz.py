@@ -6,6 +6,8 @@ import trimesh
 import copy
 import open3d as o3d
 
+import bayes3d.o3d_viz
+
 
 viz_intrinsics = j.Intrinsics(
     1000,1000,
@@ -49,8 +51,8 @@ camera_pose = j.t3d.transform_from_pos_target_up(
     jnp.array([0.0, 0.0, 0.0]),
     jnp.array([0.0, 0.0, 1.0]),
 )
-rgb = viz.capture_image(viz_intrinsics, camera_pose)
-j.get_rgb_image(rgb).save("test_open3d_viz.png")
+rgbd = viz.capture_image(viz_intrinsics, camera_pose)
+j.get_rgb_image(rgbd.rgb).save("test_open3d_viz.png")
 
 
 model_dir = "/home/nishadgothoskar/models"
@@ -84,7 +86,8 @@ viz.make_trimesh(trimesh_mesh, pose2, [1.0, 0.0, 0.0, 0.8])
 
 viz.render.scene.set_lighting(viz.render.scene.LightingProfile.NO_SHADOWS, (0, 0, 0))
 viz.set_background(np.array([0.0, 0.0, 0.0, 0.0]))
-rgb = viz.capture_image(viz_intrinsics, np.eye(4))
+rgbd = viz.capture_image(viz_intrinsics, np.eye(4))
+rgb = rgbd.rgb
 rgb = rgb.at[(rgb[:,:,:3].sum(-1)) < 4, -1].set(0.0)
 j.get_rgb_image(rgb).save("test_open3d_viz.png")
 
