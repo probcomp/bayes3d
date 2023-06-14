@@ -3,6 +3,27 @@ import numpy as np
 import pickle
 import os
 import open3d as o3d
+from pybullet_utils import transformations as tf
+
+def open3d_to_pybullet(point):
+    # Convert Open3D coordinate to PyBullet coordinate
+    return np.array([point[0], point[2], -point[1]])
+
+def pybullet_to_open3d(point):
+    # Convert PyBullet coordinate to Open3D coordinate
+    return np.array([point[0], -point[2], point[1]])
+
+def open3d_to_pybullet_pose(pose):
+    # Convert Open3D pose (4x4 transformation matrix) to PyBullet pose
+    translation = pose[:3, 3]
+    rotation = tf.quaternion_from_matrix(pose)
+    return translation, rotation
+
+def pybullet_to_open3d_pose(translation, rotation):
+    # Convert PyBullet pose (translation and rotation) to Open3D pose (4x4 transformation matrix)
+    pose = tf.quaternion_matrix(rotation)
+    pose[:3, 3] = translation
+    return pose
 
 # create sphere with defined parameters
 def create_sphere(radius, mass, position, start_velocity):
@@ -56,7 +77,7 @@ def draw_scene(sphere_data, wall_data, sphere_color=[0, 0, 1], wall_color=[1, 0,
     opt = vis.get_render_option()
     opt.background_color = np.asarray([1, 1, 1])  # Set background color
     # Capture the screen (no need to run the visualizer)
-    image = vis.capture_screen_float_buffer(do_render=True)
+    image = vis.capture_screen_float_buffer(do_render=False)
     vis.destroy_window()
     # Convert the floating point buffer to an image
     image = np.array(image)

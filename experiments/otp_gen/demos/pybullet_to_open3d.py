@@ -6,7 +6,7 @@ from pyb_gen import *
 import open3d as o3d
 import numpy as np
 
-def create_gif(object_data, save_path='open3d_animation.gif'):
+def create_gif(object_data, save_path='output/open3d_animation.gif'):
     frames = []
     pos = 0 
     for sphere_pos, wall_pos in zip(object_data['sphere']['positions'], object_data['wall']['positions']):
@@ -82,7 +82,8 @@ def physics_sim(vis=False):
             frames.append(rgb_array)
 
     if vis:
-        imageio.mimsave('pybullet_occlusion.gif', frames, duration = (1000 * (1/15)))
+        # saved to output folder
+        imageio.mimsave('output/pybullet_occlusion.gif', frames, duration = (1000 * (1/15)))
     p.disconnect()
 
     # store object info in a set 
@@ -94,5 +95,5 @@ def physics_sim(vis=False):
     return object_data
 
 if __name__ == '__main__':
-    object_data = physics_sim(vis=True)
+    object_data = physics_sim(vis=False)
     create_gif(object_data)
