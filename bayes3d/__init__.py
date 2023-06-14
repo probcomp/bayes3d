@@ -8,7 +8,6 @@ from .likelihood import *
 from .camera import *
 from .viz import *
 from .meshcatviz import *
-from .trace import *
 
 from . import mesh
 from . import utils
@@ -17,5 +16,7 @@ from . import ycb_loader
 from . import scene_graph
 from . import segmentation
 from . import c2f
+
+from .trace import *
 
 RENDERER = None
