@@ -14,7 +14,8 @@ intrinsics = j.Intrinsics(
     150.0,150.0,
     0.001, 50.0
 )
-renderer = j.Renderer(intrinsics)
+j.setup_renderer(intrinsics)
+renderer = j.RENDERER
 
 r = 0.1
 outlier_prob = 0.01
@@ -70,7 +71,6 @@ def f(poses, ids):
 
 f_jit = jax.jit(f)
 imgs = f_jit(gt_poses_all, jnp.array([0,1]))
-
 
 from IPython import embed; embed()
 
