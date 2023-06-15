@@ -40,7 +40,7 @@ and view `demo.gif`
 
 ![](assets/demo.gif)
 
-# CosyPose Setup
+## CosyPose Setup
 
 ```
 git submodule update --init --recursive
@@ -72,3 +72,10 @@ In order to download cuDNN libraries, you need to go to https://developer.nvidia
 sudo apt-get install libglu-dev
 
 sudo apt-get remove libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev
+
+## MuJoCo (Physics Rendering) Setup
+To use the MuJoCo physics engine + renderer extension, `pip install dm_control` (already specified in `requirements.txt`). For headless rendering, install the OpenGL Extension Wrapper
+```
+sudo apt-get install libglew2.1 
+```
+This is for Ubuntu 20.04 LTS. Check https://pkgs.org/search/?q=libglew for other OSes
