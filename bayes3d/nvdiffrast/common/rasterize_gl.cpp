@@ -537,6 +537,9 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
         NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
 
         for(int object_idx=0; object_idx < indices.size(); object_idx++){
+            if (indices[object_idx] < 0){
+                continue;
+            }
             NVDR_CHECK_GL_ERROR(glBindVertexArray(s.glVAOs[indices[object_idx]]));
             std::vector<GLDrawCmd> drawCmdBuffer(poses_on_this_iter);
             for (int i=0; i < poses_on_this_iter; i++)
