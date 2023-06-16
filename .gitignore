@@ -17,3 +17,4 @@ experiments/3dnel/threednel
 assets/sam/*
 assets/tum/*
 .vscode/*
+*.pickle

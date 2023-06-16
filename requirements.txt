@@ -23,3 +23,4 @@ torchaudio
 pickle5
 zmq
 tqdm
+dm_control
