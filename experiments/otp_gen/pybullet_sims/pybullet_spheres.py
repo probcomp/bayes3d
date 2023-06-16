@@ -4,33 +4,37 @@ import imageio
 import numpy as np
 import pickle
 import os
-print(os.getcwd(), "this is the current working directory")
 
 # Initialize the PyBullet physics simulation
-p.connect(p.GUI)
+p.connect(p.DIRECT)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
 # Set up the simulation environment
 p.setGravity(0, 0, -10)
 plane_id = p.loadURDF("plane.urdf")
 
+# restitution value
+restitution = 0.9
+
 # Create the first sphere
 sphere_radius1 = 0.5
 sphere_mass1 = 1
 sphere_position1 = [-2, 0, 1]
 sphere_start_velocity1 = [10, 0, 0]
-sphere_shape1 = p.createCollisionShape(p.GEOM_SPHERE, radius=sphere_radius1)
-sphere_id1 = p.createMultiBody(sphere_mass1, sphere_shape1, basePosition=sphere_position1)
+sphere_shape1 = p.createCollisionShape(p.GEOM_SPHERE, radius=sphere_radius1, collisionFramePosition=sphere_position1)
+sphere_id1 = p.createMultiBody(sphere_mass1, sphere_shape1, basePosition=sphere_position1, baseInertialFramePosition=sphere_position1)
 p.resetBaseVelocity(sphere_id1, sphere_start_velocity1)
+p.changeDynamics(sphere_id1, -1, restitution=restitution)
 
 # Create the second sphere
 sphere_radius2 = 0.5
 sphere_mass2 = 1
 sphere_position2 = [2, 0, 1]
 sphere_start_velocity2 = [-10, 0, 0]
-sphere_shape2 = p.createCollisionShape(p.GEOM_SPHERE, radius=sphere_radius2)
-sphere_id2 = p.createMultiBody(sphere_mass2, sphere_shape2, basePosition=sphere_position2)
+sphere_shape2 = p.createCollisionShape(p.GEOM_SPHERE, radius=sphere_radius2, collisionFramePosition=sphere_position2)
+sphere_id2 = p.createMultiBody(sphere_mass2, sphere_shape2, basePosition=sphere_position2, baseInertialFramePosition=sphere_position2)
 p.resetBaseVelocity(sphere_id2, sphere_start_velocity2)
+p.changeDynamics(sphere_id2, -1, restitution=restitution)
 
 # Arrays for serialization 
 frames = []
@@ -38,7 +42,7 @@ sphere_loc = []
 sphere_loc2 = []
 
 # Step through the simulation
-for i in range(100):
+for i in range(200):
     p.stepSimulation()
     # record positions of spheres
     sphere_position1 = p.getBasePositionAndOrientation(sphere_id1)[0]
@@ -59,9 +63,9 @@ for i in range(100):
 
 # Save GIF and serialize the sphere locations
 imageio.mimsave('balls-simulation.gif', frames, 'GIF', duration=1000 * (1/15))
-with open('sph_loc.pkl', 'wb') as f:
-    pickle.dump(sphere_loc, f)
-with open('sph_loc2.pkl', 'wb') as f:
-    pickle.dump(sphere_loc2, f)
+# with open('sph_loc.pkl', 'wb') as f:
+#     pickle.dump(sphere_loc, f)
+# with open('sph_loc2.pkl', 'wb') as f:
+#     pickle.dump(sphere_loc2, f)
 
 p.disconnect()

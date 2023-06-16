@@ -76,7 +76,7 @@ def o3d_render(scene):
 # Base class
 class Body:
     def __init__(self, object_id, position, orientation, transparency = 0, velocity = 0, texture = None, color = None):
-        self.object_id = object_id
+        self.id = object_id
         self.position = position
         self.orientation = orientation
         self.transparency = transparency
@@ -100,24 +100,25 @@ class Body:
         return self.velocity
 
 
+
 # Class for spheres
 class Sphere(Body):
-    def __init__(self, object_id, pose, radius, transparency = 0, velocity = 0, texture = None, color = None):
-        super().__init__(object_id, pose, transparency, velocity, texture, color)
+    def __init__(self, object_id, position, orientation, radius, transparency = 0, velocity = 0, texture = None, color = None):
+        super().__init__(object_id, position, orientation, transparency, velocity, texture, color)
         self.radius = radius
         self.color = [0, 0, 1]
 
 # Class for rectangles
 class Rectangle(Body):
-    def __init__(self, object_id, pose, half_extents, transparency = 0, velocity = 0, texture = None, color = None):
-        super().__init__(object_id, pose, transparency, velocity, texture, color)
+    def __init__(self, object_id, position, orientation, half_extents, transparency = 0, velocity = 0, texture = None, color = None):
+        super().__init__(object_id, position, orientation, transparency, velocity, texture, color)
         self.half_extents = half_extents
         self.color = [1, 0, 0]
 
 # Class for meshes
 class Mesh(Body):
-    def __init__(self, object_id, pose, mesh, transparency = 0, velocity = 0, texture = None, color = None):
-        super().__init__(object_id, pose, transparency, velocity, texture, color)
+    def __init__(self, object_id, position, orientation, mesh, transparency = 0, velocity = 0, texture = None, color = None):
+        super().__init__(object_id, position, orientation, transparency, velocity, texture, color)
         self.mesh = mesh
     
 # Class for scenes
@@ -152,7 +153,7 @@ class Scene:
     
     # render scene using open3d, pybullet, or kubric if camera and light are set
     def render(self, renderer):
-        image = renderer.render(self)
+        image = renderer(self)
         return image
     
     # simulate scene using pybullet, save gif using open3d, pybullet, or kubric
