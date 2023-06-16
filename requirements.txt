@@ -27,3 +27,4 @@ https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.4.7+cuda11.cudnn86-c
 jax==0.4.7
 jupyterlab
 imageio
+dm_control
