@@ -8,6 +8,7 @@ from .likelihood import *
 from .camera import *
 from .viz import *
 from .meshcatviz import *
+from .mujoco import *
 
 from . import mesh
 from . import utils
