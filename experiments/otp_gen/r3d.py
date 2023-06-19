@@ -49,7 +49,8 @@ def pybullet_render(scene):
     pyb_sim = PybulletSimulator()
     for body in scene.bodies.values():
         pyb_sim.add_body_to_simulation(body)
-    image = pyb_sim.capture_image()
+    image_rgb = pyb_sim.capture_image()
+    image = Image.fromarray(image_rgb)
     return image
 
 def blender_to_pybullet_position(blender_position):
@@ -96,8 +97,6 @@ def make_body_from_obj(obj_path, position, orientation=None, id=None):
     pose[:3, 3] = position
     return make_body_from_obj_pose(obj_path, pose, id)
 
-
-
 class Body:
     def __init__(self, object_id, pose, mesh, restitution=1.0, friction=0, damping=0, transparency=1, velocity=0, texture=None, color=None):
         self.id = object_id
@@ -108,7 +107,7 @@ class Body:
         self.transparency = transparency
         self.velocity = velocity
         self.texture = texture
-        self.color = color if color is not None else [1, 1, 1]
+        self.color = color if color is not None else [1, 0, 0]
         self.mesh = mesh #trimesh mesh, with vertices and faces
 
     def set_transparency(self, transparency):
@@ -177,8 +176,12 @@ class Scene:
         image = render_func(self)
         return image
     
-    def simulate(self, renderer, timesteps):
-        raise NotImplementedError("Simulation not implemented yet")
+    def simulate(self, timesteps):
+        # create physics simulator 
+        # add bodies to physics simulator
+        # simulate for timesteps
+        # returns pybullet simulation, which you can obtain a gif, poses from. 
+        pass
 
     def __str__(self):
         body_str = "\n".join(["    " + str(body) for body in self.bodies.values()])
