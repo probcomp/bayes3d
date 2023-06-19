@@ -2,7 +2,9 @@
 import pybullet as p
 import numpy as np
 import open3d as o3d
-from pybullet_utils import transformations as tf
+import trimesh as tm
+import bayes3d as b
+
 # import mathutils
 
 def o3d_to_pybullet_position(o3d_position):
@@ -21,6 +23,24 @@ def pybullet_to_o3d_pose(pybullet_pose):
     o3d_pose[3, :3] = -o3d_pose[3, :3]  # Convert rotation from PyBullet to Open3D
     return o3d_pose
 
+# converts o3d triangle_mesh to trimesh mesh
+def o3d_to_trimesh(mesh):
+    vertices = np.asarray(mesh.vertices)
+    faces = np.asarray(mesh.triangles)
+    mesh = tm.Trimesh(vertices=vertices, faces=faces, process=False)
+    return mesh
+
+def o3d_render(scene): 
+    intrinsics = o3d.camera.PinholeCameraIntrinsic()
+    renderer = b.o3d_viz.O3DVis(intrinsics=intrinsics) 
+    for body in scene.bodies.values():
+        mesh = body.mesh
+        pose = body.pose
+        renderer.render_mesh(mesh, pose)
+    camera_pose = scene.camera.pose
+    image = renderer.render(camera_pose)
+    return image
+
 # def pybullet_to_blender_position(pybullet_position):
 #     return mathutils.Vector(pybullet_position)
 
@@ -35,127 +55,114 @@ def blender_to_pybullet_orientation(blender_orientation):
     euler = blender_orientation.to_euler()
     return euler[:]  # Return as a list
 
-def create_sphere_geom(position, radius):
+# wrapper for creating boxes with pose 
+def create_box(pose, length, width, height, id = None): 
+    position = pose[:3, 3]
+    orientation = pose[:3, :3]
+    return create_box(position, length, width, height, orientation, id)
+
+def create_box(position, length, width, height, orientation = None, id = None):
+    box = o3d.geometry.TriangleMesh.create_box(width=length, height=width, depth=height)
+    mesh = o3d_to_trimesh(box)
+    orientation = orientation if orientation is not None else np.eye(3)
+    pose = np.eye(4)
+    pose[:3, :3] = orientation
+    pose[:3, 3] = position
+    obj_id = "box" if id is None else id
+    body = Body(obj_id, pose, mesh)
+    return body
+
+def create_sphere(position, radius, id = None):
     sphere = o3d.geometry.TriangleMesh.create_sphere(radius=radius)
-    sphere.compute_vertex_normals()
-    sphere.translate(position, relative=False)
-    return sphere
+    mesh = o3d_to_trimesh(sphere)
+    pose = np.eye(4)
+    pose[:3, 3] = position
+    obj_id = "sphere" if id is None else id
+    body = Body(obj_id, pose, mesh)
+    return body
 
-def create_cube_geom(position, half_extents):
-    cube = o3d.geometry.TriangleMesh.create_box(width=half_extents[0]*2, height=half_extents[1]*2, depth=half_extents[2]*2)
-    cube.compute_vertex_normals()
-    cube.translate(position, relative=False)
-    return cube
-
-def o3d_render(scene):
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(width=960, height=720, visible=False)
-    # create camera, lighting, background and floor
-
-    for object in scene.bodies:
-        if type(object) == Rectangle:
-            cube = create_cube_geom(object.position, object.half_extents)
-            paint_color = object.color.append(object.transparency)
-            cube.paint_uniform_color(paint_color)
-            vis.add_geometry(cube)
-        elif type(object) == Sphere:
-            sphere = create_sphere_geom(object.position, object.radius)
-            paint_color = object.color.append(object.transparency)
-            sphere.paint_uniform_color(paint_color)
-            vis.add_geometry(sphere)
-        else:
-            raise ValueError("Object type not supported")
-        
-    # render scene
-    opt = vis.get_render_option()
-    opt.background_color = np.asarray([1, 1, 1])  # Set background color
-    image = vis.capture_screen_float_buffer(do_render=False)
-    vis.destroy_window()
-    return image
-
-# Base class
 class Body:
-    def __init__(self, object_id, position, orientation, transparency = 0, velocity = 0, texture = None, color = None):
+    def __init__(self, object_id, pose, mesh, restitution=1.0, friction=0, damping=0, transparency=0, velocity=0, texture=None, color=None):
         self.id = object_id
-        self.position = position
-        self.orientation = orientation
+        self.pose = pose  # use pose instead of position and orientation
+        self.restitution = restitution
+        self.friction = friction
+        self.damping = damping
         self.transparency = transparency
         self.velocity = velocity
         self.texture = texture
         self.color = color
+        self.mesh = mesh
 
-    # set transparency
     def set_transparency(self, transparency):
         self.transparency = transparency
         return self.transparency
-    
-    # set pose
+
     def set_pose(self, pose):
         self.pose = pose
         return self.pose
     
-    # set velocity
+    def get_position(self):
+        return self.pose[:3, 3]
+    
+    def get_orientation(self):
+        return self.pose[:3, :3]
+
     def set_velocity(self, velocity):
         self.velocity = velocity
         return self.velocity
 
+    def set_restitution(self, restitution):
+        self.restitution = restitution
+        return self.restitution
 
+    def set_friction(self, friction):
+        self.friction = friction
+        return self.friction
 
-# Class for spheres
-class Sphere(Body):
-    def __init__(self, object_id, position, orientation, radius, transparency = 0, velocity = 0, texture = None, color = None):
-        super().__init__(object_id, position, orientation, transparency, velocity, texture, color)
-        self.radius = radius
-        self.color = [0, 0, 1]
+    def set_damping(self, damping):
+        self.damping = damping
+        return self.damping
 
-# Class for rectangles
-class Rectangle(Body):
-    def __init__(self, object_id, position, orientation, half_extents, transparency = 0, velocity = 0, texture = None, color = None):
-        super().__init__(object_id, position, orientation, transparency, velocity, texture, color)
-        self.half_extents = half_extents
-        self.color = [1, 0, 0]
-
-# Class for meshes
-class Mesh(Body):
-    def __init__(self, object_id, position, orientation, mesh, transparency = 0, velocity = 0, texture = None, color = None):
-        super().__init__(object_id, position, orientation, transparency, velocity, texture, color)
-        self.mesh = mesh
+    def get_fields(self):
+        return f"Body ID: {self.id}, Pose: {self.pose}, Restitution: {self.restitution}, Friction: {self.friction}, Damping: {self.damping}, Transparency: {self.transparency}, Velocity: {self.velocity}, Texture: {self.texture}, Color: {self.color}"
     
-# Class for scenes
-class Scene:
-    def __init__(self, scene_id, bodies = {}, camera = None, light = None):
-        self.scene_id = scene_id
-        self.bodies = bodies
-        self.camera = camera
+    def __str__(self):
+        return f"Body ID: {self.id}, Position: {self.get_position()}"
 
-    # add object to scene
+
+class Scene:
+    def __init__(self, scene_id = None, bodies={}, camera=None, light=None):
+        self.scene_id = scene_id if scene_id is not None else "scene"
+        self.bodies = bodies
+        self.camera = camera if camera is not None else Body("camera", np.eye(4), None) #todo 
+
     def add_body(self, body: Body):
         self.bodies[body.id] = body
         return self.bodies
-    
-    # remove object from scene using the object id, otherwise raise an error 
+
     def remove_body(self, body_id):
         if body_id not in self.bodies:
             raise ValueError("Body not in scene")
         else:
             del self.bodies[body_id]
         return self.bodies
-    
-    # set camera in a scene
+
     def set_camera(self, camera):
         self.camera = camera
         return self.camera
-    
-    # set light in a scene using pose information from a body 
+
     def set_light(self, light: Body):
         self.light = light 
         return self.light
     
-    # render scene using open3d, pybullet, or kubric if camera and light are set
-    def render(self, renderer):
-        image = renderer(self)
+    def render(self, render_func):
+        image = render_func(self)
         return image
     
-    # simulate scene using pybullet, save gif using open3d, pybullet, or kubric
     def simulate(self, renderer, timesteps):
         raise NotImplementedError("Simulation not implemented yet")
+
+    def __str__(self):
+        body_str = "\n".join(["    " + str(body) for body in self.bodies.values()])
+        return f"Scene ID: {self.scene_id}\nBodies:\n{body_str}"

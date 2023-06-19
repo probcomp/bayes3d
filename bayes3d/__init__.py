@@ -17,5 +17,6 @@ from . import distributions
 from . import ycb_loader
 from . import scene_graph
 from . import segmentation
+from . import o3d_viz
 
 RENDERER = None
