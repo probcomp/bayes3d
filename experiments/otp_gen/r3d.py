@@ -1,9 +1,12 @@
 # Interface and DS design for R3D
 import pybullet as p
+import pybullet_data
 import numpy as np
 import open3d as o3d
 import trimesh as tm
 import bayes3d as b
+import os 
+from PIL import Image
 
 # import mathutils
 
@@ -39,6 +42,13 @@ def o3d_render(scene):
         renderer.render_mesh(mesh, pose)
     camera_pose = scene.camera.pose
     image = renderer.render(camera_pose)
+    return image
+
+def pybullet_render(scene):
+    pyb_sim = PybulletSimulator()
+    for body in scene.bodies.values():
+        pyb_sim.add_body_to_simulation(body)
+    image = pyb_sim.capture_image()
     return image
 
 # def pybullet_to_blender_position(pybullet_position):
@@ -81,8 +91,97 @@ def create_sphere(position, radius, id = None):
     body = Body(obj_id, pose, mesh)
     return body
 
+class PybulletSimulator(object):
+    def __init__(self, timestep=1/240, gravity=0):
+        self.timestep = timestep
+        self.gravity = gravity
+        self.client = p.connect(p.DIRECT)
+        p.setGravity(0, 0, self.gravity, physicsClientId=self.client)
+        p.setPhysicsEngineParameter(fixedTimeStep=self.timestep, physicsClientId=self.client)
+        p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.plane_id = p.loadURDF("plane.urdf", physicsClientId=self.client)
+
+    def add_object(mesh_path, pose, velocity):
+        raise NotImplementedError
+    
+    def add_body_to_simulation(self, body):
+        """
+        Add a body to the pybullet simulation.
+        :param body: a Body object.
+        :return: None
+        """
+        client = self.client
+
+        # Get vertices and faces from the trimesh
+        vertices = body.mesh.vertices.tolist()
+        faces = body.mesh.faces.ravel().tolist()
+
+        # Create visual and collision shapes
+        visualShapeId = p.createVisualShape(shapeType=p.GEOM_MESH, 
+                                            vertices=vertices, 
+                                            indices=faces,
+                                            rgbaColor=body.color + [body.transparency],
+                                            physicsClientId=client)
+        collisionShapeId = p.createCollisionShape(shapeType=p.GEOM_MESH,
+                                                vertices=vertices, 
+                                                indices=faces,
+                                                physicsClientId=client)
+
+        # Create a multibody with the created shapes
+        body.id = p.createMultiBody(baseMass=1,
+                                    baseInertialFramePosition=[0, 0, 0],
+                                    baseCollisionShapeIndex=collisionShapeId,
+                                    baseVisualShapeIndex=visualShapeId,
+                                    basePosition=body.get_position(),
+                                    baseOrientation=body.get_orientation(),
+                                    physicsClientId=client)
+
+        # Set physical properties
+        p.changeDynamics(body.id, -1, restitution=body.restitution, lateralFriction=body.friction, 
+                        linearDamping=body.damping, physicsClientId=client)
+
+        # Set initial velocity if specified
+        if body.velocity != 0:
+            p.resetBaseVelocity(body.id, linearVelocity=body.velocity, physicsClientId=client)
+
+        # If texture is specified, load it
+        if body.texture is not None:
+            textureId = p.loadTexture(body.texture, physicsClientId=client)
+            p.changeVisualShape(body.id, -1, textureUniqueId=textureId, physicsClientId=client)
+        p.stepSimulation(physicsClientId=client)
+
+    def step_simulation():
+        raise NotImplementedError
+
+    def capture_image(self):
+        view_matrix = p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=[0, 0, 0], distance=5, yaw=0, pitch=-30, roll=0,
+                                                            upAxisIndex=2)
+        proj_matrix = p.computeProjectionMatrixFOV(fov=60, aspect=float(960) / 720, nearVal=0.1, farVal=100.0)
+        (_, _, px, _, _) = p.getCameraImage(width=960, height=720, viewMatrix=view_matrix,
+                                            projectionMatrix=proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
+        rgb_array = np.array(px, dtype=np.uint8)
+        rgb_array = np.reshape(rgb_array, (720, 960, 4))
+        rgb_array = rgb_array[:, :, :3]
+        image = Image.fromarray(rgb_array)
+        return image
+
+    def set_velocity(obj_id):
+        return
+    
+    def set_timestep(dt):
+        return
+
+    def set_gravity(obj_id):
+        return
+    
+    def get_object_poses():
+        return
+
+    def add_plane():
+        return
+
 class Body:
-    def __init__(self, object_id, pose, mesh, restitution=1.0, friction=0, damping=0, transparency=0, velocity=0, texture=None, color=None):
+    def __init__(self, object_id, pose, mesh, restitution=1.0, friction=0, damping=0, transparency=1, velocity=0, texture=None, color=None):
         self.id = object_id
         self.pose = pose  # use pose instead of position and orientation
         self.restitution = restitution
@@ -91,8 +190,8 @@ class Body:
         self.transparency = transparency
         self.velocity = velocity
         self.texture = texture
-        self.color = color
-        self.mesh = mesh
+        self.color = color if color is not None else [1, 1, 1]
+        self.mesh = mesh #trimesh mesh, with vertices and faces
 
     def set_transparency(self, transparency):
         self.transparency = transparency
