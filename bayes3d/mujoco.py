@@ -6,7 +6,7 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 from IPython.display import HTML
 # For headless rendering, use egl. Otherwise, use GLFW or OSMesa
-os.environ["MUJOCO_GL"] = 'egl'
+# os.environ["MUJOCO_GL"] = 'egl'
 
 # PyMJCF imports
 from dm_control import mujoco
