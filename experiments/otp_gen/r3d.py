@@ -50,6 +50,7 @@ def pybullet_render(scene):
     for body in scene.bodies.values():
         pyb_sim.add_body_to_simulation(body)
     image_rgb = pyb_sim.capture_image()
+    pyb_sim.close()
     image = Image.fromarray(image_rgb)
     return image
 
@@ -98,48 +99,97 @@ def make_body_from_obj(obj_path, position, orientation=None, id=None):
     return make_body_from_obj_pose(obj_path, pose, id)
 
 class Body:
-    def __init__(self, object_id, pose, mesh, restitution=1.0, friction=0, damping=0, transparency=1, velocity=0, texture=None, color=None):
+    def __init__(self, object_id, pose, mesh, restitution=1.0, friction=0, damping=0, transparency=1, velocity=0, mass=1, texture=None, color=[1, 0, 0]):
         self.id = object_id
-        self.pose = pose  # use pose instead of position and orientation
+        self.pose = pose
         self.restitution = restitution
         self.friction = friction
         self.damping = damping
         self.transparency = transparency
         self.velocity = velocity
         self.texture = texture
-        self.color = color if color is not None else [1, 0, 0]
-        self.mesh = mesh #trimesh mesh, with vertices and faces
+        self.color = color
+        self.mass = mass
+        self.mesh = mesh  # trimesh mesh, with vertices and faces
+    
+    # Getter methods
+    def get_id(self):
+        return self.id
 
-    def set_transparency(self, transparency):
-        self.transparency = transparency
+    def get_pose(self):
+        return self.pose
+
+    def get_mesh(self):
+        return self.mesh
+
+    def get_restitution(self):
+        return self.restitution
+
+    def get_friction(self):
+        return self.friction
+
+    def get_damping(self):
+        return self.damping
+
+    def get_transparency(self):
         return self.transparency
+
+    def get_velocity(self):
+        return self.velocity
+
+    def get_mass(self):
+        return self.mass
+
+    def get_texture(self):
+        return self.texture
+
+    def get_color(self):
+        return self.color
+
+    def get_position(self):
+        return self.pose[:3, 3]
+
+    def get_orientation(self):
+        return self.pose[:3, :3]
+        
+    # Setter methods
+    def set_id(self, object_id):
+        self.id = object_id
 
     def set_pose(self, pose):
         self.pose = pose
-        return self.pose
-    
-    def get_position(self):
-        return self.pose[:3, 3]
-    
-    def get_orientation(self):
-        return self.pose[:3, :3]
-
-    def set_velocity(self, velocity):
-        self.velocity = velocity
-        return self.velocity
 
     def set_restitution(self, restitution):
         self.restitution = restitution
-        return self.restitution
 
     def set_friction(self, friction):
         self.friction = friction
-        return self.friction
 
     def set_damping(self, damping):
         self.damping = damping
-        return self.damping
 
+    def set_transparency(self, transparency):
+        self.transparency = transparency
+
+    def set_velocity(self, velocity):
+        self.velocity = velocity
+
+    def set_mass(self, mass):
+        self.mass = mass
+
+    def set_texture(self, texture):
+        self.texture = texture
+
+    def set_color(self, color):
+        self.color = color
+
+    def set_position(self, position):
+        self.pose[:3, 3] = position
+
+    def set_orientation(self, orientation):
+        self.pose[:3, :3] = orientation
+
+    # Miscellaneous methods
     def get_fields(self):
         return f"Body ID: {self.id}, Pose: {self.pose}, Restitution: {self.restitution}, Friction: {self.friction}, Damping: {self.damping}, Transparency: {self.transparency}, Velocity: {self.velocity}, Texture: {self.texture}, Color: {self.color}"
     
@@ -147,14 +197,23 @@ class Body:
         return f"Body ID: {self.id}, Position: {self.get_position()}"
 
 
+
 class Scene:
-    def __init__(self, scene_id = None, bodies={}, camera=None, light=None):
-        self.scene_id = scene_id if scene_id is not None else "scene"
-        self.bodies = bodies
+    def __init__(self, id = None, bodies=None, camera=None, light=None, gravity = 0):
+        self.scene_id = id if id is not None else "scene"
+        self.bodies = bodies if bodies is not None else {}
+        self.gravity = 0
         self.camera = camera if camera is not None else Body("camera", np.eye(4), None) #todo 
+        self.pyb_sim = None
+
 
     def add_body(self, body: Body):
         self.bodies[body.id] = body
+        return self.bodies
+    
+    def add_bodies(self, bodies: list):
+        for body in bodies:
+            self.add_body(body)
         return self.bodies
 
     def remove_body(self, body_id):
@@ -162,6 +221,15 @@ class Scene:
             raise ValueError("Body not in scene")
         else:
             del self.bodies[body_id]
+        return self.bodies
+    
+    def remove_bodies(self, body_ids):
+        for body_id in body_ids:
+            self.remove_body(body_id)
+            print('removed body: ', body_id)
+        return self.bodies
+    
+    def get_bodies(self):
         return self.bodies
 
     def set_camera(self, camera):
@@ -172,16 +240,34 @@ class Scene:
         self.light = light 
         return self.light
     
+    def set_gravity(self, gravity):
+        self.gravity = gravity
+        return self.gravity
+    
     def render(self, render_func):
         image = render_func(self)
         return image
     
     def simulate(self, timesteps):
         # create physics simulator 
+        pyb = PybulletSimulator()
+        self.pyb_sim = pyb
+
         # add bodies to physics simulator
+        for body in self.bodies.values():
+            pyb.add_body_to_simulation(body)
+
         # simulate for timesteps
+        pyb.simulate(timesteps)
         # returns pybullet simulation, which you can obtain a gif, poses from. 
-        pass
+        
+        return pyb
+
+    def close(self): 
+        if self.pyb_sim == None: 
+            raise ValueError("No pybullet simulation to close")
+        else:
+            p.disconnect(self.pyb_sim.client)
 
     def __str__(self):
         body_str = "\n".join(["    " + str(body) for body in self.bodies.values()])
