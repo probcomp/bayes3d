@@ -31,7 +31,11 @@ def pybullet_to_o3d_pose(pybullet_pose):
 def o3d_to_trimesh(mesh):
     vertices = np.asarray(mesh.vertices)
     faces = np.asarray(mesh.triangles)
-    mesh = tm.Trimesh(vertices=vertices, faces=faces, process=False)
+    mesh.compute_triangle_normals()
+    mesh.compute_vertex_normals()
+    tri_normals = np.asarray(mesh.triangle_normals)
+    vert_normals = np.asarray(mesh.vertex_normals)
+    mesh = tm.Trimesh(vertices=vertices, faces=faces, vertex_normals=vert_normals, face_normals=tri_normals)
     return mesh
 
 def o3d_render(scene): 

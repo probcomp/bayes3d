@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation as R
 from PIL import Image
 
 class PybulletSimulator(object):
-    def __init__(self, timestep=1/60, gravity=0):
+    def __init__(self, timestep=1/60, gravity=-10):
         self.timestep = timestep
         self.gravity = gravity
         self.client = p.connect(p.DIRECT)
@@ -32,22 +32,30 @@ class PybulletSimulator(object):
         :param body: a Body object.
         :return: None
         """
-        client = self.client
 
         # Get vertices and faces from the trimesh
         vertices = body.mesh.vertices.tolist()
         faces = body.mesh.faces.ravel().tolist()
+        # normals = body.mesh.face_normals.ravel().tolist()
 
         # Create visual and collision shapes
         visualShapeId = p.createVisualShape(shapeType=p.GEOM_MESH, 
                                             vertices=vertices, 
                                             indices=faces,
-                                            rgbaColor=np.append(body.color, body.transparency),
-                                            physicsClientId=client)
+                                            # normals=normals,
+                                            # fileName = "sphere.obj",
+                                            physicsClientId=self.client,
+                                            rgbaColor=np.append(body.color, body.transparency)
+                                            )
+        
         collisionShapeId = p.createCollisionShape(shapeType=p.GEOM_MESH,
                                                 vertices=vertices, 
                                                 indices=faces,
-                                                physicsClientId=client)
+                                                # normals=normals,
+                                                # fileName = "sphere.obj",
+                                                physicsClientId=self.client, 
+                                                # collisionFramePosition=body.get_position()
+                                                )
 
         # Get the orientation matrix
         rot_matrix = body.get_orientation()
@@ -58,33 +66,40 @@ class PybulletSimulator(object):
 
         # Create a multibody with the created shapes
         pyb_id = p.createMultiBody(baseMass=1,
-                                    baseInertialFramePosition=[0, 0, 0],
                                     baseCollisionShapeIndex=collisionShapeId,
                                     baseVisualShapeIndex=visualShapeId,
                                     basePosition=body.get_position(),
-                                    baseOrientation=quaternion,
-                                    physicsClientId=client)
+                                    # baseOrientation=quaternion,
+                                    physicsClientId=self.client,
+                                    baseInertialFramePosition=body.get_position())
 
 
         # Set physical properties
         p.changeDynamics(pyb_id, -1, restitution=body.restitution, lateralFriction=body.friction, 
-                        linearDamping=body.damping, physicsClientId=client)
+                        linearDamping=body.damping, physicsClientId=self.client)
 
         # Set initial velocity if specified
         if body.velocity != 0:
-            p.resetBaseVelocity(pyb_id, linearVelocity=body.velocity, physicsClientId=client)
+            p.resetBaseVelocity(pyb_id, linearVelocity=body.velocity, physicsClientId=self.client)
 
         # If texture is specified, load it
         if body.texture is not None:
-            textureId = p.loadTexture(body.texture, physicsClientId=client)
-            p.changeVisualShape(pyb_id, -1, textureUniqueId=textureId, physicsClientId=client)
+            textureId = p.loadTexture(body.texture, physicsClientId=self.client)
+            p.changeVisualShape(pyb_id, -1, textureUniqueId=textureId, physicsClientId=self.client)
 
         # Add to mapping from pybullet id to body id
         self.pyb_id_to_body_id[pyb_id] = body.id
         self.body_poses[body.id] = []
 
+    def check_collision(self):
+        for body in self.pyb_id_to_body_id.keys():
+            collisions = p.getContactPoints(bodyA=body, physicsClientId=self.client)
+            if len(collisions) > 0:
+                print(f"Body {body} is colliding.")
+
     def step_simulation(self):
         self.step_count+=1
+        self.check_collision()
         p.stepSimulation(physicsClientId=self.client)
     
     def update_body_poses(self):
@@ -100,7 +115,7 @@ class PybulletSimulator(object):
         # returns frames, poses of objects over time
         for i in range(steps):
             self.frames.append(self.capture_image())
-            self.update_body_poses()
+            # self.update_body_poses()
             self.step_simulation()
 
     def capture_image(self):
