@@ -152,8 +152,8 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _render_abstract(poses, indices):
-        num_images = poses.shape[1]
-        if poses.shape[0] != indices.shape[0]:
+        num_images = poses.shape[0]
+        if poses.shape[1] != indices.shape[0]:
             raise ValueError(f"Mismatched #objects: {poses.shape}, {indices.shape}")
         dtype = dtypes.canonicalize_dtype(poses.dtype)
         return [ShapedArray((num_images, r.intrinsics.height, r.intrinsics.width, 4), dtype),
@@ -175,7 +175,7 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
         if np.dtype(indices_aval.dtype) != np.int32:
             raise NotImplementedError(f"Unsupported indices dtype {indices_aval.dtype}")
 
-        num_objects, num_images = poses_aval.shape[:2]
+        num_images, num_objects = poses_aval.shape[:2]
         out_shp_dtype = mlir.ir.RankedTensorType.get(
             [num_images, r.intrinsics.height, r.intrinsics.width, 4],
             mlir.dtype_to_ir_type(poses_aval.dtype))
@@ -197,7 +197,7 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
             # The inputs:
             operands=[poses, indices],
             # Layout specification:
-            operand_layouts=[(3, 2, 1, 0), (0,)],
+            operand_layouts=[(3, 2, 0, 1), (0,)],
             result_layouts=[(3, 2, 1, 0), ()],
             # GPU specific additional data
             backend_config=opaque
@@ -291,7 +291,8 @@ def build_render_primitive_single(r: "Renderer", on_object: int = 0):
         if poses.ndim != 4:
             raise NotImplementedError("Underlying primitive must operate on 4D poses.")
 
-        if poses.shape[0] != indices.shape[0]:
+        poses = jnp.moveaxis(poses, axes[0], 0)
+        if poses.shape[1] != indices.shape[0]:
             raise ValueError(f"Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}")
         if poses.shape[-2:] != (4, 4):
             raise ValueError(f"Unexpected poses shape: {poses.shape}")
