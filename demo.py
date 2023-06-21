@@ -53,7 +53,7 @@ print("gt_poses.shape", gt_poses.shape)
 
 
 # gt_images = jax.vmap(b.RENDERER.render, in_axes=(1, None))(gt_poses[None,...], jnp.array([0]))
-gt_images = jnp.array([b.RENDERER.render(poses[None, ...], jnp.array([0])) for poses in gt_poses])
+gt_images = jnp.array([b.RENDERER.render_jax(poses[None, ...], jnp.array([0])) for poses in gt_poses])
 print("gt_images.shape", gt_images.shape)
 print("non-zero D-channel pixels in img 0:", (gt_images[0,:,:,-1] > 0 ).sum())
 
@@ -70,12 +70,12 @@ pose_estimate = gt_poses[0]
 
 def update_pose_estimate(pose_estimate, gt_image):
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, translation_deltas)
-    rendered_images = jax.vmap(b.RENDERER.render, in_axes=(0, None))(proposals[:,None, ...], jnp.array([0]))
+    rendered_images = jax.vmap(b.RENDERER.render_jax, in_axes=(0, None))(proposals[:,None, ...], jnp.array([0]))
     weights_new = b.threedp3_likelihood_parallel(gt_image, rendered_images, 0.05, 0.1, 10**3, 3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, rotation_deltas)
-    rendered_images = jax.vmap(b.RENDERER.render, in_axes=(0, None))(proposals[:, None, ...], jnp.array([0]))
+    rendered_images = jax.vmap(b.RENDERER.render_jax, in_axes=(0, None))(proposals[:, None, ...], jnp.array([0]))
     weights_new = b.threedp3_likelihood_parallel(gt_image, rendered_images, 0.05, 0.1, 10**3, 3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
     return pose_estimate, pose_estimate
@@ -93,7 +93,7 @@ print ("FPS:", gt_poses.shape[0] / (end - start))
 viz_images = []
 max_depth = 10.0
 
-rerendered_images = b.RENDERER.render_parallel(pose_estimates_over_time[:, None, ...], jnp.array([0]))
+rerendered_images = b.RENDERER.render_jax_parallel(pose_estimates_over_time[:, None, ...], jnp.array([0]))
 viz_images = [
     j.viz.multi_panel(
         [j.viz.get_depth_image(d[:,:,2]), j.viz.get_depth_image(r[:,:,2])],

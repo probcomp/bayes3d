@@ -377,11 +377,11 @@ class _Renderer(object):
                 torch.tensor(triangles.astype(np.int32), device='cuda'),
             )
 
-    def render(self, poses, indices, on_object=0):
+    def render_jax(self, poses, indices, on_object=0):
         images_jnp = render_custom_call_single(self, poses, indices, on_object)[0]
         return transform_image_zeros(images_jnp, self.intrinsics)
 
-    def render_parallel(self, poses, indices, on_object=0):
+    def render_jax_parallel(self, poses, indices, on_object=0):
         images_jnp = render_custom_call(self, poses, indices, on_object)[0]
         return transform_image_zeros_parallel(images_jnp, self.intrinsics)
 
