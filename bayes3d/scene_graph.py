@@ -44,21 +44,22 @@ relative_pose_from_edge_parallel_jit = jax.jit(
     )
 )
 
-def iter(poses, box_dims, edge, contact_params, face_parent, face_child):
-    i, j = edge
-    parent_plane = get_contact_planes(box_dims[i])[face_parent]
-    rel_pose = parent_plane.dot(relative_pose_from_edge(contact_params, face_child, box_dims[j]))
+def iter(poses, box_dims, parent, child, contact_params, face_parent, face_child):
+    parent_plane = get_contact_planes(box_dims[parent])[face_parent]
+    relative = parent_plane.dot(
+        relative_pose_from_edge(contact_params, face_child, box_dims[child])
+    )
     return (
-        poses[i].dot(rel_pose) * (i != -1)
+        poses[parent].dot(relative) * (parent != -1)
         +
-        poses[j] * (i == -1)
+        poses[child] * (parent == -1)
     )
 
-def poses_from_scene_graph(start_poses, box_dims, edges, contact_params, face_parent, face_child):
+def poses_from_scene_graph(start_poses, box_dims, parents, contact_params, face_parent, face_child):
     def _f(poses, _):
-        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0, 0))(poses, box_dims, edges, contact_params, face_parent, face_child)
+        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0, 0, 0))(poses, box_dims, parents, jnp.arange(parents.shape[0]), contact_params, face_parent, face_child)
         return (new_poses, new_poses)
-    return jax.lax.scan(_f, start_poses, jnp.ones(edges.shape[0]))[0]
+    return jax.lax.scan(_f, start_poses, jnp.ones(parents.shape[0]))[0]
 poses_from_scene_graph_jit = jax.jit(poses_from_scene_graph)
 
     

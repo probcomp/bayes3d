@@ -30,7 +30,8 @@ def transform_image_zeros(image_jnp, intrinsics):
     )
     return image_jnp_2
 transform_image_zeros_jit = jax.jit(transform_image_zeros)
-transform_image_zeros_parallel_jit = jax.jit(jax.vmap(transform_image_zeros, in_axes=(0,None)))
+transform_image_zeros_parallel = jax.vmap(transform_image_zeros, in_axes=(0,None))
+transform_image_zeros_parallel_jit = jax.jit(transform_image_zeros_parallel)
 
 
 # Useful reference for understanding the custom calls setup:
@@ -151,8 +152,8 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _render_abstract(poses, indices):
-        num_images = poses.shape[1]
-        if poses.shape[0] != indices.shape[0]:
+        num_images = poses.shape[0]
+        if poses.shape[1] != indices.shape[0]:
             raise ValueError(f"Mismatched #objects: {poses.shape}, {indices.shape}")
         dtype = dtypes.canonicalize_dtype(poses.dtype)
         return [ShapedArray((num_images, r.intrinsics.height, r.intrinsics.width, 4), dtype),
@@ -174,7 +175,7 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
         if np.dtype(indices_aval.dtype) != np.int32:
             raise NotImplementedError(f"Unsupported indices dtype {indices_aval.dtype}")
 
-        num_objects, num_images = poses_aval.shape[:2]
+        num_images, num_objects = poses_aval.shape[:2]
         out_shp_dtype = mlir.ir.RankedTensorType.get(
             [num_images, r.intrinsics.height, r.intrinsics.width, 4],
             mlir.dtype_to_ir_type(poses_aval.dtype))
@@ -196,12 +197,88 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
             # The inputs:
             operands=[poses, indices],
             # Layout specification:
-            operand_layouts=[(3, 2, 1, 0), (0,)],
+            operand_layouts=[(3, 2, 0, 1), (0,)],
             result_layouts=[(3, 2, 1, 0), ()],
             # GPU specific additional data
             backend_config=opaque
         )
+    # *********************************************
+    # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
+    # *********************************************
+    _render_prim = core.Primitive(f"render__{id(r)}__{on_object}")
+    _render_prim.multiple_results = True
+    _render_prim.def_impl(functools.partial(xla.apply_primitive, _render_prim))
+    _render_prim.def_abstract_eval(_render_abstract)
+
+    # Connect the XLA translation rules for JIT compilation
+    mlir.register_lowering(_render_prim, _render_lowering, platform="gpu")
     
+    return _render_prim
+
+
+
+@functools.partial(jax.jit, static_argnums=(0, 3))
+def render_custom_call_single(r: "Renderer", poses, idx, on_object=0):
+    return build_render_primitive_single(r, int(on_object)).bind(poses, idx)
+
+
+@functools.lru_cache(maxsize=None)
+def build_render_primitive_single(r: "Renderer", on_object: int = 0):
+    _register_custom_calls()
+    
+    # For JIT compilation we need a function to evaluate the shape and dtype of the
+    # outputs of our op for some given inputs
+    def _render_abstract(poses, indices):
+        if poses.shape[0] != indices.shape[0]:
+            raise ValueError(f"Mismatched #objects: {poses.shape}, {indices.shape}")
+        dtype = dtypes.canonicalize_dtype(poses.dtype)
+        return [ShapedArray((r.intrinsics.height, r.intrinsics.width, 4), dtype),
+                ShapedArray((), dtype)]
+
+    # Provide an MLIR "lowering" of the render primitive.
+    def _render_lowering(ctx, poses, indices):
+
+        # Extract the numpy type of the inputs
+        poses_aval, indices_aval = ctx.avals_in
+        if poses_aval.ndim != 3:
+            raise NotImplementedError(f"Only 3D inputs supported: got {poses_aval.shape}")
+        if indices_aval.ndim != 1:
+            raise NotImplementedError(f"Only 1D inputs supported: got {indices_aval.shape}")
+
+        np_dtype = np.dtype(poses_aval.dtype)
+        if np_dtype != np.float32:
+            raise NotImplementedError(f"Unsupported poses dtype {np_dtype}")
+        if np.dtype(indices_aval.dtype) != np.int32:
+            raise NotImplementedError(f"Unsupported indices dtype {indices_aval.dtype}")
+
+        num_objects = poses_aval.shape[0]
+        out_shp_dtype = mlir.ir.RankedTensorType.get(
+            [r.intrinsics.height, r.intrinsics.width, 4],
+            mlir.dtype_to_ir_type(poses_aval.dtype))
+
+        if num_objects != indices_aval.shape[0]:
+            raise ValueError("Mismatched #objects in poses vs indices: "
+                             f"{num_objects} vs {indices_aval.shape[0]}")
+        opaque = dr._get_plugin(gl=True).build_rasterize_descriptor(r.renderer_env.cpp_wrapper,
+                                                                    r.proj_list,
+                                                                    [num_objects, 1],
+                                                                    on_object)
+
+        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(poses_aval.dtype))
+        op_name = "jax_rasterize_fwd_gl"
+        return custom_call(
+            op_name,
+            # Output types
+            out_types=[out_shp_dtype, scalar_dummy],
+            # The inputs:
+            operands=[poses, indices],
+            # Layout specification:
+            operand_layouts=[(2, 1, 0), (0,)],
+            result_layouts=[(2, 1, 0), ()],
+            # GPU specific additional data
+            backend_config=opaque
+        )
+
     # ************************************
     # *  SUPPORT FOR BATCHING WITH VMAP  *
     # ************************************
@@ -211,21 +288,15 @@ def build_render_primitive(r: "Renderer", on_object: int = 0):
             raise NotImplementedError("Batching on object indices is not yet supported.")
         if axes[0] is None:
             raise NotImplementedError("Must batch a dimension of poses.")
-        if poses.ndim != 5:
+        if poses.ndim != 4:
             raise NotImplementedError("Underlying primitive must operate on 4D poses.")
-        # 4D pose shape is [num_objects, num_images, 4, 4].
-        orig_num_images = poses.shape[1]
-        num_batched = poses.shape[axes[0]]
-        new_num_images = num_batched * orig_num_images
-        # First, we will move the batched axis to be adjacent to num_images (axis 1).
-        poses = jnp.moveaxis(poses, axes[0], 1)
-        poses = poses.reshape(poses.shape[0], new_num_images, 4, 4)
-        if poses.shape[0] != indices.shape[0]:
+
+        poses = jnp.moveaxis(poses, axes[0], 0)
+        if poses.shape[1] != indices.shape[0]:
             raise ValueError(f"Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}")
         if poses.shape[-2:] != (4, 4):
             raise ValueError(f"Unexpected poses shape: {poses.shape}")
         renders, dummy = render_custom_call(r, poses, indices, on_object=on_object)
-        renders = renders.reshape(num_batched, orig_num_images, *renders.shape[1:])
         out_axes = 0, None
         return (renders, dummy), out_axes
 
@@ -306,50 +377,14 @@ class _Renderer(object):
                 torch.tensor(triangles.astype(np.int32), device='cuda'),
             )
 
-    def render_to_torch(self, poses, idx, on_object=0):
-        poses_torch = torch.utils.dlpack.from_dlpack(jax.dlpack.to_dlpack(poses))
-        images_torch = dr._get_plugin(gl=True).rasterize_fwd_gl(
-            self.renderer_env.cpp_wrapper, poses_torch, self.proj_list, idx, on_object)
-        return images_torch
-    
-    def render_jax(self, poses, idx, on_object=0):
-        poses = jnp.float32(poses)
-        idx = jnp.int32(idx)
-        return render_custom_call(self, poses, idx, on_object)[0]
-        
-    def render_single_object(self, pose, idx):
-        if not CUSTOM_CALLS:
-            images_torch = self.render_to_torch(pose[None, None, :, :], [idx])
-            images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
-        else:
-            images_jnp = self.render_jax(pose[None, None, :, :], [idx])[0]
-        return transform_image_zeros_jit(images_jnp, self.intrinsics)
+    def render_jax(self, poses, indices, on_object=0):
+        images_jnp = render_custom_call_single(self, poses, indices, on_object)[0]
+        return transform_image_zeros(images_jnp, self.intrinsics)
 
-    def render_parallel(self, poses, idx):
-        if not CUSTOM_CALLS:
-            images_torch = self.render_to_torch(poses[None, :, :, :], [idx])
-            images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
-        else:
-            images_jnp = self.render_jax(poses[None, :, :, :], [idx])
-        return transform_image_zeros_parallel_jit(images_jnp, self.intrinsics)
+    def render_jax_parallel(self, poses, indices, on_object=0):
+        images_jnp = render_custom_call(self, poses, indices, on_object)[0]
+        return transform_image_zeros_parallel(images_jnp, self.intrinsics)
 
-
-    def render_multiobject(self, poses, indices):
-        if not CUSTOM_CALLS:
-            images_torch = self.render_to_torch(poses[:, None, :, :], indices)
-            images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch[0]))
-        else:
-            images_jnp = self.render_jax(poses[:, None, :, :], indices)[0]
-        return transform_image_zeros_jit(images_jnp, self.intrinsics)
-
-
-    def render_multiobject_parallel(self, poses, indices, on_object=0):
-        if not CUSTOM_CALLS:
-            images_torch = self.render_to_torch(poses, indices, on_object=on_object)
-            images_jnp = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(images_torch))
-        else:
-            images_jnp = self.render_jax(poses, indices, on_object=on_object)
-        return transform_image_zeros_parallel_jit(images_jnp, self.intrinsics)
 
 def render_point_cloud(point_cloud, intrinsics, pixel_smudge=0):
     transformed_cloud = point_cloud
