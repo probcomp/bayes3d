@@ -1,19 +1,18 @@
-import os
 import json
+import os
+from collections import deque
 
+import bayes3d
 import jax
 import jax.numpy as jnp
 import numpy as np
+from bayes3d.renderer import _Renderer
+from bayes3d.transforms_3d import transform_from_pos, unproject_depth
+from bayes3d.viz import get_depth_image, make_gif_from_pil_images, multi_panel
 from PIL import Image
 from tqdm import tqdm
 
-import bayes3d
-from bayes3d.transforms_3d import transform_from_pos, unproject_depth
-from bayes3d.viz import get_depth_image, make_gif_from_pil_images, multi_panel
-
 import cog_utils as utils
-from collections import deque
-
 from config import Config
 
 
@@ -31,7 +30,7 @@ def model(
 
     intrinsics = utils.get_camera_intrinsics(config.width, config.height, config.fov)
     bayes3d.setup_renderer(intrinsics)
-    renderer = bayes3d.RENDERER
+    renderer: _Renderer = bayes3d.RENDERER
 
     rgb_images, depth_images, seg_maps = [], [], []
     rgb_images_pil = []
@@ -87,18 +86,19 @@ def model(
 
     start_t = config.start_t
     seg_img = seg_images[start_t]
+    known_obj_ids = set()
 
     indices, init_poses = [], []
-    obj_ids = jnp.unique(seg_img.reshape(-1, 3), axis=0)
+    obj_ids = np.unique(seg_img.reshape(-1, 3), axis=0)
     obj_ids = sorted(
-        obj_ids, key=lambda x: jnp.all(seg_img == x, axis=-1).sum(), reverse=True
+        obj_ids, key=lambda x: np.all(seg_img == x, axis=-1).sum(), reverse=True
     )
     for obj_id in obj_ids[: num_objects + 1]:
-        if jnp.all(obj_id == 0):
+        if np.all(obj_id == 0):
             # Background
             continue
 
-        obj_mask = jnp.all(seg_img == obj_id, axis=-1)
+        obj_mask = np.all(seg_img == obj_id, axis=-1)
         masked_depth = coord_images[start_t].copy()
         masked_depth[~obj_mask] = 0
 
@@ -112,6 +112,7 @@ def model(
         if best:
             indices.append(best[0])
             init_poses.append(best[1])
+            known_obj_ids.add(tuple(obj_id))
 
     init_poses = jnp.array(init_poses)
 
@@ -151,24 +152,26 @@ def model(
     prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None)))
 
     # Liklelihood model
-    def scorer(rendered_image, gt, var=0.1, op=0.005, ov=0.5, fs=5):
+    def scorer(rendered_image, gt, var=0.01, op=0.05, ov=1, fs=3):
         # Liklihood parameters
         # r: radius
         # op: outlier probability
         # ov: outlier volume
-        weight = bayes3d.likelihood.threedp3_likelihood(gt, rendered_image, var, op, ov, fs)
+        weight = bayes3d.likelihood.threedp3_likelihood(
+            gt, rendered_image, var, op, ov, fs
+        )
         return weight
 
     scorer_parallel = jax.jit(jax.vmap(scorer, in_axes=(0, None)))
+    # scorer_parallel = jax.vmap(scorer, in_axes=(0, None))
 
     num_steps = (
         (num_frames - start_t) if config.num_steps == "auto" else config.num_steps
     )
     n_objects = init_poses.shape[0]
-    reward_idx = utils.get_reward_idx(meshes, indices)
+    reward_indices = utils.get_reward_indices(meshes, indices)
 
     containment_relations = {}
-    contained_objs = set()
     inferred_poses = []
     pose_estimates = init_poses.copy()
     past_poses = {
@@ -177,10 +180,30 @@ def model(
     }
     for t in tqdm(range(start_t, start_t + num_steps), desc="Inference"):
         gt_image = jnp.array(coord_images[t])
+        if not len(reward_indices):
+            new_indices, new_poses = utils.detect_new_objects(
+                renderer=renderer,
+                seg_img=seg_images[t],
+                coord_image=coord_images[t],
+                meshes=meshes,
+                known_obj_ids=known_obj_ids,
+            )
+            if new_indices:
+                indices.extend(new_indices)
+                pose_estimates = jnp.concatenate((pose_estimates, new_poses))
+                past_poses.update(
+                    {
+                        (i + len(past_poses)): deque([new_poses[i]] * config.num_past_poses)
+                        for i in range(len(new_poses))
+                    }
+                )
+                n_objects += len(new_indices)
+                reward_indices = utils.get_reward_indices(meshes, indices)
+
         for _ in range(config.iterations_per_step):
             for i in range(n_objects):
                 # Check for occlusion
-                if i == reward_idx:
+                if i in reward_indices:
                     occluded = utils.check_occlusion(
                         renderer, pose_estimates, indices, i
                     )
@@ -190,7 +213,6 @@ def model(
                         )
                         if containing_obj is not None:
                             containment_relations[containing_obj] = i
-                            contained_objs.add(i)
 
                 for d in config.grid_deltas:
                     translation_deltas = make_unfiform_grid(n=config.grid_n, d=d)
@@ -228,6 +250,7 @@ def model(
 
         inferred_poses.append(pose_estimates.copy())
 
+    reward_idx = reward_indices[-1]
     apple_pos = pose_estimates[reward_idx, :-1, 3]
     sorted_receptacles = sorted(
         [
@@ -252,15 +275,12 @@ def model(
             rgb_viz = Image.fromarray(rgb_images[t].astype(np.int8), mode="RGB")
             gt_depth_1 = get_depth_image(coord_images[t][:, :, 2], max=5.0)
             poses = inferred_poses[t - start_t]
-            rendered_image = renderer.render_multiobject(poses, indices)
+            rendered_image = renderer.render_multiobject(poses, indices[: len(poses)])
             rendered_image_depth = get_depth_image(rendered_image[:, :, 2], max=5)
             rendered_image_segmentation = get_depth_image(
                 rendered_image[:, :, -1], max=num_objects
             )
 
-            apple_pose = poses[-1]
-            rendered_apple = renderer.render_single_object(apple_pose, indices[-1])
-            rendered_apple = get_depth_image(rendered_apple[:, :, 2], max=5)
             all_images.append(
                 multi_panel(
                     [
@@ -268,14 +288,12 @@ def model(
                         gt_depth_1,
                         rendered_image_depth,
                         rendered_image_segmentation,
-                        rendered_apple,
                     ],
                     [
                         f"Class: {closest_receptacle_idx}\nRGB Image",
                         "\nActual Depth",
                         f"   Frame: {t}\nReconstructed Depth",
                         "\nReconstructed Segmentation",
-                        "\nApple Only",
                     ],
                     middle_width=10,
                     label_fontsize=20,

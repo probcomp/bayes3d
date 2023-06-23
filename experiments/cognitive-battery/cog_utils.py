@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Set
 
 import jax.numpy as jnp
 import numpy as np
@@ -10,6 +10,8 @@ from scipy.spatial.transform import Rotation as R
 import bayes3d
 from bayes3d.renderer import _Renderer
 from bayes3d.viz import get_depth_image
+from bayes3d.transforms_3d import transform_from_pos
+
 
 def get_object_transforms(obj_name: str, init_transform: jnp.ndarray) -> jnp.ndarray:
     """
@@ -76,7 +78,6 @@ def find_best_mesh(
         obj_transforms = get_object_transforms(meshes[m], obj_transform)
         for i, transform in enumerate(obj_transforms):
             rendered_image = renderer.render_single_object(transform, m)
-            get_depth_image(rendered_image[:, :, 2], max=50).save(pp + f"{meshes[m]}_{i}.png")
             scaling_factor = (rendered_image[:, :, 2] != rendered_image.max()).sum() / (
                 depth[:, :, 2] != 0.0
             ).sum()
@@ -86,8 +87,14 @@ def find_best_mesh(
             keep_points = (
                 jnp.sum(
                     jnp.logical_or(
-                        ((depth[:, :, 2] != 0.0) * (rendered_image[:, :, 2] == rendered_image.max())),
-                        ((depth[:, :, 2] == 0.0) * (rendered_image[:, :, 2] != rendered_image.max())),
+                        (
+                            (depth[:, :, 2] != 0.0)
+                            * (rendered_image[:, :, 2] == rendered_image.max())
+                        ),
+                        (
+                            (depth[:, :, 2] == 0.0)
+                            * (rendered_image[:, :, 2] != rendered_image.max())
+                        ),
                     )
                 )
                 * scaling_factor
@@ -180,14 +187,18 @@ def full_translation_deltas_single(
     return translation_proposals
 
 
-def get_reward_idx(
+def get_reward_indices(
     meshes: List[str], indices: List[int], reward_mesh_name: str = "apple"
 ) -> int:
-    assert (reward_mesh_name in meshes), f"Could not find mesh name {reward_mesh_name} in the meshes list."
+    assert (
+        reward_mesh_name in meshes
+    ), f"Could not find mesh name {reward_mesh_name} in the meshes list."
     reward_mesh_idx = meshes.index(reward_mesh_name)
 
-    assert reward_mesh_idx in indices, "Could not locate the reward in the scene."
-    return indices.index(reward_mesh_idx)
+    # assert reward_mesh_idx in indices, "Could not locate the reward in the scene."
+    if reward_mesh_idx not in indices:
+        print("WARNING: Could not locate the reward in the scene.")
+    return [i for i, v in enumerate(indices) if v == reward_mesh_idx]
 
 
 def read_label(video_path: str, label_key: str = "final_location") -> int:
@@ -196,3 +207,40 @@ def read_label(video_path: str, label_key: str = "final_location") -> int:
         expt_stats = yaml.safe_load(f)
         label = expt_stats[label_key]
     return label
+
+
+def detect_new_objects(
+    renderer: _Renderer,
+    seg_img: np.ndarray,
+    coord_image: np.ndarray,
+    meshes: List[str],
+    known_obj_ids: Set,
+):
+    indices, init_poses = [], []
+    obj_ids = np.unique(seg_img.reshape(-1, 3), axis=0)
+    obj_ids = sorted(
+        obj_ids, key=lambda x: np.all(seg_img == x, axis=-1).sum(), reverse=True
+    )
+    for obj_id in obj_ids:
+        if np.all(obj_id == 0) or tuple(obj_id) in known_obj_ids:
+            # Background or known object
+            continue
+
+        obj_mask = np.all(seg_img == obj_id, axis=-1)
+        masked_depth = coord_image.copy()
+        masked_depth[~obj_mask] = 0
+
+        object_points = coord_image[obj_mask]
+        maxs = np.max(object_points, axis=0)
+        mins = np.min(object_points, axis=0)
+        obj_center = (maxs + mins) / 2
+        obj_transform = transform_from_pos(obj_center)
+
+        best = find_best_mesh(renderer, meshes, obj_transform, masked_depth)
+        if best:
+            indices.append(best[0])
+            init_poses.append(best[1])
+            known_obj_ids.add(tuple(obj_id))
+    init_poses = jnp.array(init_poses)
+
+    return indices, init_poses
