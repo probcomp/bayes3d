@@ -36,4 +36,11 @@ class gravity_config(Config):
     table_y = 0.5
 
 
-CONFIG_MAP = {c.scene: c for c in {swap_config, gravity_config}}
+class rotation_config(Config):
+    scene = "rotation"
+    receptacle_name = "cup"
+    start_t = 6
+    table_y = 0.5
+
+
+CONFIG_MAP = {c.scene: c for c in {swap_config, gravity_config, rotation_config}}
