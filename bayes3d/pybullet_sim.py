@@ -100,11 +100,12 @@ def create_sphere(position, radius, velocity=0, restitution=1, friction=0, id=No
     Returns:
         Body: The created Body object representing the sphere.
     """
-    mesh = tm.load("sphere.obj")
+    path_to_sphere = "../assets/sample_objs/sphere.obj"
+    mesh = tm.load(path_to_sphere)
     pose = np.eye(4)
     pose[:3, 3] = position
     obj_id = "sphere" if id is None else id
-    body = Body(obj_id, pose, mesh, file_dir="sphere.obj", restitution=restitution, friction=friction, velocity=velocity)
+    body = Body(obj_id, pose, mesh, file_dir=path_to_sphere, restitution=restitution, friction=friction, velocity=velocity)
     return body
 
 
@@ -431,6 +432,8 @@ class PybulletSimulator(object):
             self.frames.append(self.capture_image())
             # self.update_body_poses()
             self.step_simulation()
+
+        self.close()
 
     def capture_image(self, distance = 7, yaw = 0, pitch = -30, roll = 0, dims = [960, 720]):
         view_matrix = p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=[0, 0, 0], distance=distance, yaw=yaw, pitch=pitch, roll=roll,
