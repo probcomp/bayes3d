@@ -1,3 +1,11 @@
+# _files are private, helps keeping the repo clean
+# while prototyping
+**/_*/
+**/_*
+**/_*.*
+!**/__*__.py
+**/.DS_Store
+
 venv/*
 *.gif
 *.png
