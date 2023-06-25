@@ -30,7 +30,7 @@ def make_gif_from_pil_images(images, filename):
     images[0].save(
         fp=filename,
         format="GIF",
-        append_images=images,
+        append_images=images[1:],
         save_all=True,
         duration=100,
         loop=0,
