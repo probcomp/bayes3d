@@ -55,7 +55,7 @@ def pybullet_render(scene):
     Returns:
         PIL.Image.Image: The rendered image.
     """
-    pyb_sim = PybulletSimulator()
+    pyb_sim = PybulletSimulator(camera=scene.camera)
     for body in scene.bodies.values():
         pyb_sim.add_body_to_simulation(body)
     image_rgb = pyb_sim.capture_image()
@@ -258,7 +258,7 @@ class Scene:
         self.bodies = bodies if bodies is not None else {}
         self.gravity = gravity
         self.timestep = timestep
-        self.camera = camera if camera is not None else Body("camera", np.eye(4), None) #todo 
+        self.camera = camera
         self.pyb_sim = None
 
 
@@ -287,8 +287,8 @@ class Scene:
     def get_bodies(self):
         return self.bodies
 
-    def set_camera(self, camera):
-        self.camera = camera
+    def set_camera_position_target(self, position, target):
+        self.camera = [position, target]
         return self.camera
 
     def set_light(self, light: Body):
@@ -305,7 +305,7 @@ class Scene:
     
     def simulate(self, timesteps):
         # create physics simulator 
-        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity)
+        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera)
         self.pyb_sim = pyb
 
         # add bodies to physics simulator
@@ -315,7 +315,6 @@ class Scene:
         # simulate for timesteps
         pyb.simulate(timesteps)
         # returns pybullet simulation, which you can obtain a gif, poses from. 
-        
         return pyb
 
     def close(self): 
@@ -329,7 +328,7 @@ class Scene:
         return f"Scene ID: {self.scene_id}\nBodies:\n{body_str}"
     
 class PybulletSimulator(object):
-    def __init__(self, timestep=1/60, gravity=0, floor_restitution=0.5):
+    def __init__(self, timestep=1/60, gravity=0, floor_restitution=0.5, camera = None):
         self.timestep = timestep
         self.gravity = gravity
         self.client = p.connect(p.DIRECT)
@@ -337,6 +336,7 @@ class PybulletSimulator(object):
         self.frames = [] 
         self.pyb_id_to_body_id = {}
         self.body_poses = {}
+        self.camera = camera
 
         # Set up the simulation environment
         p.resetSimulation(physicsClientId=self.client)
@@ -435,9 +435,15 @@ class PybulletSimulator(object):
 
         self.close()
 
-    def capture_image(self, distance = 7, yaw = 0, pitch = -30, roll = 0, dims = [960, 720]):
-        view_matrix = p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=[0, 0, 0], distance=distance, yaw=yaw, pitch=pitch, roll=roll,
-                                                            upAxisIndex=2)
+    def capture_image(self, up_vector = [0,0,1], distance = 7, yaw = 0, pitch = -30, roll = 0, dims = [960, 720]):
+        # if no position is specified, use arbitrary default position. 
+        if self.camera is None:
+            view_matrix = p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=[0, 0, 0], distance=distance, yaw=yaw, pitch=pitch, roll=roll,
+                                                                upAxisIndex=2)
+        else: 
+            position = self.camera[0]
+            target = self.camera[1]
+            view_matrix = p.computeViewMatrix(cameraEyePosition=position, cameraTargetPosition=target, cameraUpVector=up_vector)
         proj_matrix = p.computeProjectionMatrixFOV(fov=60, aspect=float(960) / 720, nearVal=0.1, farVal=100.0)
         (_, _, px, _, _) = p.getCameraImage(width=dims[0], height=dims[1], viewMatrix=view_matrix,
                                             projectionMatrix=proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
