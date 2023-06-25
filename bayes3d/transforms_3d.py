@@ -103,6 +103,18 @@ def transform_to_posevec(transform):
 def transform_from_posevec(posevec):
     return transform_from_rot_and_pos(rotation_from_rodrigues(posevec[3:]), posevec[:3])
 
+def axis_angle_from_rotation(R):
+    rvec = rodrigues_from_rotation(R)
+    return rvec/jnp.linalg.norm(rvec), jnp.linalg.norm(rvec)
+
+def rodrigues_from_rotation(R):
+    #formula from http://motion.pratt.duke.edu/RoboticSystems/3DRotations.html
+    eps = 1e-8 #prevent numerical instability
+    theta = jnp.clip(jnp.arccos((jnp.trace(R)-1)/2), a_min=eps, a_max=jnp.pi-eps)
+    rvec = jnp.array([(R[2,1]-R[1,2])/(2*jnp.sin(theta)), (R[0,2]-R[2,0])/(2*jnp.sin(theta)), (R[1,0]-R[0,1])/(2*jnp.sin(theta))]) * theta
+    rvec += eps
+    return rvec.reshape(-1)
+
 def transform_from_rvec_tvec(rvec, tvec):
     return transform_from_rot_and_pos(
         rotation_from_rodrigues(rvec),
