@@ -58,34 +58,35 @@ def pybullet_render(scene):
     pyb_sim = PybulletSimulator(camera=scene.camera)
     for body in scene.bodies.values():
         pyb_sim.add_body_to_simulation(body)
-    image_rgb = pyb_sim.capture_image()
+    image_rgb, depth, _ = pyb_sim.capture_image()
     pyb_sim.close()
     image = Image.fromarray(image_rgb)
     return image
 
-def create_box(pose, length, width, height, restitution=1, friction=0, velocity=0, id=None):
+def create_box(pose, scale = [1,1,1], restitution=1, friction=0, velocity=0, id=None):
     """
     Creates a box-shaped Body object.
-
-    Args:
-        pose (np.ndarray): The pose of the box.
-        length (float): The length of the box.
-        width (float): The width of the box.
-        height (float): The height of the box.
-        restitution (float, optional): The restitution coefficient of the box. Default is 1.
-        friction (float, optional): The friction coefficient of the box. Default is 0.
-        velocity (float, optional): The initial velocity of the box. Default is 0.
-        id (str, optional): The ID of the box. Default is None.
-
-    Returns:
-        Body: The created Body object representing the box.
     """
     position = pose[:3, 3]
     orientation = pose[:3, :3]
-    return create_box(position, length, width, height, restitution, friction, velocity, orientation, id)
+    return create_box(position, scale, restitution, friction, velocity, orientation, id)
 
 
-def create_sphere(position, radius, velocity=0, restitution=1, friction=0, id=None):
+def create_box(position, scale=[1,1,1], restitution=1, friction=0, velocity=0, orientation=None, id=None):
+    """
+    Creates a box-shaped Body object.
+    """
+    path_to_box = "../assets/sample_objs/cube.obj"
+    mesh = tm.load(path_to_box)
+    pose = np.eye(4)
+    pose[:3, :3] = orientation if orientation is not None else np.eye(3)
+    pose[:3, 3] = position
+    obj_id = "box" if id is None else id
+    body = Body(obj_id, pose, mesh, file_dir=path_to_box, restitution=restitution, friction=friction, velocity=velocity, scale=scale)
+    return body
+
+
+def create_sphere(position, scale = [1,1,1], velocity=0, restitution=1, friction=0, id=None):
     """
     Creates a sphere-shaped Body object.
 
@@ -105,11 +106,11 @@ def create_sphere(position, radius, velocity=0, restitution=1, friction=0, id=No
     pose = np.eye(4)
     pose[:3, 3] = position
     obj_id = "sphere" if id is None else id
-    body = Body(obj_id, pose, mesh, file_dir=path_to_sphere, restitution=restitution, friction=friction, velocity=velocity)
+    body = Body(obj_id, pose, mesh, file_dir=path_to_sphere, restitution=restitution, friction=friction, velocity=velocity, scale = scale)
     return body
 
 
-def make_body_from_obj_pose(obj_path, pose, velocity=0, restitution=1, friction=0, id=None):
+def make_body_from_obj_pose(obj_path, pose, velocity=0, restitution=1, friction=0, id=None, scale = None ):
     """
     Creates a Body object from an OBJ file with a given pose.
 
@@ -126,11 +127,11 @@ def make_body_from_obj_pose(obj_path, pose, velocity=0, restitution=1, friction=
     """
     mesh = tm.load(obj_path)
     obj_id = "obj_mesh" if id is None else id
-    body = Body(obj_id, pose, mesh, velocity=velocity, friction=friction, restitution=restitution, file_dir=obj_path)
+    body = Body(obj_id, pose, mesh, velocity=velocity, friction=friction, restitution=restitution, file_dir=obj_path, scale = scale)
     return body
 
 
-def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0, orientation=None, id=None):
+def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0, orientation=None, id=None, scale=None):
     """
     Creates a Body object from an OBJ file with a given position.
 
@@ -149,10 +150,10 @@ def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0
     pose = np.eye(4)
     pose[:3, :3] = orientation if orientation is not None else np.eye(3)
     pose[:3, 3] = position
-    return make_body_from_obj_pose(obj_path, pose, id=id, friction=friction, restitution=restitution, velocity=velocity)
+    return make_body_from_obj_pose(obj_path, pose, id=id, friction=friction, restitution=restitution, velocity=velocity, scale=scale)
 
 class Body:
-    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=1.0, friction=0, damping=0, transparency=1, velocity=0, mass=1, texture=None, color=[1, 0, 0]):
+    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=1.0, friction=0, damping=0, transparency=1, velocity=0, mass=1, texture=None, color=[1, 0, 0], scale=None):
         self.id = object_id
         self.pose = pose
         self.restitution = restitution
@@ -165,7 +166,8 @@ class Body:
         self.mass = mass
         self.file_dir = file_dir
         self.mesh = mesh
-    
+        self.scale = scale
+
     # Getter methods
     def get_id(self):
         return self.id
@@ -205,6 +207,9 @@ class Body:
 
     def get_orientation(self):
         return self.pose[:3, :3]
+    
+    def get_scale(self):
+        return self.scale
         
     # Setter methods
     def set_id(self, object_id):
@@ -242,6 +247,10 @@ class Body:
 
     def set_orientation(self, orientation):
         self.pose[:3, :3] = orientation
+
+    def set_scale(self, scale):
+        self.scale = scale
+
 
     # Miscellaneous methods
     def get_fields(self):
@@ -334,6 +343,7 @@ class PybulletSimulator(object):
         self.client = p.connect(p.DIRECT)
         self.step_count = 0
         self.frames = [] 
+        self.depth = []
         self.pyb_id_to_body_id = {}
         self.body_poses = {}
         self.camera = camera
@@ -355,6 +365,7 @@ class PybulletSimulator(object):
         # vertices = body.mesh.vertices.tolist()
         # faces = body.mesh.faces.ravel().tolist()
         obj_file_dir = body.file_dir
+        mesh_scale = body.scale
 
 
         # Create visual and collision shapes
@@ -362,6 +373,7 @@ class PybulletSimulator(object):
                                             # vertices=vertices, 
                                             # indices=faces,
                                             fileName = obj_file_dir,
+                                            meshScale = mesh_scale,
                                             physicsClientId=self.client,
                                             rgbaColor=np.append(body.color, body.transparency),
                                             )
@@ -370,6 +382,7 @@ class PybulletSimulator(object):
                                                 # vertices=vertices, 
                                                 # indices=faces,
                                                 fileName = obj_file_dir,
+                                                meshScale = mesh_scale,
                                                 physicsClientId=self.client, 
                                                 )
 
@@ -381,7 +394,7 @@ class PybulletSimulator(object):
         quaternion = r.as_quat()
 
         # Create a multibody with the created shapes
-        pyb_id = p.createMultiBody(baseMass=1,
+        pyb_id = p.createMultiBody(baseMass=body.mass,
                                     baseCollisionShapeIndex=collisionShapeId,
                                     baseVisualShapeIndex=visualShapeId, 
                                     basePosition=body.get_position(),
@@ -429,14 +442,23 @@ class PybulletSimulator(object):
     def simulate(self, steps): 
         # returns frames, poses of objects over time
         for i in range(steps):
-            self.frames.append(self.capture_image())
+            rgb, depth, segm = self.capture_image()
+            self.frames.append(rgb)
+            self.depth.append(depth)
             # self.update_body_poses()
             self.step_simulation()
 
         self.close()
 
-    def capture_image(self, up_vector = [0,0,1], distance = 7, yaw = 0, pitch = -30, roll = 0, dims = [960, 720]):
-        # if no position is specified, use arbitrary default position. 
+    #TODO; fix this function to return the correct depth image
+    def depth_to_image(self, depth_array):
+        # Normalize the depth array between 0 and 1 for visualization
+        depth_img = (depth_array - np.min(depth_array)) / (np.max(depth_array) - np.min(depth_array))
+        depth_uint8 = np.uint8(depth_img * 255)
+        return depth_uint8
+
+    def capture_image(self, up_vector=[0, 0, 1], distance=7, yaw=0, pitch=-30, roll=0, dims=[960, 720]):
+    # if no position is specified, use arbitrary default position. 
         if self.camera is None:
             view_matrix = p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=[0, 0, 0], distance=distance, yaw=yaw, pitch=pitch, roll=roll,
                                                                 upAxisIndex=2)
@@ -444,13 +466,30 @@ class PybulletSimulator(object):
             position = self.camera[0]
             target = self.camera[1]
             view_matrix = p.computeViewMatrix(cameraEyePosition=position, cameraTargetPosition=target, cameraUpVector=up_vector)
-        proj_matrix = p.computeProjectionMatrixFOV(fov=60, aspect=float(960) / 720, nearVal=0.1, farVal=100.0)
-        (_, _, px, _, _) = p.getCameraImage(width=dims[0], height=dims[1], viewMatrix=view_matrix,
-                                            projectionMatrix=proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
-        rgb_array = np.array(px, dtype=np.uint8)
+        proj_matrix = p.computeProjectionMatrixFOV(fov=60, aspect=float(dims[0]) / dims[1], nearVal=0.1, farVal=100.0)
+        width, height, rgb_pixels, depth_pixels, segm_pixels = p.getCameraImage(width=dims[0], height=dims[1], viewMatrix=view_matrix,
+                                                projectionMatrix=proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
+        
+        # Convert rgb_pixels (a list of RGBA values) into an array
+        rgb_array = np.array(rgb_pixels, dtype=np.uint8)
         rgb_array = np.reshape(rgb_array, (dims[1], dims[0], 4))
-        rgb_array = rgb_array[:, :, :3]
-        return rgb_array
+        rgb_array = rgb_array[:, :, :3]  # strip off the alpha channel
+
+        # # Convert depth_pixels (a list of depth values) into an array
+        # depth_array = np.array(depth_pixels)
+        # depth_array = np.reshape(depth_array, (dims[1], dims[0]))
+        # far = 1000.
+        # near = 0.01
+        # depth = far * near / (far - (far - near) * depth_array)
+        # depth_img = self.depth_to_image(depth)
+        depth_img = None 
+
+        # Convert segm_pixels (a list of segmentation values) into an array
+        # segm_array = np.array(segm_pixels)
+        # segm_array = np.reshape(segm_array, (dims[1], dims[0]))
+        segm_array = None 
+
+        return rgb_array, depth_img, segm_array
     
     def create_gif(self, path, fps=15):
         imageio.mimsave(path, self.frames, duration = (1000 * (1/fps)))
