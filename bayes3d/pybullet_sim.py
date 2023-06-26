@@ -153,7 +153,7 @@ def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0
     return make_body_from_obj_pose(obj_path, pose, id=id, friction=friction, restitution=restitution, velocity=velocity, scale=scale)
 
 class Body:
-    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=1.0, friction=0, damping=0, transparency=1, velocity=0, mass=1, texture=None, color=[1, 0, 0], scale=None):
+    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=0.8, friction=0, damping=0, transparency=1, velocity=0, mass=1, texture=None, color=[1, 0, 0], scale=None):
         self.id = object_id
         self.pose = pose
         self.restitution = restitution
@@ -262,13 +262,14 @@ class Body:
 
 
 class Scene:
-    def __init__(self, id = None, bodies=None, camera=None, timestep = 1/60, light=None, gravity = 0):
+    def __init__(self, id = None, bodies=None, camera=None, timestep = 1/60, light=None, gravity = [0,0,0], downsampling = 1):
         self.scene_id = id if id is not None else "scene"
         self.bodies = bodies if bodies is not None else {}
         self.gravity = gravity
         self.timestep = timestep
         self.camera = camera
         self.pyb_sim = None
+        self.downsampling = downsampling
 
 
     def add_body(self, body: Body):
@@ -308,13 +309,21 @@ class Scene:
         self.gravity = gravity
         return self.gravity
     
+    def set_downsampling(self, downsampling):
+        self.downsampling = downsampling
+        return self.downsampling
+    
+    def set_timestep(self, timestep):
+        self.timestep = timestep
+        return self.timestep
+    
     def render(self, render_func):
         image = render_func(self)
         return image
     
     def simulate(self, timesteps):
         # create physics simulator 
-        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera)
+        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera, downsampling = self.downsampling)
         self.pyb_sim = pyb
 
         # add bodies to physics simulator
@@ -337,7 +346,7 @@ class Scene:
         return f"Scene ID: {self.scene_id}\nBodies:\n{body_str}"
     
 class PybulletSimulator(object):
-    def __init__(self, timestep=1/60, gravity=0, floor_restitution=0.5, camera = None):
+    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1):
         self.timestep = timestep
         self.gravity = gravity
         self.client = p.connect(p.DIRECT)
@@ -347,10 +356,11 @@ class PybulletSimulator(object):
         self.pyb_id_to_body_id = {}
         self.body_poses = {}
         self.camera = camera
+        self.downsampling = downsampling
 
         # Set up the simulation environment
         p.resetSimulation(physicsClientId=self.client)
-        p.setGravity(0, 0, self.gravity, physicsClientId=self.client)
+        p.setGravity(self.gravity[0], self.gravity[1], self.gravity[2], physicsClientId=self.client)
         p.setPhysicsEngineParameter(fixedTimeStep=self.timestep, physicsClientId=self.client)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.plane_id = p.loadURDF("plane.urdf", physicsClientId=self.client)
@@ -442,10 +452,11 @@ class PybulletSimulator(object):
     def simulate(self, steps): 
         # returns frames, poses of objects over time
         for i in range(steps):
-            rgb, depth, segm = self.capture_image()
-            self.frames.append(rgb)
-            self.depth.append(depth)
-            # self.update_body_poses()
+            if i % self.downsampling == 0:
+                rgb, depth, segm = self.capture_image()
+                self.frames.append(rgb)
+                # self.depth.append(depth)
+                # self.update_body_poses()
             self.step_simulation()
 
         self.close()
@@ -505,7 +516,7 @@ class PybulletSimulator(object):
     # adjusts the gravity of the simulation
     def set_gravity(self, g):
         self.gravity = g
-        p.setGravity(0, 0, self.gravity, physicsClientId=self.client)
+        p.setGravity(self.gravity[0],self.gravity[1], self.gravity[2], physicsClientId=self.client)
 
     def close(self):
         p.resetSimulation(physicsClientId=self.client)
