@@ -416,8 +416,7 @@ def render_point_cloud_batched(point_cloud, intrinsics, NUM_PER, pixel_smudge=0)
 def project_cloud_to_pixels(point_cloud, intrinsics):
     point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
     temp1 = point_cloud_normalized[:, :2] * jnp.array([intrinsics.fx,intrinsics.fy])
-    temp2 = temp1 + jnp.array([intrinsics.cx, intrinsics.cy])
-    pixels = jnp.round(temp2) 
+    pixels = temp1 + jnp.array([intrinsics.cx, intrinsics.cy])
     return pixels
 
 def get_masked_and_complement_image(depth_image, segmentation_image, segmentation_id, intrinsics):
