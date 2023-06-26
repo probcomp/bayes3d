@@ -63,16 +63,16 @@ def pybullet_render(scene):
     image = Image.fromarray(image_rgb)
     return image
 
-def create_box(pose, scale = [1,1,1], restitution=1, friction=0, velocity=0, id=None):
+def create_box(pose, scale = [1,1,1], restitution=1, friction=0, velocity=0, angular_velocity = [0,0,0], id=None):
     """
     Creates a box-shaped Body object.
     """
     position = pose[:3, 3]
     orientation = pose[:3, :3]
-    return create_box(position, scale, restitution, friction, velocity, orientation, id)
+    return create_box(position, scale, restitution, friction, velocity, angular_velocity, orientation, id)
 
 
-def create_box(position, scale=[1,1,1], restitution=1, friction=0, velocity=0, orientation=None, id=None):
+def create_box(position, scale=[1,1,1], restitution=1, friction=0, velocity=0, angular_velocity = [0,0,0], orientation=None, id=None):
     """
     Creates a box-shaped Body object.
     """
@@ -82,11 +82,11 @@ def create_box(position, scale=[1,1,1], restitution=1, friction=0, velocity=0, o
     pose[:3, :3] = orientation if orientation is not None else np.eye(3)
     pose[:3, 3] = position
     obj_id = "box" if id is None else id
-    body = Body(obj_id, pose, mesh, file_dir=path_to_box, restitution=restitution, friction=friction, velocity=velocity, scale=scale)
+    body = Body(obj_id, pose, mesh, file_dir=path_to_box, restitution=restitution, friction=friction, velocity=velocity, angular_velocity=angular_velocity, scale=scale)
     return body
 
 
-def create_sphere(position, scale = [1,1,1], velocity=0, restitution=1, friction=0, id=None):
+def create_sphere(position, scale = [1,1,1], velocity=0, angular_velocity = [0,0,0], restitution=1, friction=0, id=None):
     """
     Creates a sphere-shaped Body object.
 
@@ -106,11 +106,11 @@ def create_sphere(position, scale = [1,1,1], velocity=0, restitution=1, friction
     pose = np.eye(4)
     pose[:3, 3] = position
     obj_id = "sphere" if id is None else id
-    body = Body(obj_id, pose, mesh, file_dir=path_to_sphere, restitution=restitution, friction=friction, velocity=velocity, scale = scale)
+    body = Body(obj_id, pose, mesh, file_dir=path_to_sphere, restitution=restitution, friction=friction, velocity=velocity, angular_velocity=angular_velocity, scale = scale)
     return body
 
 
-def make_body_from_obj_pose(obj_path, pose, velocity=0, restitution=1, friction=0, id=None, scale = None ):
+def make_body_from_obj_pose(obj_path, pose, velocity=0, angular_velocity = [0,0,0], restitution=1, friction=0, id=None, scale = None ):
     """
     Creates a Body object from an OBJ file with a given pose.
 
@@ -127,11 +127,11 @@ def make_body_from_obj_pose(obj_path, pose, velocity=0, restitution=1, friction=
     """
     mesh = tm.load(obj_path)
     obj_id = "obj_mesh" if id is None else id
-    body = Body(obj_id, pose, mesh, velocity=velocity, friction=friction, restitution=restitution, file_dir=obj_path, scale = scale)
+    body = Body(obj_id, pose, mesh, velocity=velocity, angular_velocity = angular_velocity, friction=friction, restitution=restitution, file_dir=obj_path, scale = scale)
     return body
 
 
-def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0, orientation=None, id=None, scale=None):
+def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0, angular_velocity = [0,0,0], orientation=None, id=None, scale=None):
     """
     Creates a Body object from an OBJ file with a given position.
 
@@ -150,10 +150,10 @@ def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0
     pose = np.eye(4)
     pose[:3, :3] = orientation if orientation is not None else np.eye(3)
     pose[:3, 3] = position
-    return make_body_from_obj_pose(obj_path, pose, id=id, friction=friction, restitution=restitution, velocity=velocity, scale=scale)
+    return make_body_from_obj_pose(obj_path, pose, id=id, friction=friction, restitution=restitution, velocity=velocity, scale=scale, angular_velocity=angular_velocity)
 
 class Body:
-    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=0.8, friction=0, damping=0, transparency=1, velocity=0, mass=1, texture=None, color=[1, 0, 0], scale=None):
+    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=0.8, friction=0, damping=0, transparency=1, velocity=[0,0,0], angular_velocity = [0,0,0],mass=1, texture=None, color=[1, 0, 0], scale=None):
         self.id = object_id
         self.pose = pose
         self.restitution = restitution
@@ -161,6 +161,7 @@ class Body:
         self.damping = damping
         self.transparency = transparency
         self.velocity = velocity
+        self.angular_velocity = angular_velocity
         self.texture = texture
         self.color = color
         self.mass = mass
@@ -192,6 +193,9 @@ class Body:
 
     def get_velocity(self):
         return self.velocity
+    
+    def get_angular_velocity(self):
+        return self.angular_velocity
 
     def get_mass(self):
         return self.mass
@@ -232,6 +236,9 @@ class Body:
 
     def set_velocity(self, velocity):
         self.velocity = velocity
+
+    def set_angular_velocity(self, angular_velocity):
+        self.angular_velocity = angular_velocity
 
     def set_mass(self, mass):
         self.mass = mass
@@ -418,8 +425,8 @@ class PybulletSimulator(object):
                         linearDamping=body.damping, physicsClientId=self.client)
 
         # Set initial velocity if specified
-        if body.velocity != 0:
-            p.resetBaseVelocity(pyb_id, linearVelocity=body.velocity, physicsClientId=self.client)
+        if body.velocity != [0,0,0] or body.angular_velocity != [0,0,0]:
+            p.resetBaseVelocity(pyb_id, linearVelocity=body.velocity, angularVelocity = body.angular_velocity, physicsClientId=self.client)
 # 
         # If texture is specified, load it
         if body.texture is not None:
