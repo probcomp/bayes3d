@@ -55,7 +55,7 @@ def pybullet_render(scene):
     Returns:
         PIL.Image.Image: The rendered image.
     """
-    pyb_sim = PybulletSimulator(camera=scene.camera)
+    pyb_sim = PybulletSimulator(camera=scene.camera, floor = scene.floor)
     for body in scene.bodies.values():
         pyb_sim.add_body_to_simulation(body)
     image_rgb, depth, _ = pyb_sim.capture_image()
@@ -269,14 +269,16 @@ class Body:
 
 
 class Scene:
-    def __init__(self, id = None, bodies=None, camera=None, timestep = 1/60, light=None, gravity = [0,0,0], downsampling = 1):
+    def __init__(self, id = None, bodies=None, camera=None, timestep = 1/60, light=None, gravity = [0,0,0], downsampling = 1, floor = True):
         self.scene_id = id if id is not None else "scene"
         self.bodies = bodies if bodies is not None else {}
         self.gravity = gravity
         self.timestep = timestep
         self.camera = camera
+        self.floor = floor
         self.pyb_sim = None
         self.downsampling = downsampling
+        print(self.floor)
 
 
     def add_body(self, body: Body):
@@ -303,6 +305,10 @@ class Scene:
     
     def get_bodies(self):
         return self.bodies
+    
+    def set_floor(self, floor):
+        self.floor = floor
+        return self.floor
 
     def set_camera_position_target(self, position, target):
         self.camera = [position, target]
@@ -330,7 +336,7 @@ class Scene:
     
     def simulate(self, timesteps):
         # create physics simulator 
-        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera, downsampling = self.downsampling)
+        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera, downsampling = self.downsampling, floor = self.floor )
         self.pyb_sim = pyb
 
         # add bodies to physics simulator
@@ -353,7 +359,7 @@ class Scene:
         return f"Scene ID: {self.scene_id}\nBodies:\n{body_str}"
     
 class PybulletSimulator(object):
-    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1):
+    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True):
         self.timestep = timestep
         self.gravity = gravity
         self.client = p.connect(p.DIRECT)
@@ -364,14 +370,17 @@ class PybulletSimulator(object):
         self.body_poses = {}
         self.camera = camera
         self.downsampling = downsampling
+        self.floor = floor 
 
         # Set up the simulation environment
         p.resetSimulation(physicsClientId=self.client)
         p.setGravity(self.gravity[0], self.gravity[1], self.gravity[2], physicsClientId=self.client)
         p.setPhysicsEngineParameter(fixedTimeStep=self.timestep, physicsClientId=self.client)
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        self.plane_id = p.loadURDF("plane.urdf", physicsClientId=self.client)
-        p.changeDynamics(self.plane_id, -1, restitution=floor_restitution)
+        print(self.floor)
+        if self.floor:
+            p.setAdditionalSearchPath(pybullet_data.getDataPath())
+            self.plane_id = p.loadURDF("plane.urdf", physicsClientId=self.client)
+            p.changeDynamics(self.plane_id, -1, restitution=floor_restitution)
     
     def add_body_to_simulation(self, body):
         """
