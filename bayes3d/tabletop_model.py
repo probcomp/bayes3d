@@ -26,7 +26,7 @@ class ImageLikelihood(ExactDensity):
         return img
 
     def logpdf(self, image, s, variance, outlier_prob, outlier_volume):
-        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume,5)
+        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume,3)
 
 @dataclass
 class ContactParamsUniform(ExactDensity):
@@ -110,6 +110,10 @@ def tabletop_model(array, root_poses, all_box_dims):
     outlier_prob  = genjax.distributions.tfp_uniform(0.00001, 0.01) @ "outlier_prob"
     image_likelihood(rendered, variance, outlier_prob, 100.0) @ "image"
     return rendered, indices, poses
+
+get_rendered_image = lambda trace: trace.get_retval()[0]
+get_indices = lambda trace: trace.get_retval()[1]
+get_poses = lambda trace: trace.get_retval()[2]
 
 simulate_jit = jax.jit(tabletop_model.simulate)
 update_jit = jax.jit(tabletop_model.update)
