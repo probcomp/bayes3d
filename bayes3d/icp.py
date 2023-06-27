@@ -31,29 +31,6 @@ def find_closest_point_at_pixel(
     best_point = model_xyz[jnp.unravel_index(jnp.argmin(distance), distance.shape)]
     return best_point
 
-def find_least_squares_transform_between_clouds(c1, c2, mask):
-    centroid1 = jnp.sum(c1 * mask, axis=0) / jnp.sum(mask)
-    centroid2 = jnp.sum(c2 * mask, axis=0) / jnp.sum(mask)
-    c1_centered = c1 - centroid1
-    c2_centered = c2 - centroid2
-    H = jnp.transpose(c1_centered * mask).dot(c2_centered * mask)
-
-    U,_,V = jnp.linalg.svd(H)
-    rot = (jnp.transpose(V).dot(jnp.transpose(U)))
-
-    modifier = jnp.array([
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, -1.0],
-    ])
-    V_mod = modifier.dot(V)
-    rot2 = (jnp.transpose(V_mod).dot(jnp.transpose(U)))
-
-    rot_final = (jnp.linalg.det(rot) < 0) * rot2 + (jnp.linalg.det(rot) > 0) * rot
-
-    T = (centroid2 - rot_final.dot(centroid1))
-    transform =  transform_from_rot_and_pos(rot_final, T)
-    return transform
 
 def icp(render_func, init_pose, obs_img, outer_iterations, inner_iterations):
     def _icp_step(j, pose_):

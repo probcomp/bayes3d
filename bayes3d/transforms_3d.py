@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from typing import Tuple
+import cv2
 
 
 def inverse_pose(t):
@@ -35,8 +36,22 @@ def rotation_from_axis_angle(axis, angle):
                         [-direction[1], direction[0], 0.0]])
     return R
 
-def rotation_from_rodrigues(rvec):
-    return rotation_from_axis_angle(rvec.reshape(-1), jnp.linalg.norm(rvec))
+def rotation_from_rodrigues(r_in):
+    r_flat = r_in.reshape(-1)
+    theta = jnp.linalg.norm(r_flat)
+    r = r_flat/theta
+    A = jnp.array([[0, -r[2], r[1]],[r[2], 0, -r[0]],[-r[1], r[0],  0]])
+    R = jnp.cos(theta) * jnp.eye(3) + (1 - jnp.cos(theta)) * r.reshape(-1,1) * r.transpose() + jnp.sin(theta) * A
+    return jnp.where(theta < 0.0001, jnp.eye(3), R)
+
+def transform_to_posevec(transform):
+    rvec = jnp.array(cv2.Rodrigues(np.array(transform[:3,:3]))[0]).reshape(-1)
+    tvec = transform[:3,3].reshape(-1)
+    posevec = jnp.concatenate([tvec, rvec])
+    return posevec
+
+def transform_from_posevec(posevec):
+    return transform_from_rot_and_pos(rotation_from_rodrigues(posevec[3:]), posevec[:3])
 
 def transform_from_rvec_tvec(rvec, tvec):
     return transform_from_rot_and_pos(
@@ -228,6 +243,29 @@ def transform_from_pos_target_up(pos, target, up):
     ])
     return transform_from_rot_and_pos(R, pos)
 
+def estimate_transform_between_clouds(c1, c2):
+    centroid1 = jnp.sum(c1, axis=0) 
+    centroid2 = jnp.sum(c2, axis=0)
+    c1_centered = c1 - centroid1
+    c2_centered = c2 - centroid2
+    H = jnp.transpose(c1_centered).dot(c2_centered)
+
+    U,_,V = jnp.linalg.svd(H)
+    rot = (jnp.transpose(V).dot(jnp.transpose(U)))
+
+    modifier = jnp.array([
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, -1.0],
+    ])
+    V_mod = modifier.dot(V)
+    rot2 = (jnp.transpose(V_mod).dot(jnp.transpose(U)))
+
+    rot_final = (jnp.linalg.det(rot) < 0) * rot2 + (jnp.linalg.det(rot) > 0) * rot
+
+    T = (centroid2 - rot_final.dot(centroid1))
+    transform =  transform_from_rot_and_pos(rot_final, T)
+    return transform
 
 def interpolate_between_two_poses(pose_start, pose_end, time):
     """
