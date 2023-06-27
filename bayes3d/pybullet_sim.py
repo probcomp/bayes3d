@@ -1,9 +1,11 @@
 import pybullet as p
 import pybullet_data
 import numpy as np
+import jax.numpy as jnp
 import open3d as o3d
 import trimesh as tm
 import bayes3d as b
+import bayes3d.transforms_3d as t3d
 import imageio
 from scipy.spatial.transform import Rotation as R
 from PIL import Image
@@ -58,7 +60,8 @@ def pybullet_render(scene):
     pyb_sim = PybulletSimulator(camera=scene.camera, floor = scene.floor)
     for body in scene.bodies.values():
         pyb_sim.add_body_to_simulation(body)
-    image_rgb, depth, _ = pyb_sim.capture_image()
+    image_rgb, depth, _ = pyb_sim.capture_image(scene.camera)
+    # print(image_rgb.shape)
     pyb_sim.close()
     image = Image.fromarray(image_rgb)
     return image
@@ -274,11 +277,10 @@ class Scene:
         self.bodies = bodies if bodies is not None else {}
         self.gravity = gravity
         self.timestep = timestep
-        self.camera = camera
+        self.camera = Camera()
         self.floor = floor
         self.pyb_sim = None
         self.downsampling = downsampling
-        print(self.floor)
 
 
     def add_body(self, body: Body):
@@ -311,7 +313,14 @@ class Scene:
         return self.floor
 
     def set_camera_position_target(self, position, target):
-        self.camera = [position, target]
+        self.camera.position_target = True
+        self.camera.position = position
+        self.camera.target = target
+        return self.camera
+    
+    def set_camera_pose(self, pose):
+        self.camera.position_target = False
+        self.camera.pose = pose
         return self.camera
 
     def set_light(self, light: Body):
@@ -358,6 +367,34 @@ class Scene:
         body_str = "\n".join(["    " + str(body) for body in self.bodies.values()])
         return f"Scene ID: {self.scene_id}\nBodies:\n{body_str}"
     
+
+# TODO: reduce exposure 
+class Camera(object):
+    def __init__(self, position_target=True, position=None, near=0.1, far=100.0, fov=60, width=960, height=720,
+                up_vector=None, distance=7, yaw=0, pitch=-30, roll=0, intrinsics=None):
+        self.position_target = position_target
+        self.position = [0, -5.5, 3] if position is None else position
+        self.target = [0, 0, 0]
+        self.pose = None
+        self.near = near
+        self.far = far
+        self.fov = fov
+        self.fx,self.fy, self.cx,self.cy = (
+        500.0,500.0,
+        320.0,240.0
+        )
+        self.width = width
+        self.height = height
+        self.up_vector = [0, 0, 1] if up_vector is None else up_vector
+        self.distance = distance
+        self.yaw = yaw
+        self.pitch = pitch
+        self.roll = roll
+        self.intrinsics = intrinsics
+
+    def __str__(self) -> str:
+        return f"Camera: position_target = {self.position_target}, position={self.position}, target={self.target}, pose={self.pose}, near={self.near}, far={self.far}, fov={self.fov}, width={self.width}, height={self.height}, up_vector={self.up_vector}, distance={self.distance}, yaw={self.yaw}, pitch={self.pitch}, roll={self.roll}, intrinsics={self.intrinsics}"
+    
 class PybulletSimulator(object):
     def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True):
         self.timestep = timestep
@@ -376,7 +413,6 @@ class PybulletSimulator(object):
         p.resetSimulation(physicsClientId=self.client)
         p.setGravity(self.gravity[0], self.gravity[1], self.gravity[2], physicsClientId=self.client)
         p.setPhysicsEngineParameter(fixedTimeStep=self.timestep, physicsClientId=self.client)
-        print(self.floor)
         if self.floor:
             p.setAdditionalSearchPath(pybullet_data.getDataPath())
             self.plane_id = p.loadURDF("plane.urdf", physicsClientId=self.client)
@@ -469,54 +505,40 @@ class PybulletSimulator(object):
         # returns frames, poses of objects over time
         for i in range(steps):
             if i % self.downsampling == 0:
-                rgb, depth, segm = self.capture_image()
+                rgb, depth, segm = self.capture_image(self.camera)
                 self.frames.append(rgb)
                 # self.depth.append(depth)
                 # self.update_body_poses()
             self.step_simulation()
 
         self.close()
+    
+    def capture_image(self, camera):
+        if camera.position_target:
+            projMatrix = p.computeProjectionMatrixFOV(fov=camera.fov, aspect=float(camera.width) / camera.height, nearVal=camera.near, farVal=camera.far)
+            viewMatrix = p.computeViewMatrix(cameraEyePosition=camera.position, cameraTargetPosition=camera.target, cameraUpVector=camera.up_vector)
+        else:
+            projMatrix = (
+            2*camera.fx/camera.width,0,0,0,
+            0,2*camera.fy/camera.height,0,0,
+            2*(camera.cx/camera.width)-1,2*(camera.cy/camera.height)-1,-(camera.far+camera.near)/(camera.far-camera.near),
+            -1,0,0,-2*camera.far*camera.near/(camera.far-camera.near),0
+            )
+            mat = np.array(t3d.transform_from_rot(t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]),jnp.pi)))
+            viewMatrix = tuple(np.linalg.inv(np.array(camera.pose).dot(mat)).T.reshape(-1))
 
-    #TODO; fix this function to return the correct depth image
-    def depth_to_image(self, depth_array):
-        # Normalize the depth array between 0 and 1 for visualization
-        depth_img = (depth_array - np.min(depth_array)) / (np.max(depth_array) - np.min(depth_array))
-        depth_uint8 = np.uint8(depth_img * 255)
-        return depth_uint8
+        _,_, rgb, depth, segmentation = p.getCameraImage(camera.width, camera.height,
+            viewMatrix,
+            projMatrix,
+            renderer=p.ER_BULLET_HARDWARE_OPENGL
+        )
 
-    def capture_image(self, up_vector=[0, 0, 1], distance=7, yaw=0, pitch=-30, roll=0, dims=[960, 720]):
-    # if no position is specified, use arbitrary default position. 
-        if self.camera is None:
-            view_matrix = p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=[0, 0, 0], distance=distance, yaw=yaw, pitch=pitch, roll=roll,
-                                                                upAxisIndex=2)
-        else: 
-            position = self.camera[0]
-            target = self.camera[1]
-            view_matrix = p.computeViewMatrix(cameraEyePosition=position, cameraTargetPosition=target, cameraUpVector=up_vector)
-        proj_matrix = p.computeProjectionMatrixFOV(fov=60, aspect=float(dims[0]) / dims[1], nearVal=0.1, farVal=100.0)
-        width, height, rgb_pixels, depth_pixels, segm_pixels = p.getCameraImage(width=dims[0], height=dims[1], viewMatrix=view_matrix,
-                                                projectionMatrix=proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
-        
-        # Convert rgb_pixels (a list of RGBA values) into an array
-        rgb_array = np.array(rgb_pixels, dtype=np.uint8)
-        rgb_array = np.reshape(rgb_array, (dims[1], dims[0], 4))
-        rgb_array = rgb_array[:, :, :3]  # strip off the alpha channel
-
-        # # Convert depth_pixels (a list of depth values) into an array
-        # depth_array = np.array(depth_pixels)
-        # depth_array = np.reshape(depth_array, (dims[1], dims[0]))
-        # far = 1000.
-        # near = 0.01
-        # depth = far * near / (far - (far - near) * depth_array)
-        # depth_img = self.depth_to_image(depth)
-        depth_img = None 
-
-        # Convert segm_pixels (a list of segmentation values) into an array
-        # segm_array = np.array(segm_pixels)
-        # segm_array = np.reshape(segm_array, (dims[1], dims[0]))
-        segm_array = None 
-
-        return rgb_array, depth_img, segm_array
+        rgb = np.array(rgb, dtype=np.uint8).reshape((camera.height, camera.width, 4))
+        depth_buffer = np.array(depth).reshape((camera.height, camera.width))
+        depth = camera.far * camera.near / (camera.far - (camera.far - camera.near) * depth_buffer)
+        depth[depth > camera.far] = 0.0
+        segmentation = np.array(segmentation).reshape((camera.height, camera.width))
+        return rgb, depth, segmentation
     
     def create_gif(self, path, fps=15):
         imageio.mimsave(path, self.frames, duration = (1000 * (1/fps)))
