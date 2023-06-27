@@ -61,10 +61,14 @@ def pybullet_render(scene):
     for body in scene.bodies.values():
         pyb_sim.add_body_to_simulation(body)
     image_rgb, depth, _ = pyb_sim.capture_image(scene.camera)
-    # print(image_rgb.shape)
     pyb_sim.close()
     image = Image.fromarray(image_rgb)
-    return image
+    depth = depth - (min(depth.flatten()))
+    depth = depth / (max(depth.flatten()))
+    depth = depth * 255
+    depth = depth.astype(np.uint8)
+    depth = Image.fromarray(depth)
+    return image, depth
 
 def create_box(pose, scale = [1,1,1], restitution=1, friction=0, velocity=0, angular_velocity = [0,0,0], id=None):
     """
@@ -534,11 +538,13 @@ class PybulletSimulator(object):
         )
 
         rgb = np.array(rgb, dtype=np.uint8).reshape((camera.height, camera.width, 4))
-        depth_buffer = np.array(depth).reshape((camera.height, camera.width))
-        depth = camera.far * camera.near / (camera.far - (camera.far - camera.near) * depth_buffer)
+        depth_buffer = np.reshape(depth, (camera.height, camera.width))
+        far = camera.far
+        near = camera.near
+        depth = far * near / (far - (far - near) * depth_buffer)
         depth[depth > camera.far] = 0.0
         segmentation = np.array(segmentation).reshape((camera.height, camera.width))
-        return rgb, depth, segmentation
+        return rgb, depth_buffer, segmentation
     
     def create_gif(self, path, fps=15):
         imageio.mimsave(path, self.frames, duration = (1000 * (1/fps)))
