@@ -26,7 +26,7 @@ class ImageLikelihood(ExactDensity):
         return img
 
     def logpdf(self, image, s, variance, outlier_prob, outlier_volume):
-        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume,3)
+        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 5)
 
 @dataclass
 class ContactParamsUniform(ExactDensity):
@@ -35,16 +35,6 @@ class ContactParamsUniform(ExactDensity):
 
     def logpdf(self, sampled_val, low, high, **kwargs):
         valid = ((low <= sampled_val) & (sampled_val <= high))
-        log_probs = jnp.log((valid * 1.0) * (jnp.ones_like(sampled_val) / (high-low)))
-        return log_probs.sum()
-
-@dataclass
-class ContactParamsUniform(ExactDensity):
-    def sample(self, key, low, high, arr):
-        return jax.random.uniform(key, shape=arr.shape).reshape(-1,1) * (high - low) + low
-
-    def logpdf(self, sampled_val, low, high, arr,**kwargs):
-        valid = ((low < sampled_val) & (sampled_val < high))
         log_probs = jnp.log((valid * 1.0) * (jnp.ones_like(sampled_val) / (high-low)))
         return log_probs.sum()
 
@@ -89,10 +79,10 @@ def viz_trace_meshcat(trace, colors=None):
         b.set_pose(f"obj_{i}", trace.get_retval()[2][i])
 
 @genjax.gen
-def tabletop_model(array, root_poses, all_box_dims):
+def tabletop_model(array, possible_object_indices, root_poses, all_box_dims, outlier_volume):
     indices = jnp.array([-1])
     for i in range(array.shape[0]):
-        index = uniform_discrete(jnp.arange(0,22)) @ f"id_{i}"
+        index = uniform_discrete(possible_object_indices) @ f"id_{i}"
         indices = jnp.concatenate([indices, jnp.array([index])])
     indices = indices[1:]
         
@@ -108,8 +98,8 @@ def tabletop_model(array, root_poses, all_box_dims):
 
     variance = genjax.distributions.tfp_uniform(0.00001, 0.1) @ "variance"
     outlier_prob  = genjax.distributions.tfp_uniform(0.00001, 0.01) @ "outlier_prob"
-    image_likelihood(rendered, variance, outlier_prob, 100.0) @ "image"
-    return rendered, indices, poses
+    image = image_likelihood(rendered, variance, outlier_prob, outlier_volume) @ "image"
+    return rendered, indices, poses, image
 
 get_rendered_image = lambda trace: trace.get_retval()[0]
 get_indices = lambda trace: trace.get_retval()[1]
