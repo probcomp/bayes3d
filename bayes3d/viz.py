@@ -15,13 +15,15 @@ GREEN = np.array([0.0, 1.0, 0.0])
 BLUE = np.array([0.0, 0.0, 1.0])
 BLACK = np.array([0.0, 0.0, 0.0])
 
-def make_gif(images, filename):
+def make_gif(images, filename, fps = 200):
+    duration = int(1000/fps)
+    print(duration)
     images[0].save(
         fp=filename,
         format="GIF",
         append_images=images,
         save_all=True,
-        duration=100,
+        duration=10,
         loop=0,
     )
 
