@@ -8,12 +8,12 @@ import os
 import time
 
 
-intrinsics = b.Intrinsics(
+intrinsics = j.Intrinsics(
     300,
     300,
     200.0,200.0,
     150.0,150.0,
-    0.001, 10.0
+    0.001, 50.0
 )
 b.setup_renderer(intrinsics)
 renderer = j.RENDERER
@@ -26,7 +26,6 @@ renderer.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/c
 renderer.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/sphere.obj"))
 
 
-from IPython import embed; embed()
 
 num_parallel_frames = 20
 gt_poses_1 = jnp.tile(jnp.array([
