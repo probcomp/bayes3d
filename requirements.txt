@@ -23,5 +23,6 @@ torchaudio
 pickle5
 zmq
 tqdm
+imageio
 https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.4.7+cuda11.cudnn86-cp39-cp39-manylinux2014_x86_64.whl
 jax==0.4.7
