@@ -635,8 +635,6 @@ pybind11::capsule EncapsulateFunction(T* fn) {
 
 pybind11::dict Registrations() {
   pybind11::dict dict;
-  dict["jax_setup"] = EncapsulateFunction(jax_setup);
-  dict["jax_load_vertices"] = EncapsulateFunction(jax_load_vertices);
   dict["jax_rasterize_fwd_gl"] = EncapsulateFunction(jax_rasterize_fwd_gl);
   return dict;
 }
