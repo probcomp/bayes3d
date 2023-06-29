@@ -11,7 +11,6 @@ pip install -r requirements.txt
 python setup.py develop
 ```
 
-
 To get assets:
 ```
 bash download.sh
