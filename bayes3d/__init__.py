@@ -18,6 +18,5 @@ from . import segmentation
 from . import c2f
 
 from .trace import *
-from . import pybullet_sim
 
 RENDERER = None
