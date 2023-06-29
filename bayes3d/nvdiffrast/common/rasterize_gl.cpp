@@ -138,7 +138,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         STRINGIFY_SHADER_SOURCE(
             layout(location = 0) uniform mat4 mvp;
             layout(location = 1) uniform float seg_id;
-            layout(location = 2) uniform int on_object;
             in vec4 in_vert;
             out vec4 vertex_on_object;
             out float seg_id_out;
@@ -151,8 +150,8 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 vec4 v3 = texelFetch(texture, ivec2(2, gl_Layer), 0);
                 vec4 v4 = texelFetch(texture, ivec2(3, gl_Layer), 0);
                 mat4 pose_mat = transpose(mat4(v1,v2,v3,v4));
-                vertex_on_object = on_object * in_vert + (1-on_object) * pose_mat * in_vert;
-                gl_Position = mvp * pose_mat * in_vert;
+                vertex_on_object = pose_mat * in_vert;
+                gl_Position = mvp * vertex_on_object;
                 seg_id_out = seg_id;
             }
         )
@@ -475,7 +474,7 @@ void jax_load_vertices(cudaStream_t stream,
 }
 
 
-torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int>& indices, int on_object, void* out = nullptr)
+torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int>& indices,  void* out = nullptr)
 {
     NVDR_CHECK_DEVICE(pose);
     NVDR_CHECK_CONTIGUOUS(pose);
@@ -500,7 +499,6 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
 
     NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
     glUniformMatrix4fv(0, 1, GL_TRUE, &proj[0]);
-    glUniform1i(2, on_object);
 
     // Copy color buffers to output tensors.
     cudaArray_t array = 0;
@@ -589,8 +587,8 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
 }
 
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int>& indices, int on_object) {
-    return _rasterize_fwd_gl(at::cuda::getCurrentCUDAStream(), stateWrapper, pose, proj, indices, on_object, nullptr);
+torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int>& indices) {
+    return _rasterize_fwd_gl(at::cuda::getCurrentCUDAStream(), stateWrapper, pose, proj, indices, nullptr);
 }
 
 
@@ -626,7 +624,6 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
                           opts),
                       /*proj=*/std::vector<float>(d.proj, d.proj + 16),
                       /*indices=*/indices,
-                      /*on_object=*/d.on_object,
                       /*out=*/out);
 }
 
@@ -673,13 +670,11 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("build_rasterize_descriptor",
           [](RasterizeGLStateWrapper& stateWrapper,
              std::vector<float>& proj,
-             std::vector<int> objs_images,
-             int on_object) {
+             std::vector<int> objs_images) {
               RasterizeCustomCallDescriptor d;
               d.gl_state_wrapper = &stateWrapper;
               // NVDR_CHECK(proj.size() == 4 * 4);
               std::copy(proj.begin(), proj.end(), d.proj);
-              d.on_object = on_object;
               d.num_objects = objs_images[0];
               d.num_images = objs_images[1];
               return PackDescriptor(d);
