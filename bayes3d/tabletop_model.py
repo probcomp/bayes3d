@@ -26,7 +26,7 @@ class ImageLikelihood(ExactDensity):
         return img
 
     def logpdf(self, image, s, variance, outlier_prob, outlier_volume):
-        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 5)
+        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 3)
 
 @dataclass
 class ContactParamsUniform(ExactDensity):
@@ -87,7 +87,8 @@ def tabletop_model(array, possible_object_indices, root_poses, all_box_dims, out
         
         params = contact_params_uniform(
             jnp.array([-0.2,-0.2, -2*jnp.pi]), 
-            jnp.array([0.2,0.2, 2*jnp.pi])) @ f"contact_params_{i}"
+            jnp.array([0.2,0.2, 2*jnp.pi])
+        ) @ f"contact_params_{i}"
         contact_params = jnp.concatenate([contact_params, params.reshape(1,-1)])
 
         parent_obj = b.tabletop_model.uniform_discrete(jnp.arange(-1,array.shape[0] - 1)) @ f"parent_{i}"
@@ -100,11 +101,11 @@ def tabletop_model(array, possible_object_indices, root_poses, all_box_dims, out
     box_dims = all_box_dims[indices]
     poses = b.scene_graph.poses_from_scene_graph(
         root_poses, box_dims, parents, contact_params, faces_parents, faces_child)
-    rendered = b.RENDERER.render_jax(
+    rendered = b.RENDERER.render(
         poses , indices
     )[...,:3]
 
-    variance = genjax.distributions.tfp_uniform(0.00001, 0.1) @ "variance"
+    variance = genjax.distributions.tfp_uniform(0.00001, 0.01) @ "variance"
     outlier_prob  = genjax.distributions.tfp_uniform(0.00001, 0.01) @ "outlier_prob"
     image = b.tabletop_model.image_likelihood(rendered, variance, outlier_prob, outlier_volume) @ "image"
     return rendered, indices, poses, parents, contact_params, faces_parents, faces_child
@@ -112,7 +113,10 @@ def tabletop_model(array, possible_object_indices, root_poses, all_box_dims, out
 get_rendered_image = lambda trace: trace.get_retval()[0]
 get_indices = lambda trace: trace.get_retval()[1]
 get_poses = lambda trace: trace.get_retval()[2]
-
+get_parents = lambda trace: trace.get_retval()[3]
+get_contact_params = lambda trace: trace.get_retval()[4]
+get_faces_parents = lambda trace: trace.get_retval()[5]
+get_faces_child = lambda trace: trace.get_retval()[6]
 
 enumerator = lambda trace, key, address, c: trace.update(
     key,
