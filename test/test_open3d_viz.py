@@ -92,7 +92,9 @@ rgb = rgb.at[(rgb[:,:,:3].sum(-1)) < 4, -1].set(0.0)
 j.get_rgb_image(rgb).save("test_open3d_viz.png")
 
 
-rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv")
+# rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', "/home/nishadgothoskar/data/bop/ycbv")
+rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', "/home/ubuntu/bayes3d/assets/bop/ycbv")
+
 
 viz_intrinsics = j.Intrinsics(
     1000,1000,
@@ -157,7 +159,8 @@ viz.render.scene.add_geometry("pcd7", pcd, material)
 j.get_rgb_image(viz.capture_image(rgbd.intrinsics, np.eye(4))).save("test_open3d_viz.png")
 
 
-model_dir = "/home/nishadgothoskar/models"
+# model_dir = "/home/nishadgothoskar/models"
+model_dir = "/home/ubuntu/bayes3d/assets/ycb_video_models"
 mesh_paths = []
 model_names = j.ycb_loader.MODEL_NAMES
 offset_poses = []
