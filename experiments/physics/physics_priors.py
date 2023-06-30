@@ -63,7 +63,7 @@ def physics_prior_v1(prev_pose, prev_prev_pose, bbox_dims, camera_pose, world2ca
     object_bottom = prev_pos_world[2] - 0.5*bbox_dims[2]
 
     vel_pos_world = jax.lax.cond(jnp.less_equal(object_bottom, 0.01 * bbox_dims[2]),
-        lambda x: x.at[2].set(0),
+        lambda x: x, # x.at[2].set(0),
         lambda x: x,
         vel_pos_world)
 
