@@ -83,7 +83,7 @@ def apply_transform(coords, transform):
 
 apply_transform_jit = jax.jit(apply_transform)
 
-def quaternion_to_rotation_matrix(Q):
+def quaternion_to_rotation_matrix(Q_in):
     """
     Covert a quaternion into a full three-dimensional rotation matrix.
  
@@ -96,6 +96,7 @@ def quaternion_to_rotation_matrix(Q):
              frame to a point in the global reference frame.
     """
     # Extract the values from Q
+    Q = Q_in / jnp.linalg.norm(Q_in)
     q0 = Q[0]
     q1 = Q[1]
     q2 = Q[2]
