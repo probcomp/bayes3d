@@ -32,7 +32,7 @@ class ImageLikelihood(ExactDensity):
         return img
 
     def logpdf(self, image, s, variance, outlier_prob, outlier_volume):
-        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 3)
+        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 1)
 
 @dataclass
 class ContactParamsUniform(ExactDensity):
