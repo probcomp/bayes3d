@@ -11,14 +11,6 @@ pip install -r requirements.txt
 python setup.py develop
 ```
 
-Install JAX:
-```
-# GPU
-pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
-# CPU
-pip install jax jaxlib
-```
 
 To get assets:
 ```
