@@ -510,10 +510,10 @@ class PybulletSimulator(object):
     def simulate(self, steps): 
         # returns frames, poses of objects over time
         for i in range(steps):
-            # if i % self.downsampling == 0:
-                # rgb, depth, segm = self.capture_image(self.camera)
-                # self.frames.append(rgb)
-                # self.update_body_poses()
+            if i % self.downsampling == 0:
+                rgb, depth, segm = self.capture_image(self.camera)
+                self.frames.append(rgb)
+                self.update_body_poses()
             self.step_simulation()
 
         self.close()
