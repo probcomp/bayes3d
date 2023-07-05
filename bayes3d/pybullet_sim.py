@@ -499,7 +499,8 @@ class PybulletSimulator(object):
     def update_body_poses(self):
         for pyb_id in self.pyb_id_to_body_id.keys():
             position, orientation = p.getBasePositionAndOrientation(pyb_id, physicsClientId=self.client)
-            orientation = p.getRotationMatrixFromQuaternion(orientation)
+            orientation = p.getMatrixFromQuaternion(orientation)
+            orientation = np.array(orientation).reshape(3, 3)
             pose = np.eye(4)
             pose[:3, :3] = orientation
             pose[:3, 3] = position
@@ -508,10 +509,10 @@ class PybulletSimulator(object):
     def simulate(self, steps): 
         # returns frames, poses of objects over time
         for i in range(steps):
-            # if i % self.downsampling == 0:
-                # rgb, depth, segm = self.capture_image(self.camera)
-                # self.frames.append(rgb)
-                # self.update_body_poses()
+            if i % self.downsampling == 0:
+                rgb, depth, segm = self.capture_image(self.camera)
+                self.frames.append(rgb)
+                self.update_body_poses()
             self.step_simulation()
 
         self.close()
