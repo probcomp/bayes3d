@@ -5,6 +5,64 @@ import functools
 from functools import partial
 from jax.scipy.special import logsumexp
 
+
+
+@functools.partial(
+    jnp.vectorize,
+    signature='(m)->()',
+    excluded=(1,2,3,4,5,),
+)
+def gausssian_mixture_vectorize_new(
+    ij,
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    variance,
+    outlier_prob: float,
+    outlier_volume: float,
+):
+    probability = jax.scipy.stats.norm.logpdf(
+        observed_xyz[ij[0], ij[1], :3] - rendered_xyz[ij[0], ij[1], :3],
+        loc=0.0,
+        scale=jnp.sqrt(variance)
+    ).sum(-1)
+    return jnp.logaddexp(
+        probability + jnp.log(1.0 - outlier_prob),
+        jnp.log(outlier_prob) - jnp.log(outlier_volume)
+    )
+
+def threedp3_likelihood_per_pixel_new(
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    variance,
+    outlier_prob,
+    outlier_volume,
+):
+    jj, ii = jnp.meshgrid(jnp.arange(observed_xyz.shape[1]), jnp.arange(observed_xyz.shape[0]))
+    indices = jnp.stack([ii,jj],axis=-1)
+    log_probabilities = gausssian_mixture_vectorize_new(
+        indices,
+        observed_xyz,
+        rendered_xyz,
+        variance, outlier_prob, outlier_volume
+    )
+    return log_probabilities
+
+def threedp3_likelihood_new(
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    variance,
+    outlier_prob,
+    outlier_volume,
+):
+    log_probabilities_per_pixel = threedp3_likelihood_per_pixel_new(
+        observed_xyz, rendered_xyz, variance,
+        outlier_prob, outlier_volume
+    )
+    return log_probabilities_per_pixel.sum()
+
+
+
+
 @functools.partial(
     jnp.vectorize,
     signature='(m)->()',

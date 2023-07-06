@@ -178,13 +178,16 @@ class Renderer(object):
             mesh_name = f"object_{len(self.meshes)}"
         
         mesh.vertices = mesh.vertices * scaling_factor
+        bounding_box_dims, bounding_box_pose = bayes3d.utils.aabb(mesh.vertices)
+        mesh.vertices = mesh.vertices - bounding_box_pose[:3,3]
+        
         self.meshes.append(mesh)
         self.mesh_names.append(mesh_name)
 
         self.model_box_dims = jnp.vstack(
             [
                 self.model_box_dims,
-                bayes3d.utils.aabb(mesh.vertices)[0]
+                bounding_box_dims
             ]
         )
 

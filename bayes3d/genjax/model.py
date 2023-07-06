@@ -27,13 +27,13 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
         index = uniform_discrete(possible_object_indices) @ f"id_{i}"
 
         pose = uniform_pose(
-            -pose_bounds, 
-            pose_bounds, 
+            pose_bounds[0], 
+            pose_bounds[1], 
         ) @ f"root_pose_{i}"
 
         params = contact_params_uniform(
-            -contact_bounds, 
-            contact_bounds
+            contact_bounds[0], 
+            contact_bounds[1]
         ) @ f"contact_params_{i}"
 
         parent_obj = uniform_discrete(jnp.arange(-1,array.shape[0] - 1)) @ f"parent_{i}"
@@ -52,8 +52,8 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
         root_poses, box_dims, parents, contact_params, faces_parents, faces_child)
 
     camera_pose = uniform_pose(
-        -pose_bounds, 
-        pose_bounds, 
+        pose_bounds[0], 
+        pose_bounds[1], 
     ) @ f"camera_pose"
 
     rendered = b.RENDERER.render(
@@ -113,9 +113,9 @@ def make_enumerator(addresses):
             genjax.choice_map({
                 addr: c for (addr, c) in zip(addresses, args)
             }),
-            jtu.tree_map(lambda v: Diff(v, UnknownChange), trace.args),
+            tuple(map(lambda v: Diff(v, UnknownChange), trace.args)),
         )[1][2]
     
     def enumerator_score(trace, key, *args):
         return enumerator(trace, key, *args).get_score()
-    return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))
+    return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))
