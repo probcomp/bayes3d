@@ -173,6 +173,7 @@ class Body:
         self.file_dir = file_dir
         self.mesh = mesh
         self.scale = scale
+        self.forces = {} # maps from a timestep to a vector of force to apply 
 
     # Getter methods
     def get_id(self):
@@ -263,6 +264,12 @@ class Body:
     def set_scale(self, scale):
         self.scale = scale
 
+    def add_force(self, force_vector, timestep): 
+        self.forces[timestep] = force_vector
+        return self.forces
+    
+    def get_forces(self):
+        return self.forces
 
     # Miscellaneous methods
     def get_fields(self):
@@ -283,7 +290,7 @@ class Scene:
         self.floor = floor
         self.pyb_sim = None
         self.downsampling = downsampling
-
+        self.timestep_to_forces = {} #TODO
 
     def add_body(self, body: Body):
         self.bodies[body.id] = body
@@ -346,8 +353,15 @@ class Scene:
         return image
     
     def simulate(self, timesteps):
+        # create mapping from timestep to forces
+        for body in self.bodies.values():
+            forces = body.get_forces()
+            for timestep in forces.keys():
+                force_on_body = forces[timestep]
+                self.timestep_to_forces[timestep] = [(body.get_id(), force_on_body)] if timestep not in self.timestep_to_forces.keys() else self.timestep_to_forces[timestep] + [(body.get_id(), force_on_body)]
+
         # create physics simulator 
-        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera, downsampling = self.downsampling, floor = self.floor )
+        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera, downsampling = self.downsampling, floor = self.floor, forces = self.timestep_to_forces)
         self.pyb_sim = pyb
 
         # add bodies to physics simulator
@@ -398,7 +412,7 @@ class Camera(object):
         return f"Camera: position_target = {self.position_target}, position={self.position}, target={self.target}, pose={self.pose}, near={self.near}, far={self.far}, fov={self.fov}, width={self.width}, height={self.height}, up_vector={self.up_vector}, distance={self.distance}, yaw={self.yaw}, pitch={self.pitch}, roll={self.roll}, intrinsics={self.intrinsics}"
     
 class PybulletSimulator(object):
-    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True):
+    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True, forces = None):
         # only build pybullet when needed 
         import pybullet as p
         import pybullet_data
@@ -410,10 +424,12 @@ class PybulletSimulator(object):
         self.frames = [] 
         self.depth = []
         self.pyb_id_to_body_id = {}
+        self.body_id_to_pyb_id = {}
         self.body_poses = {}
         self.camera = camera
         self.downsampling = downsampling
         self.floor = floor 
+        self.timestep_to_forces = forces
 
         # Set up the simulation environment
         self.p.resetSimulation(physicsClientId=self.client)
@@ -438,8 +454,6 @@ class PybulletSimulator(object):
 
         # Create visual and collision shapes
         visualShapeId = self.p.createVisualShape(shapeType=self.p.GEOM_MESH, 
-                                            # vertices=vertices, 
-                                            # indices=faces,
                                             fileName = obj_file_dir,
                                             meshScale = mesh_scale,
                                             physicsClientId=self.client,
@@ -447,8 +461,6 @@ class PybulletSimulator(object):
                                             )
         
         collisionShapeId = self.p.createCollisionShape(shapeType=self.p.GEOM_MESH,
-                                                # vertices=vertices, 
-                                                # indices=faces,
                                                 fileName = obj_file_dir,
                                                 meshScale = mesh_scale,
                                                 physicsClientId=self.client, 
@@ -486,6 +498,7 @@ class PybulletSimulator(object):
 
         # Add to mapping from pybullet id to body id
         self.pyb_id_to_body_id[pyb_id] = body.id
+        self.body_id_to_pyb_id[body.id] = pyb_id
         self.body_poses[body.id] = []
 
     def check_collision(self):
@@ -496,12 +509,17 @@ class PybulletSimulator(object):
 
     def step_simulation(self):
         self.step_count+=1
+        # check if external forces are applied to any bodies
+        if self.step_count in self.timestep_to_forces.keys():
+            for body_id,force in self.timestep_to_forces[self.step_count]:
+                id_in_sim = self.body_id_to_pyb_id[body_id]
+                self.p.applyExternalForce(objectUniqueId=id_in_sim, linkIndex=-1, forceObj=force, posObj=[0,0,0], flags=self.p.WORLD_FRAME, physicsClientId=self.client)
         self.p.stepSimulation(physicsClientId=self.client)
     
     def update_body_poses(self):
         for pyb_id in self.pyb_id_to_body_id.keys():
             position, orientation = self.p.getBasePositionAndOrientation(pyb_id, physicsClientId=self.client)
-            orientation = self.p.getRotationMatrixFromQuaternion(orientation)
+            orientation = self.p.getMatrixFromQuaternion(orientation)
             pose = np.eye(4)
             pose[:3, :3] = orientation
             pose[:3, 3] = position
@@ -513,9 +531,8 @@ class PybulletSimulator(object):
             if i % self.downsampling == 0:
                 rgb, depth, segm = self.capture_image(self.camera)
                 self.frames.append(rgb)
-                self.update_body_poses()
+                # self.update_body_poses()
             self.step_simulation()
-
         self.close()
     
     def capture_image(self, camera):
