@@ -478,17 +478,15 @@ class PybulletSimulator(object):
         self.timestep_to_body_force = {}
         for init_timestep in self.initial_timestep_to_forces.keys():
             for body_id, force_info in self.initial_timestep_to_forces[init_timestep]:
-                if force_info["end_timestep"] is not None: # if force is applied for a range of timesteps TODO: implement step 
-                    for timestep in range(init_timestep, force_info["end_timestep"] + 1):
-                        if timestep not in self.timestep_to_body_force.keys():
-                            self.timestep_to_body_force[timestep] = [(body_id, force_info["force"])]
-                        else:
-                            self.timestep_to_body_force[timestep].append((body_id, force_info["force"]))
-                else: # force is applied for one timestep
-                    if init_timestep in self.timestep_to_body_force.keys():
-                        self.timestep_to_body_force[init_timestep].append((body_id, force_info["force"]))
-                    else: 
-                        self.timestep_to_body_force[init_timestep] = [(body_id, force_info["force"])]
+                # if force_info["end_timestep"] is None, assign it to init_timestep
+                end_timestep = force_info["end_timestep"] or init_timestep
+                # if force_info["step"] is None, assign it to 1
+                step = force_info.get("step", 1) 
+                for timestep in range(init_timestep, end_timestep + 1, step):
+                    # Use setdefault() to simplify appending to the dictionary
+                    self.timestep_to_body_force.setdefault(timestep, []).append((body_id, force_info["force"]))
+
+
     
     def add_body_to_simulation(self, body):
         """
