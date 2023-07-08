@@ -74,10 +74,23 @@ get_faces_parents = lambda trace: trace.get_retval()[5]
 get_faces_child = lambda trace: trace.get_retval()[6]
 get_root_poses = lambda trace: trace.get_retval()[7]
 
+def add_object(trace, key, obj_id, parent, face_parent, face_child):
+    N = b.genjax.get_indices(trace).shape[0] + 1
+    choices = trace.get_choices()
+    choices[f"parent_{N-1}"] = parent
+    choices[f"id_{N-1}"] = obj_id
+    choices[f"face_parent_{N-1}"] = face_parent
+    choices[f"face_child_{N-1}"] = face_child
+    choices[f"contact_params_{N-1}"] = jnp.zeros(3)
+    return model.importance(key, choices,
+        (jnp.arange(N), *trace.get_args()[1:])
+    )[1][1]
+
 def print_trace(trace):
     print("""
     SCORE: {:0.7f}
-    VARIANCE: {:0.7f} OUTLIER_PROB {:0.7f}
+    VARIANCE: {:0.7f}
+    OUTLIER_PROB {:0.7f}
     """.format(trace.get_score(), trace["variance"], trace["outlier_prob"]))
 
 def viz_trace_meshcat(trace, colors=None):

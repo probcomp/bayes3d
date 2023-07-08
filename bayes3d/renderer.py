@@ -168,19 +168,21 @@ class Renderer(object):
         self.mesh_names =[]
         self.model_box_dims = jnp.zeros((0,3))
 
-    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None):
+    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None, center_mesh=True):
         mesh = trimesh.load(mesh_filename, force=force)
-        self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor)
+        self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor, center_mesh=center_mesh)
 
-    def add_mesh(self, mesh, mesh_name=None, scaling_factor=1.0):
+    def add_mesh(self, mesh, mesh_name=None, scaling_factor=1.0, center_mesh=True):
         
         if mesh_name is None:
             mesh_name = f"object_{len(self.meshes)}"
         
         mesh.vertices = mesh.vertices * scaling_factor
-        bounding_box_dims, bounding_box_pose = bayes3d.utils.aabb(mesh.vertices)
-        mesh.vertices = mesh.vertices - bounding_box_pose[:3,3]
         
+        bounding_box_dims, bounding_box_pose = bayes3d.utils.aabb(mesh.vertices)
+        if center_mesh:
+            mesh.vertices = mesh.vertices - bounding_box_pose[:3,3]
+
         self.meshes.append(mesh)
         self.mesh_names.append(mesh_name)
 

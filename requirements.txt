@@ -28,3 +28,4 @@ jax==0.4.7
 jupyterlab
 imageio
 timm
+joblib
