@@ -174,6 +174,7 @@ class Body:
         self.mesh = mesh
         self.scale = scale
         self.forces = {} # maps from a timestep to a vector of force to apply 
+        self.velocity_changes = {} 
 
     # Getter methods
     def get_id(self):
@@ -264,12 +265,33 @@ class Body:
     def set_scale(self, scale):
         self.scale = scale
 
-    def add_force(self, force_vector, timestep): 
-        self.forces[timestep] = force_vector
+    def add_force(self, force_vector, start_timestep, end_timestep = None, step = None): 
+        self.forces[start_timestep] = {"force" : force_vector, "end_timestep" : end_timestep, "step" : step}
         return self.forces
+    
+    def remove_force(self, timestep):
+        if timestep not in self.forces.keys():
+            raise ValueError("No force applied at this timestep")
+        else:
+            del self.forces[timestep]
+        return self.forces
+    
+    def add_velocity_change(self, velocity_change, timestep):
+        self.velocity_changes[timestep] = velocity_change
+        return self.velocity_changes
+    
+    def remove_velocity_change(self, timestep):
+        if timestep not in self.velocity_changes.keys():
+            raise ValueError("No velocity change applied at this timestep")
+        else:
+            del self.velocity_changes[timestep]
+        return self.velocity_changes
     
     def get_forces(self):
         return self.forces
+    
+    def get_velocity_changes(self):
+        return self.velocity_changes
 
     # Miscellaneous methods
     def get_fields(self):
@@ -290,7 +312,8 @@ class Scene:
         self.floor = floor
         self.pyb_sim = None
         self.downsampling = downsampling
-        self.timestep_to_forces = {} #TODO
+        self.timestep_to_forces = {}
+        self.timestep_to_dv = {}
 
     def add_body(self, body: Body):
         self.bodies[body.id] = body
@@ -360,8 +383,15 @@ class Scene:
                 force_on_body = forces[timestep]
                 self.timestep_to_forces[timestep] = [(body.get_id(), force_on_body)] if timestep not in self.timestep_to_forces.keys() else self.timestep_to_forces[timestep] + [(body.get_id(), force_on_body)]
 
+        # do the same for velocity changes
+        for body in self.bodies.values():
+            velocity_changes = body.get_velocity_changes()
+            for timestep in velocity_changes.keys():
+                velocity_change_on_body = velocity_changes[timestep]
+                self.timestep_to_dv[timestep] = [(body.get_id(), velocity_change_on_body)] if timestep not in self.timestep_to_dv.keys() else self.timestep_to_dv[timestep] + [(body.get_id(), velocity_change_on_body)]
+
         # create physics simulator 
-        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera, downsampling = self.downsampling, floor = self.floor, forces = self.timestep_to_forces)
+        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera, downsampling = self.downsampling, floor = self.floor, forces = self.timestep_to_forces, dv = self.timestep_to_dv)
         self.pyb_sim = pyb
 
         # add bodies to physics simulator
@@ -412,7 +442,7 @@ class Camera(object):
         return f"Camera: position_target = {self.position_target}, position={self.position}, target={self.target}, pose={self.pose}, near={self.near}, far={self.far}, fov={self.fov}, width={self.width}, height={self.height}, up_vector={self.up_vector}, distance={self.distance}, yaw={self.yaw}, pitch={self.pitch}, roll={self.roll}, intrinsics={self.intrinsics}"
     
 class PybulletSimulator(object):
-    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True, forces = None):
+    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True, forces = None, dv = None):
         # only build pybullet when needed 
         import pybullet as p
         import pybullet_data
@@ -429,7 +459,8 @@ class PybulletSimulator(object):
         self.camera = camera
         self.downsampling = downsampling
         self.floor = floor 
-        self.timestep_to_forces = forces
+        self.initial_timestep_to_forces = forces 
+        self.timestep_to_dv = dv
 
         # Set up the simulation environment
         self.p.resetSimulation(physicsClientId=self.client)
@@ -439,6 +470,25 @@ class PybulletSimulator(object):
             self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
             self.plane_id = self.p.loadURDF("plane.urdf", physicsClientId=self.client)
             self.p.changeDynamics(self.plane_id, -1, restitution=floor_restitution)
+
+
+
+        # initial timestep to forces  = {timestep : [(body_id, {force_info})]}
+        # setup timestep to forces mapping
+        self.timestep_to_body_force = {}
+        for init_timestep in self.initial_timestep_to_forces.keys():
+            for body_id, force_info in self.initial_timestep_to_forces[init_timestep]:
+                if force_info["end_timestep"] is not None: # if force is applied for a range of timesteps TODO: implement step 
+                    for timestep in range(init_timestep, force_info["end_timestep"] + 1):
+                        if timestep not in self.timestep_to_body_force.keys():
+                            self.timestep_to_body_force[timestep] = [(body_id, force_info["force"])]
+                        else:
+                            self.timestep_to_body_force[timestep].append((body_id, force_info["force"]))
+                else: # force is applied for one timestep
+                    if init_timestep in self.timestep_to_body_force.keys():
+                        self.timestep_to_body_force[init_timestep].append((body_id, force_info["force"]))
+                    else: 
+                        self.timestep_to_body_force[init_timestep] = [(body_id, force_info["force"])]
     
     def add_body_to_simulation(self, body):
         """
@@ -510,10 +560,14 @@ class PybulletSimulator(object):
     def step_simulation(self):
         self.step_count+=1
         # check if external forces are applied to any bodies
-        if self.step_count in self.timestep_to_forces.keys():
-            for body_id,force in self.timestep_to_forces[self.step_count]:
+        if self.step_count in self.timestep_to_body_force.keys():
+            for body_id,force in self.timestep_to_body_force[self.step_count]:
                 id_in_sim = self.body_id_to_pyb_id[body_id]
                 self.p.applyExternalForce(objectUniqueId=id_in_sim, linkIndex=-1, forceObj=force, posObj=[0,0,0], flags=self.p.WORLD_FRAME, physicsClientId=self.client)
+        if self.step_count in self.timestep_to_dv.keys():
+            for body_id, dv in self.timestep_to_dv[self.step_count]:
+                id_in_sim = self.body_id_to_pyb_id[body_id]
+                self.p.resetBaseVelocity(id_in_sim, linearVelocity=dv, physicsClientId=self.client)
         self.p.stepSimulation(physicsClientId=self.client)
     
     def update_body_poses(self):
