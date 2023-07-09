@@ -56,7 +56,7 @@ def render_multiobject_parallel(mesh_paths, poses, intrinsics, scaling_factor=1.
         f""" --volume {os.path.dirname(p)}:{os.path.dirname(p)} """ for p in mesh_paths
     ])
     
-    command_string2 = f""" kubricdockerhub/kubruntu /usr/bin/python3 {path}/jax3dp3/photorealistic_renderers/kubric_exec_parallel.py"""
+    command_string2 = f""" kubricdockerhub/kubruntu /usr/bin/python3 {path}/jax3dp3/photorealistic_renderers/_kubric_exec_parallel.py"""
     print(command_string + command_strings + command_string2)
     subprocess.run([command_string + command_strings + command_string2], shell=True)
 

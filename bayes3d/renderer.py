@@ -150,6 +150,12 @@ def setup_renderer(intrinsics, num_layers=1024):
 
 class Renderer(object):
     def __init__(self, intrinsics, num_layers=1024):
+        """A renderer for rendering meshes.
+        
+        Args:
+            intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
+            num_layers (int, optional): The number of layers to use for rendering. Defaults to 1024.
+        """
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
         self.proj_list = list(bayes3d.camera.open_gl_projection_matrix(
@@ -169,11 +175,27 @@ class Renderer(object):
         self.model_box_dims = jnp.zeros((0,3))
 
     def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None, center_mesh=True):
+        """Add a mesh to the renderer from a file.
+        
+        Args:
+            mesh_filename (str): The filename of the mesh.
+            mesh_name (str, optional): The name of the mesh. Defaults to None.
+            scaling_factor (float, optional): The scaling factor to apply to the mesh. Defaults to 1.0.
+            force (str, optional): The file format to force. Defaults to None.
+            center_mesh (bool, optional): Whether to center the mesh. Defaults to True.
+        """
         mesh = trimesh.load(mesh_filename, force=force)
         self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor, center_mesh=center_mesh)
 
     def add_mesh(self, mesh, mesh_name=None, scaling_factor=1.0, center_mesh=True):
+        """Add a mesh to the renderer.
         
+        Args:
+            mesh (trimesh.Trimesh): The mesh to add.
+            mesh_name (str, optional): The name of the mesh. Defaults to None.
+            scaling_factor (float, optional): The scaling factor to apply to the mesh. Defaults to 1.0.
+            center_mesh (bool, optional): Whether to center the mesh. Defaults to True.
+        """
         if mesh_name is None:
             mesh_name = f"object_{len(self.meshes)}"
         
@@ -203,10 +225,32 @@ class Renderer(object):
         )
 
     def render_many(self, poses, indices):
+        """Render many scenes in parallel.
+        
+        Args:
+            poses (jnp.ndarray): The poses of the objects in the scene. Shape (N, M, 4, 4)
+                                 where N is the number of scenes and M is the number of objects.
+                                 and the last two dimensions are the 4x4 poses.
+            indices (jnp.ndarray): The indices of the objects to render. Shape (M,)
+
+        Outputs:
+            jnp.ndarray: The rendered images. Shape (N, H, W, 4) where N is the number of scenes
+                         the final dimension is the segmentation image.
+        """
         images_jnp = render_custom_call(self, poses, indices)[0]
         return transform_image_zeros_parallel(images_jnp, self.intrinsics)
 
     def render(self, poses, indices):
+        """Render a single scene.
+
+        Args:
+            poses (jnp.ndarray): The poses of the objects in the scene. Shape (M, 4, 4)
+            indices (jnp.ndarray): The indices of the objects to render. Shape (M,)
+        Outputs:
+            jnp.ndarray: The rendered image. Shape (H, W, 4)
+                         the final dimension is the segmentation image.
+
+        """
         return self.render_many(poses[None,...], indices)[0]
 
 
@@ -238,24 +282,15 @@ def render_point_cloud_batched(point_cloud, intrinsics, NUM_PER, pixel_smudge=0)
     return img
 
 def project_cloud_to_pixels(point_cloud, intrinsics):
+    """Project a point cloud to pixels.
+    
+    Args:
+        point_cloud (jnp.ndarray): The point cloud. Shape (N, 3)
+        intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
+    Outputs:
+        jnp.ndarray: The pixels. Shape (N, 2)
+    """
     point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
     temp1 = point_cloud_normalized[:, :2] * jnp.array([intrinsics.fx,intrinsics.fy])
     pixels = temp1 + jnp.array([intrinsics.cx, intrinsics.cy])
     return pixels
-
-def get_masked_and_complement_image(depth_image, segmentation_image, segmentation_id, intrinsics):
-    mask =  (segmentation_image == segmentation_id)
-    masked_image = depth_image * mask + intrinsics.far * (1.0 - mask)
-    complement_image = depth_image * (1.0 - mask) + intrinsics.far * mask
-    return masked_image, complement_image
-
-
-def splice_image_parallel(rendered_object_image, obs_image_complement):
-    keep_masks = jnp.logical_or(
-        (rendered_object_image[:,:,:,2] <= obs_image_complement[None, :,:, 2]) * 
-        rendered_object_image[:,:,:,2] > 0.0
-        ,
-        (obs_image_complement[:,:,2] == 0)[None, ...]
-    )[...,None]
-    rendered_images = keep_masks * rendered_object_image + (1.0 - keep_masks) * obs_image_complement
-    return rendered_images
