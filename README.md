@@ -23,11 +23,6 @@ To get assets:
 bash download.sh
 ```
 
-Add this to `~/.bashrc`
-```
-export XLA_PYTHON_CLIENT_PREALLOCATE=false
-```
-
 ## Test
 
 To test successful setup run:

@@ -14,6 +14,9 @@ def inverse(pose):
     """
     return jnp.linalg.inv(pose)
 
+def inverse_pose(pose):
+    return inverse(pose)
+
 def transform_from_pos(t):
     return jnp.vstack(
         [jnp.hstack([jnp.eye(3), t.reshape(3,1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
