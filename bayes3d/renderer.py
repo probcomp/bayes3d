@@ -235,7 +235,7 @@ def _build_render_primitive(r: "Renderer"):
             raise ValueError(f"Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}")
         if poses.shape[-2:] != (4, 4):
             raise ValueError(f"Unexpected poses shape: {poses.shape}")
-        renders, dummy = render_custom_call(r, poses, indices)
+        renders, dummy = _render_custom_call(r, poses, indices)
 
         renders = renders.reshape(size_1, size_2, *renders.shape[1:])
         out_axes = 0, None

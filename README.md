@@ -9,8 +9,13 @@ conda create -n bayes3d python=3.9
 conda activate bayes3d
 pip install -r requirements.txt
 pip install -r genjax/requirements.txt
+pip install -e genjax
 pip install -e .
+```
 
+```
+pip uninstall jax jaxlib
+pip install jax==0.4.7 https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.4.7+cuda11.cudnn86-cp39-cp39-manylinux2014_x86_64.whl
 ```
 
 To get assets:
