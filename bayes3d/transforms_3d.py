@@ -71,11 +71,16 @@ def axis_angle_from_rotation(R):
 
 def rodrigues_from_rotation(R):
     #formula from http://motion.pratt.duke.edu/RoboticSystems/3DRotations.html
-    eps = 1e-8 #prevent numerical instability
+    eps = 1e-9 #prevent numerical instability, results in mismatch from OpenCV implementation at singularity point theta=0
     theta = jnp.clip(jnp.arccos((jnp.trace(R)-1)/2), a_min=eps, a_max=jnp.pi-eps)
     rvec = jnp.array([(R[2,1]-R[1,2])/(2*jnp.sin(theta)), (R[0,2]-R[2,0])/(2*jnp.sin(theta)), (R[1,0]-R[0,1])/(2*jnp.sin(theta))]) * theta
     rvec += eps
     return rvec.reshape(-1)
+
+def transform_to_posevec_j(R):
+    rot_vec = rodrigues_from_rotation(R[:3,:3])
+    t_vec = R[:3,3].flatten()
+    return jnp.hstack((t_vec, rot_vec))
 
 def transform_from_rvec_tvec(rvec, tvec):
     return transform_from_rot_and_pos(
