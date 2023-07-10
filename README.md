@@ -3,14 +3,14 @@
 
 ## Setup
 
-Setup virtualenv and install dependencies:
 ```
-git clone --recurse-submodules https://github.com/probcomp/bayes3d.git
-cd bayes3d
+git submodule update --init --recursive
 conda create -n bayes3d python=3.9
 conda activate bayes3d
 pip install -r requirements.txt
-python setup.py develop
+pip install -r genjax/requirements.txt
+pip install -e .
+
 ```
 
 To get assets:
