@@ -76,7 +76,8 @@ def c2f_contact_update(trace_, key,  number, contact_param_deltas, VARIANCE_GRID
     )
 c2f_contact_update_jit = jax.jit(c2f_contact_update, static_argnames=("number",))
 
-for scene_id in tqdm(range(10,200)):
+for scene_id in tqdm(range(41,200)):
+    print("GPU Memory: ", b.utils.get_gpu_memory())
     for v_variant in range(len(VARIANCE_GRID)):
         for o_variant in range(len(OUTLIER_GRID)):
             V_GRID, O_GRID = jnp.array([VARIANCE_GRID[v_variant]]), jnp.array([OUTLIER_GRID[o_variant]])

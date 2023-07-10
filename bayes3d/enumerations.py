@@ -66,7 +66,16 @@ def make_rotation_grid_enumeration(fibonacci_sphere_points, num_planar_angle_poi
     rotation_proposals = geodesicHopf_select_axis_vmap(unit_sphere_directions, jnp.arange(min_rot_angle, max_rot_angle, rot_stepsize)).reshape(-1, 4, 4)
     return rotation_proposals
 
-def make_translation_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x=2,num_y=2,num_z=2):
+def make_translation_grid_enumeration(
+        min_x,min_y,min_z,
+        max_x,max_y,max_z,
+        num_x=2,num_y=2,num_z=2
+):
+    """
+    Generate uniformly spaced translation proposals in a 3D box
+    Args:
+        min_x, min_y, min_z: minimum x, y, z values
+    """
     deltas = jnp.stack(jnp.meshgrid(
         jnp.linspace(min_x, max_x, num_x),
         jnp.linspace(min_y, max_y, num_y),
@@ -105,14 +114,3 @@ def make_pose_grid_enumeration(min_x,min_y,min_z, min_rotation_angle,
     translations = make_translation_grid_enumeration(min_x,min_y,min_z, max_x,max_y,max_z, num_x,num_y,num_z)
     all_proposals = jnp.einsum("aij,bjk->abik", rotations, translations).reshape(-1, 4, 4)
     return all_proposals
-
-
-def enumerate_contact_and_face_parameters(min_x,min_y,min_angle, max_x, max_y, max_angle, num_x, num_y, num_angle, faces):
-    contact_params_sweep = make_translation_grid_enumeration_3d(
-        min_x,min_y, min_angle,
-        max_x, max_y, max_angle,
-        num_x, num_y, num_angle
-    )
-    contact_params_sweep_extended = jnp.tile(contact_params_sweep, (faces.shape[0],1))
-    face_params_sweep = jnp.repeat(faces, contact_params_sweep.shape[0])
-    return contact_params_sweep_extended, face_params_sweep

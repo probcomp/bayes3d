@@ -1,5 +1,6 @@
-import bayes3d.transforms_3d as t3d
-
+"""
+.. include:: ./documentation.md
+"""
 from .transforms_3d import *
 from .enumerations import *
 from .renderer import *

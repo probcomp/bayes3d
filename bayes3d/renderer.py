@@ -20,7 +20,7 @@ import jax.dlpack
 from jaxlib.hlo_helpers import custom_call
 from tqdm import tqdm
 
-def transform_image_zeros(image_jnp, intrinsics):
+def _transform_image_zeros(image_jnp, intrinsics):
     image_jnp_2 = jnp.concatenate(
         [
             j.t3d.unproject_depth(image_jnp[:,:,2], intrinsics),
@@ -29,9 +29,121 @@ def transform_image_zeros(image_jnp, intrinsics):
         axis=-1
     )
     return image_jnp_2
-transform_image_zeros_jit = jax.jit(transform_image_zeros)
-transform_image_zeros_parallel = jax.vmap(transform_image_zeros, in_axes=(0,None))
-transform_image_zeros_parallel_jit = jax.jit(transform_image_zeros_parallel)
+_transform_image_zeros_jit = jax.jit(_transform_image_zeros)
+_transform_image_zeros_parallel = jax.vmap(_transform_image_zeros, in_axes=(0,None))
+_transform_image_zeros_parallel_jit = jax.jit(_transform_image_zeros_parallel)
+
+def setup_renderer(intrinsics, num_layers=1024):
+    """Setup the renderer.
+    Args:
+        intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.    
+    """
+    b.RENDERER = Renderer(intrinsics, num_layers=num_layers)
+
+class Renderer(object):
+    def __init__(self, intrinsics, num_layers=1024):
+        """A renderer for rendering meshes.
+        
+        Args:
+            intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
+            num_layers (int, optional): The number of scenes to render in parallel. Defaults to 1024.
+        """
+        self.intrinsics = intrinsics
+        self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
+        self.proj_list = list(bayes3d.camera.open_gl_projection_matrix(
+            intrinsics.height, intrinsics.width, 
+            intrinsics.fx, intrinsics.fy, 
+            intrinsics.cx, intrinsics.cy, 
+            intrinsics.near, intrinsics.far
+        ).reshape(-1))
+
+        dr._get_plugin(gl=True).setup(
+            self.renderer_env.cpp_wrapper,
+            intrinsics.height, intrinsics.width, num_layers
+        )
+
+        self.meshes =[]
+        self.mesh_names =[]
+        self.model_box_dims = jnp.zeros((0,3))
+
+    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None, center_mesh=True):
+        """Add a mesh to the renderer from a file.
+        
+        Args:
+            mesh_filename (str): The filename of the mesh.
+            mesh_name (str, optional): The name of the mesh. Defaults to None.
+            scaling_factor (float, optional): The scaling factor to apply to the mesh. Defaults to 1.0.
+            force (str, optional): The file format to force. Defaults to None.
+            center_mesh (bool, optional): Whether to center the mesh. Defaults to True.
+        """
+        mesh = trimesh.load(mesh_filename, force=force)
+        self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor, center_mesh=center_mesh)
+
+    def add_mesh(self, mesh, mesh_name=None, scaling_factor=1.0, center_mesh=True):
+        """Add a mesh to the renderer.
+        
+        Args:
+            mesh (trimesh.Trimesh): The mesh to add.
+            mesh_name (str, optional): The name of the mesh. Defaults to None.
+            scaling_factor (float, optional): The scaling factor to apply to the mesh. Defaults to 1.0.
+            center_mesh (bool, optional): Whether to center the mesh. Defaults to True.
+        """
+        if mesh_name is None:
+            mesh_name = f"object_{len(self.meshes)}"
+        
+        mesh.vertices = mesh.vertices * scaling_factor
+        
+        bounding_box_dims, bounding_box_pose = bayes3d.utils.aabb(mesh.vertices)
+        if center_mesh:
+            mesh.vertices = mesh.vertices - bounding_box_pose[:3,3]
+
+        self.meshes.append(mesh)
+        self.mesh_names.append(mesh_name)
+
+        self.model_box_dims = jnp.vstack(
+            [
+                self.model_box_dims,
+                bounding_box_dims
+            ]
+        )
+
+        vertices = np.array(mesh.vertices)
+        vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)
+        triangles = np.array(mesh.faces)
+        dr._get_plugin(gl=True).load_vertices_fwd(
+            self.renderer_env.cpp_wrapper, 
+            torch.tensor(vertices.astype("f"), device='cuda'),
+            torch.tensor(triangles.astype(np.int32), device='cuda'),
+        )
+
+    def render_many(self, poses, indices):
+        """Render many scenes in parallel.
+        
+        Args:
+            poses (jnp.ndarray): The poses of the objects in the scene. Shape (N, M, 4, 4)
+                                 where N is the number of scenes and M is the number of objects.
+                                 and the last two dimensions are the 4x4 poses.
+            indices (jnp.ndarray): The indices of the objects to render. Shape (M,)
+
+        Outputs:
+            jnp.ndarray: The rendered images. Shape (N, H, W, 4) where N is the number of scenes
+                         the final dimension is the segmentation image.
+        """
+        images_jnp = _render_custom_call(self, poses, indices)[0]
+        return _transform_image_zeros_parallel(images_jnp, self.intrinsics)
+
+    def render(self, poses, indices):
+        """Render a single scene.
+
+        Args:
+            poses (jnp.ndarray): The poses of the objects in the scene. Shape (M, 4, 4)
+            indices (jnp.ndarray): The indices of the objects to render. Shape (M,)
+        Outputs:
+            jnp.ndarray: The rendered image. Shape (H, W, 4)
+                         the final dimension is the segmentation image.
+
+        """
+        return self.render_many(poses[None,...], indices)[0]
 
 
 # Useful reference for understanding the custom calls setup:
@@ -43,12 +155,12 @@ def _register_custom_calls():
         xla_client.register_custom_call_target(_name, _value, platform="gpu")
 
 @functools.partial(jax.jit, static_argnums=(0,))
-def render_custom_call(r: "Renderer", poses, idx):
-    return build_render_primitive(r).bind(poses, idx)
+def _render_custom_call(r: "Renderer", poses, idx):
+    return _build_render_primitive(r).bind(poses, idx)
 
 
 @functools.lru_cache(maxsize=None)
-def build_render_primitive(r: "Renderer"):
+def _build_render_primitive(r: "Renderer"):
     _register_custom_calls()
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
@@ -143,154 +255,3 @@ def build_render_primitive(r: "Renderer"):
     batching.primitive_batchers[_render_prim] = _render_batch
     
     return _render_prim
-
-def setup_renderer(intrinsics, num_layers=1024):
-    b.RENDERER = Renderer(intrinsics, num_layers=num_layers)
-    
-
-class Renderer(object):
-    def __init__(self, intrinsics, num_layers=1024):
-        """A renderer for rendering meshes.
-        
-        Args:
-            intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
-            num_layers (int, optional): The number of layers to use for rendering. Defaults to 1024.
-        """
-        self.intrinsics = intrinsics
-        self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
-        self.proj_list = list(bayes3d.camera.open_gl_projection_matrix(
-            intrinsics.height, intrinsics.width, 
-            intrinsics.fx, intrinsics.fy, 
-            intrinsics.cx, intrinsics.cy, 
-            intrinsics.near, intrinsics.far
-        ).reshape(-1))
-
-        dr._get_plugin(gl=True).setup(
-            self.renderer_env.cpp_wrapper,
-            intrinsics.height, intrinsics.width, num_layers
-        )
-
-        self.meshes =[]
-        self.mesh_names =[]
-        self.model_box_dims = jnp.zeros((0,3))
-
-    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None, center_mesh=True):
-        """Add a mesh to the renderer from a file.
-        
-        Args:
-            mesh_filename (str): The filename of the mesh.
-            mesh_name (str, optional): The name of the mesh. Defaults to None.
-            scaling_factor (float, optional): The scaling factor to apply to the mesh. Defaults to 1.0.
-            force (str, optional): The file format to force. Defaults to None.
-            center_mesh (bool, optional): Whether to center the mesh. Defaults to True.
-        """
-        mesh = trimesh.load(mesh_filename, force=force)
-        self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor, center_mesh=center_mesh)
-
-    def add_mesh(self, mesh, mesh_name=None, scaling_factor=1.0, center_mesh=True):
-        """Add a mesh to the renderer.
-        
-        Args:
-            mesh (trimesh.Trimesh): The mesh to add.
-            mesh_name (str, optional): The name of the mesh. Defaults to None.
-            scaling_factor (float, optional): The scaling factor to apply to the mesh. Defaults to 1.0.
-            center_mesh (bool, optional): Whether to center the mesh. Defaults to True.
-        """
-        if mesh_name is None:
-            mesh_name = f"object_{len(self.meshes)}"
-        
-        mesh.vertices = mesh.vertices * scaling_factor
-        
-        bounding_box_dims, bounding_box_pose = bayes3d.utils.aabb(mesh.vertices)
-        if center_mesh:
-            mesh.vertices = mesh.vertices - bounding_box_pose[:3,3]
-
-        self.meshes.append(mesh)
-        self.mesh_names.append(mesh_name)
-
-        self.model_box_dims = jnp.vstack(
-            [
-                self.model_box_dims,
-                bounding_box_dims
-            ]
-        )
-
-        vertices = np.array(mesh.vertices)
-        vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)
-        triangles = np.array(mesh.faces)
-        dr._get_plugin(gl=True).load_vertices_fwd(
-            self.renderer_env.cpp_wrapper, 
-            torch.tensor(vertices.astype("f"), device='cuda'),
-            torch.tensor(triangles.astype(np.int32), device='cuda'),
-        )
-
-    def render_many(self, poses, indices):
-        """Render many scenes in parallel.
-        
-        Args:
-            poses (jnp.ndarray): The poses of the objects in the scene. Shape (N, M, 4, 4)
-                                 where N is the number of scenes and M is the number of objects.
-                                 and the last two dimensions are the 4x4 poses.
-            indices (jnp.ndarray): The indices of the objects to render. Shape (M,)
-
-        Outputs:
-            jnp.ndarray: The rendered images. Shape (N, H, W, 4) where N is the number of scenes
-                         the final dimension is the segmentation image.
-        """
-        images_jnp = render_custom_call(self, poses, indices)[0]
-        return transform_image_zeros_parallel(images_jnp, self.intrinsics)
-
-    def render(self, poses, indices):
-        """Render a single scene.
-
-        Args:
-            poses (jnp.ndarray): The poses of the objects in the scene. Shape (M, 4, 4)
-            indices (jnp.ndarray): The indices of the objects to render. Shape (M,)
-        Outputs:
-            jnp.ndarray: The rendered image. Shape (H, W, 4)
-                         the final dimension is the segmentation image.
-
-        """
-        return self.render_many(poses[None,...], indices)[0]
-
-
-def render_point_cloud(point_cloud, intrinsics, pixel_smudge=0):
-    transformed_cloud = point_cloud
-    point_cloud = jnp.vstack([jnp.zeros((1, 3)), transformed_cloud])
-    pixels = project_cloud_to_pixels(point_cloud, intrinsics)
-    x, y = jnp.meshgrid(jnp.arange(intrinsics.width), jnp.arange(intrinsics.height))
-    matches = (jnp.abs(x[:, :, None] - pixels[:, 0]) <= pixel_smudge) & (jnp.abs(y[:, :, None] - pixels[:, 1]) <= pixel_smudge)
-    matches = matches * (intrinsics.far * 2.0 - point_cloud[:,-1][None, None, :])
-    a = jnp.argmax(matches, axis=-1)    
-    return point_cloud[a]
-
-def render_point_cloud_batched(point_cloud, intrinsics, NUM_PER, pixel_smudge=0):
-    all_images = []
-    num_iters = jnp.ceil(point_cloud.shape[0] / NUM_PER).astype(jnp.int32)
-    for i in tqdm(range(num_iters)):
-        img = j.render_point_cloud(point_cloud[i*NUM_PER:i*NUM_PER+NUM_PER], intrinsics)
-        img = img.at[img[:,:,2] < intrinsics.near].set(intrinsics.far)
-        all_images.append(img)
-    all_images_stack = jnp.stack(all_images,axis=-2)
-    best = all_images_stack[:,:,:,2].argmin(-1)
-    img = all_images_stack[
-        np.arange(intrinsics.height)[:, None],
-        np.arange(intrinsics.width)[None, :],
-        best,
-        :
-    ]
-    return img
-
-def project_cloud_to_pixels(point_cloud, intrinsics):
-    """Project a point cloud to pixels.
-    
-    Args:
-        point_cloud (jnp.ndarray): The point cloud. Shape (N, 3)
-        intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
-    Outputs:
-        jnp.ndarray: The pixels. Shape (N, 2)
-    """
-    point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
-    temp1 = point_cloud_normalized[:, :2] * jnp.array([intrinsics.fx,intrinsics.fy])
-    pixels = temp1 + jnp.array([intrinsics.cx, intrinsics.cy])
-    return pixels
