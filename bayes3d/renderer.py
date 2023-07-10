@@ -1,7 +1,7 @@
 from typing import Tuple
 
 import functools
-import bayes3d.rendering.nvdiffrast.common as dr
+import bayes3d._rendering.nvdiffrast.common as dr
 import torch
 from torch.utils import dlpack
 import bayes3d.camera
@@ -50,7 +50,7 @@ class Renderer(object):
         """
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
-        self.proj_list = list(bayes3d.camera.open_gl_projection_matrix(
+        self.proj_list = list(bayes3d.camera._open_gl_projection_matrix(
             intrinsics.height, intrinsics.width, 
             intrinsics.fx, intrinsics.fy, 
             intrinsics.cx, intrinsics.cy, 
