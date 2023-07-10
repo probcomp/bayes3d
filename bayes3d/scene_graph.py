@@ -1,6 +1,5 @@
 import jax.numpy as jnp
 import jax
-import bayes3d.enumerations
 import bayes3d.transforms_3d as t3d
 
 def get_contact_planes(dimensions):

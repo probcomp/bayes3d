@@ -2,7 +2,6 @@
 .. include:: ./documentation.md
 """
 from .transforms_3d import *
-from .enumerations import *
 from .renderer import *
 from .rgbd import *
 from .likelihood import *

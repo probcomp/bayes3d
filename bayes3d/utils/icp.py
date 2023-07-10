@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from bayes3d.utils import extract_2d_patches
+from bayes3d.utils.utils import extract_2d_patches
 from bayes3d.transforms_3d import (
     transform_from_rot_and_pos
 )
