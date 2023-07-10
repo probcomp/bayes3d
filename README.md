@@ -17,10 +17,14 @@ pip install -r assets/genjax/requirements.txt
 pip install -e assets/genjax
 ```
 
+Install JAX:
 ```
 pip uninstall jax jaxlib
 pip install jax==0.4.7 https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.4.7+cuda11.cudnn86-cp39-cp39-manylinux2014_x86_64.whl
 ```
+(see https://storage.googleapis.com/jax-releases/jax_cuda_releases.html)
+
+
 
 To get assets:
 ```
@@ -37,8 +41,9 @@ and view `demo.gif`
 
 ![](assets/demo.gif)
 
-# CosyPose Setup
 
+
+# CosyPose Setup
 ```
 git submodule update --init --recursive
 cd jax3dp3/cosypose_baseline

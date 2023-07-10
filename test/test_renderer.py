@@ -38,10 +38,6 @@ gt_poses_1 = jnp.tile(jnp.array([
 gt_poses_1 = gt_poses_1.at[:,0,3].set(jnp.linspace(-2.0, 2.0, gt_poses_1.shape[0]))
 gt_poses_1 = gt_poses_1.at[:,2,3].set(jnp.linspace(10.0, 5.0, gt_poses_1.shape[0]))
 
-
-
-
-
 gt_poses_2 = jnp.tile(jnp.array([
     [1.0, 0.0, 0.0, 0.0],   
     [0.0, 1.0, 0.0, -1.0],   
@@ -69,3 +65,13 @@ j.multi_panel(
     [multiobject_viz, multiobject_parallel_viz, segmentation_viz]
 ).save("test_renderer.png")
 
+def test_segmentation_produces_sensical_outputs():
+    assert jnp.allclose(multiobject_scene_parallel_img[-1,:,:,3].max(), 2.0)
+    assert jnp.allclose(multiobject_scene_parallel_img[-1,:,:,3].min(), 0.0)
+    assert jnp.allclose(multiobject_scene_img[:,:,3].max(), 2.0)
+    assert jnp.allclose(multiobject_scene_img[:,:,3].min(), 0.0)
+
+def test_something_is_being_rendered():
+    assert not jnp.all(multiobject_scene_parallel_img[0,:,:,2] == intrinsics.far)
+    assert not jnp.all(multiobject_scene_parallel_img[-1,:,:,2] == intrinsics.far)
+    assert not jnp.all(multiobject_scene_img[:,:,2] == intrinsics.far)

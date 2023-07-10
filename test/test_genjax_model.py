@@ -7,9 +7,6 @@ import genjax
 
 key = jax.random.PRNGKey(1)
 
-b.setup_visualizer()
-
-
 intrinsics = b.Intrinsics(
     height=100,
     width=100,
@@ -24,9 +21,13 @@ b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(), "sample_obj
 
 importance_jit = jax.jit(b.genjax.model.importance)
 
-key, (_,gt_trace) = importance_jit(key, genjax.choice_map({
-    "parent_0": -1,
-    "camera_pose": jnp.eye(4),
-    "id_0": jnp.int32(0),
-}), (jnp.arange(1), jnp.arange(2), jnp.array(jnp.ones(3)*5.0), jnp.array([0.2, 0.2, -2*jnp.pi]), b.RENDERER.model_box_dims, 100.0))
-b.genjax.viz_trace_meshcat(gt_trace)
+def test_genjax_trace_contains_right_info():
+    key = jax.random.PRNGKey(1)
+    key, (_,trace) = importance_jit(key, genjax.choice_map({
+        "parent_0": -1,
+        "camera_pose": jnp.eye(4),
+        "id_0": jnp.int32(0),
+    }), (jnp.arange(1), jnp.arange(2), jnp.array(jnp.ones(3)*5.0), jnp.array([0.2, 0.2, -2*jnp.pi]), b.RENDERER.model_box_dims, 100.0))    
+    assert trace["parent_0"] == -1
+    assert (trace["camera_pose"] == jnp.eye(4)).all()
+    assert trace["id_0"] == 0
