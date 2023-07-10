@@ -5,7 +5,9 @@
 
 Setup virtualenv and install dependencies:
 ```
-conda create -n bayes3d python=3.8
+git clone --recurse-submodules https://github.com/probcomp/bayes3d.git
+cd bayes3d
+conda create -n bayes3d python=3.9
 conda activate bayes3d
 pip install -r requirements.txt
 python setup.py develop
