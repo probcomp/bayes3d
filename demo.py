@@ -1,7 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-import bayes3d as j
 import bayes3d as b
 import time
 from PIL import Image
@@ -23,7 +22,7 @@ intrinsics = b.Intrinsics(
 )
 
 b.setup_renderer(intrinsics)
-b.RENDERER.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/cube.obj"))
+b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"))
 
 num_frames = 60
 
@@ -40,8 +39,8 @@ print("Number of frames: ", poses.shape[0])
 observed_images = b.RENDERER.render_many(poses[:,None,...],  jnp.array([0]))
 print("observed_images.shape", observed_images.shape)
 
-translation_deltas = j.utils.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
-rotation_deltas = jax.vmap(lambda key: j.distributions.gaussian_vmf(key, 0.00001, 800.0))(
+translation_deltas = b.utils.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
+rotation_deltas = jax.vmap(lambda key: b.distributions.gaussian_vmf(key, 0.00001, 800.0))(
     jax.random.split(jax.random.PRNGKey(3), 100)
 )
 
@@ -70,12 +69,12 @@ print ("FPS:", poses.shape[0] / (end - start))
 max_depth = 10.0
 rerendered_images = b.RENDERER.render_many(pose_estimates_over_time[:, None, ...], jnp.array([0]))
 viz_images = [
-    j.viz.multi_panel(
-        [j.viz.get_depth_image(d[:,:,2]), j.viz.get_depth_image(r[:,:,2])],
+    b.viz.multi_panel(
+        [b.viz.get_depth_image(d[:,:,2]), b.viz.get_depth_image(r[:,:,2])],
         ["Ground Truth", "Inferred Reconstruction"],
     )
     for (r, d) in zip(rerendered_images, observed_images)
 ]
-j.make_gif(viz_images, "demo.gif")
+b.make_gif(viz_images, "demo.gif")
 
 from IPython import embed; embed()

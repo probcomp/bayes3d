@@ -52,7 +52,7 @@ grid_params = [
     (0.05, jnp.pi/5, (11,11,11)), (0.02, 2*jnp.pi, (5,5,51))
 ]
 contact_param_gridding_schedule = [
-    b.make_translation_grid_enumeration_3d(
+    b.utils.make_translation_grid_enumeration_3d(
         -x, -x, -ang,
         x, x, ang,
         *nums
@@ -76,42 +76,43 @@ def c2f_contact_update(trace_, key,  number, contact_param_deltas, VARIANCE_GRID
     )
 c2f_contact_update_jit = jax.jit(c2f_contact_update, static_argnames=("number",))
 
-for scene_id in tqdm(range(41,200)):
+V_VARIANT = 0
+O_VARIANT = 0
+
+for scene_id in tqdm(range(94,200)):
     print("GPU Memory: ", b.utils.get_gpu_memory())
-    for v_variant in range(len(VARIANCE_GRID)):
-        for o_variant in range(len(OUTLIER_GRID)):
-            V_GRID, O_GRID = jnp.array([VARIANCE_GRID[v_variant]]), jnp.array([OUTLIER_GRID[o_variant]])
+    V_GRID, O_GRID = jnp.array([VARIANCE_GRID[V_VARIANT]]), jnp.array([OUTLIER_GRID[O_VARIANT]])
 
-            gt_trace = importance_jit(key, *joblib.load(f"data/trace_{scene_id}.joblib"))[1][1]
-            choices = gt_trace.get_choices()
-            key, (_,trace) = importance_jit(key, choices, (jnp.arange(1), jnp.arange(22), *gt_trace.get_args()[2:]))
+    gt_trace = importance_jit(key, *joblib.load(f"data/trace_{scene_id}.joblib"))[1][1]
+    choices = gt_trace.get_choices()
+    key, (_,trace) = importance_jit(key, choices, (jnp.arange(1), jnp.arange(22), *gt_trace.get_args()[2:]))
 
-            for _ in range(3):
-                all_paths = []
-                for obj_id in tqdm(range(len(b.RENDERER.meshes)-1)):
-                    path = []
-                    trace_ = add_object_jit(trace, key, obj_id, 0, 2,3)
-                    number = b.genjax.get_contact_params(trace_).shape[0] - 1
-                    path.append(trace_)
-                    for c2f_iter in range(len(contact_param_gridding_schedule)):
-                        trace_ = c2f_contact_update_jit(trace_, key, number,
-                            contact_param_gridding_schedule[c2f_iter], V_GRID, O_GRID)
-                        path.append(trace_)
-                    # for c2f_iter in range(len(contact_param_gridding_schedule)):
-                    #     trace_ = c2f_contact_update_jit(trace_, key, number,
-                    #         contact_param_gridding_schedule[c2f_iter], VARIANCE_GRID, OUTLIER_GRID)
-                    all_paths.append(
-                        path
-                    )
-                
-                scores = jnp.array([t[-1].get_score() for t in all_paths])
-                print(scores)
-                normalized_scores = b.utils.normalize_log_scores(scores)
-                trace = all_paths[jnp.argmax(scores)][-1]
-            
-            print(b.genjax.get_indices(gt_trace))
-            print(b.genjax.get_indices(trace))
+    for _ in range(3):
+        all_paths = []
+        for obj_id in tqdm(range(len(b.RENDERER.meshes)-1)):
+            path = []
+            trace_ = add_object_jit(trace, key, obj_id, 0, 2,3)
+            number = b.genjax.get_contact_params(trace_).shape[0] - 1
+            path.append(trace_)
+            for c2f_iter in range(len(contact_param_gridding_schedule)):
+                trace_ = c2f_contact_update_jit(trace_, key, number,
+                    contact_param_gridding_schedule[c2f_iter], V_GRID, O_GRID)
+                path.append(trace_)
+            # for c2f_iter in range(len(contact_param_gridding_schedule)):
+            #     trace_ = c2f_contact_update_jit(trace_, key, number,
+            #         contact_param_gridding_schedule[c2f_iter], VARIANCE_GRID, OUTLIER_GRID)
+            all_paths.append(
+                path
+            )
+        
+        scores = jnp.array([t[-1].get_score() for t in all_paths])
+        print(scores)
+        normalized_scores = b.utils.normalize_log_scores(scores)
+        trace = all_paths[jnp.argmax(scores)][-1]
+    
+    print(b.genjax.get_indices(gt_trace))
+    print(b.genjax.get_indices(trace))
 
-            joblib.dump((trace.get_choices(), trace.get_args()), f"data/inferred_{scene_id}_{v_variant}_{o_variant}.joblib")
-            del trace
-            del gt_trace
+    joblib.dump((trace.get_choices(), trace.get_args()), f"data/inferred_{V_VARIANT}_{O_VARIANT}_{scene_id}.joblib")
+    del trace
+    del gt_trace

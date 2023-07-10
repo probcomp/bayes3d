@@ -29,7 +29,7 @@
 <pre><code class="python">from typing import Tuple
 
 import functools
-import bayes3d.nvdiffrast.common as dr
+import bayes3d.rendering.nvdiffrast.common as dr
 import torch
 from torch.utils import dlpack
 import bayes3d.camera
@@ -48,7 +48,7 @@ import jax.dlpack
 from jaxlib.hlo_helpers import custom_call
 from tqdm import tqdm
 
-def transform_image_zeros(image_jnp, intrinsics):
+def _transform_image_zeros(image_jnp, intrinsics):
     image_jnp_2 = jnp.concatenate(
         [
             j.t3d.unproject_depth(image_jnp[:,:,2], intrinsics),
@@ -57,124 +57,16 @@ def transform_image_zeros(image_jnp, intrinsics):
         axis=-1
     )
     return image_jnp_2
-transform_image_zeros_jit = jax.jit(transform_image_zeros)
-transform_image_zeros_parallel = jax.vmap(transform_image_zeros, in_axes=(0,None))
-transform_image_zeros_parallel_jit = jax.jit(transform_image_zeros_parallel)
-
-
-# Useful reference for understanding the custom calls setup:
-#   https://github.com/dfm/extending-jax
-
-@functools.lru_cache
-def _register_custom_calls():
-    for _name, _value in dr._get_plugin(gl=True).registrations().items():
-        xla_client.register_custom_call_target(_name, _value, platform=&#34;gpu&#34;)
-
-@functools.partial(jax.jit, static_argnums=(0,))
-def render_custom_call(r: &#34;Renderer&#34;, poses, idx):
-    return build_render_primitive(r).bind(poses, idx)
-
-
-@functools.lru_cache(maxsize=None)
-def build_render_primitive(r: &#34;Renderer&#34;):
-    _register_custom_calls()
-    # For JIT compilation we need a function to evaluate the shape and dtype of the
-    # outputs of our op for some given inputs
-    def _render_abstract(poses, indices):
-        num_images = poses.shape[0]
-        if poses.shape[1] != indices.shape[0]:
-            raise ValueError(f&#34;Mismatched #objects: {poses.shape}, {indices.shape}&#34;)
-        dtype = dtypes.canonicalize_dtype(poses.dtype)
-        return [ShapedArray((num_images, r.intrinsics.height, r.intrinsics.width, 4), dtype),
-                ShapedArray((), dtype)]
-
-    # Provide an MLIR &#34;lowering&#34; of the render primitive.
-    def _render_lowering(ctx, poses, indices):
-
-        # Extract the numpy type of the inputs
-        poses_aval, indices_aval = ctx.avals_in
-        if poses_aval.ndim != 4:
-            raise NotImplementedError(f&#34;Only 4D inputs supported: got {poses_aval.shape}&#34;)
-        if indices_aval.ndim != 1:
-            raise NotImplementedError(f&#34;Only 1D inputs supported: got {indices_aval.shape}&#34;)
-
-        np_dtype = np.dtype(poses_aval.dtype)
-        if np_dtype != np.float32:
-            raise NotImplementedError(f&#34;Unsupported poses dtype {np_dtype}&#34;)
-        if np.dtype(indices_aval.dtype) != np.int32:
-            raise NotImplementedError(f&#34;Unsupported indices dtype {indices_aval.dtype}&#34;)
-
-        num_images, num_objects = poses_aval.shape[:2]
-        out_shp_dtype = mlir.ir.RankedTensorType.get(
-            [num_images, r.intrinsics.height, r.intrinsics.width, 4],
-            mlir.dtype_to_ir_type(poses_aval.dtype))
-
-        if num_objects != indices_aval.shape[0]:
-            raise ValueError(&#34;Mismatched #objects in poses vs indices: &#34;
-                             f&#34;{num_objects} vs {indices_aval.shape[0]}&#34;)
-        opaque = dr._get_plugin(gl=True).build_rasterize_descriptor(r.renderer_env.cpp_wrapper,
-                                                                    r.proj_list,
-                                                                    [num_objects, num_images])
-
-        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(poses_aval.dtype))
-        op_name = &#34;jax_rasterize_fwd_gl&#34;
-        return custom_call(
-            op_name,
-            # Output types
-            out_types=[out_shp_dtype, scalar_dummy],
-            # The inputs:
-            operands=[poses, indices],
-            # Layout specification:
-            operand_layouts=[(3, 2, 0, 1), (0,)],
-            result_layouts=[(3, 2, 1, 0), ()],
-            # GPU specific additional data
-            backend_config=opaque
-        )
-
-
-    # ************************************
-    # *  SUPPORT FOR BATCHING WITH VMAP  *
-    # ************************************
-    def _render_batch(args, axes):
-        poses, indices = args 
-
-        if poses.ndim != 5:
-            raise NotImplementedError(&#34;Underlying primitive must operate on 4D poses.&#34;)  
-     
-        poses = jnp.moveaxis(poses, axes[0], 0)
-        size_1 = poses.shape[0]
-        size_2 = poses.shape[1]
-        num_objects = poses.shape[2]
-        poses = poses.reshape(size_1 * size_2, num_objects, 4, 4)
-
-        if poses.shape[1] != indices.shape[0]:
-            raise ValueError(f&#34;Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}&#34;)
-        if poses.shape[-2:] != (4, 4):
-            raise ValueError(f&#34;Unexpected poses shape: {poses.shape}&#34;)
-        renders, dummy = render_custom_call(r, poses, indices)
-
-        renders = renders.reshape(size_1, size_2, *renders.shape[1:])
-        out_axes = 0, None
-        return (renders, dummy), out_axes
-
-
-    # *********************************************
-    # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
-    # *********************************************
-    _render_prim = core.Primitive(f&#34;render_multiple_{id(r)}&#34;)
-    _render_prim.multiple_results = True
-    _render_prim.def_impl(functools.partial(xla.apply_primitive, _render_prim))
-    _render_prim.def_abstract_eval(_render_abstract)
-
-    # Connect the XLA translation rules for JIT compilation
-    mlir.register_lowering(_render_prim, _render_lowering, platform=&#34;gpu&#34;)
-    batching.primitive_batchers[_render_prim] = _render_batch
-    
-    return _render_prim
+_transform_image_zeros_jit = jax.jit(_transform_image_zeros)
+_transform_image_zeros_parallel = jax.vmap(_transform_image_zeros, in_axes=(0,None))
+_transform_image_zeros_parallel_jit = jax.jit(_transform_image_zeros_parallel)
 
 def setup_renderer(intrinsics, num_layers=1024):
+    &#34;&#34;&#34;Setup the renderer.
+    Args:
+        intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.    
+    &#34;&#34;&#34;
     b.RENDERER = Renderer(intrinsics, num_layers=num_layers)
-    
 
 class Renderer(object):
     def __init__(self, intrinsics, num_layers=1024):
@@ -182,7 +74,7 @@ class Renderer(object):
         
         Args:
             intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
-            num_layers (int, optional): The number of layers to use for rendering. Defaults to 1024.
+            num_layers (int, optional): The number of scenes to render in parallel. Defaults to 1024.
         &#34;&#34;&#34;
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
@@ -265,8 +157,8 @@ class Renderer(object):
             jnp.ndarray: The rendered images. Shape (N, H, W, 4) where N is the number of scenes
                          the final dimension is the segmentation image.
         &#34;&#34;&#34;
-        images_jnp = render_custom_call(self, poses, indices)[0]
-        return transform_image_zeros_parallel(images_jnp, self.intrinsics)
+        images_jnp = _render_custom_call(self, poses, indices)[0]
+        return _transform_image_zeros_parallel(images_jnp, self.intrinsics)
 
     def render(self, poses, indices):
         &#34;&#34;&#34;Render a single scene.
@@ -282,66 +174,21 @@ class Renderer(object):
         return self.render_many(poses[None,...], indices)[0]
 
 
-def render_point_cloud(point_cloud, intrinsics, pixel_smudge=0):
-    transformed_cloud = point_cloud
-    point_cloud = jnp.vstack([jnp.zeros((1, 3)), transformed_cloud])
-    pixels = project_cloud_to_pixels(point_cloud, intrinsics)
-    x, y = jnp.meshgrid(jnp.arange(intrinsics.width), jnp.arange(intrinsics.height))
-    matches = (jnp.abs(x[:, :, None] - pixels[:, 0]) &lt;= pixel_smudge) &amp; (jnp.abs(y[:, :, None] - pixels[:, 1]) &lt;= pixel_smudge)
-    matches = matches * (intrinsics.far * 2.0 - point_cloud[:,-1][None, None, :])
-    a = jnp.argmax(matches, axis=-1)    
-    return point_cloud[a]
+# Useful reference for understanding the custom calls setup:
+#   https://github.com/dfm/extending-jax
 
-def render_point_cloud_batched(point_cloud, intrinsics, NUM_PER, pixel_smudge=0):
-    all_images = []
-    num_iters = jnp.ceil(point_cloud.shape[0] / NUM_PER).astype(jnp.int32)
-    for i in tqdm(range(num_iters)):
-        img = j.render_point_cloud(point_cloud[i*NUM_PER:i*NUM_PER+NUM_PER], intrinsics)
-        img = img.at[img[:,:,2] &lt; intrinsics.near].set(intrinsics.far)
-        all_images.append(img)
-    all_images_stack = jnp.stack(all_images,axis=-2)
-    best = all_images_stack[:,:,:,2].argmin(-1)
-    img = all_images_stack[
-        np.arange(intrinsics.height)[:, None],
-        np.arange(intrinsics.width)[None, :],
-        best,
-        :
-    ]
-    return img
+@functools.lru_cache
+def _register_custom_calls():
+    for _name, _value in dr._get_plugin(gl=True).registrations().items():
+        xla_client.register_custom_call_target(_name, _value, platform=&#34;gpu&#34;)
 
-def project_cloud_to_pixels(point_cloud, intrinsics):
-    &#34;&#34;&#34;Project a point cloud to pixels.
-    
-    Args:
-        point_cloud (jnp.ndarray): The point cloud. Shape (N, 3)
-        intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
-    Outputs:
-        jnp.ndarray: The pixels. Shape (N, 2)
-    &#34;&#34;&#34;
-    point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
-    temp1 = point_cloud_normalized[:, :2] * jnp.array([intrinsics.fx,intrinsics.fy])
-    pixels = temp1 + jnp.array([intrinsics.cx, intrinsics.cy])
-    return pixels</code></pre>
-</details>
-</section>
-<section>
-</section>
-<section>
-</section>
-<section>
-<h2 class="section-title" id="header-functions">Functions</h2>
-<dl>
-<dt id="bayes3d.renderer.build_render_primitive"><code class="name flex">
-<span>def <span class="ident">build_render_primitive</span></span>(<span>r: <a title="bayes3d.renderer.Renderer" href="#bayes3d.renderer.Renderer">Renderer</a>)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@functools.lru_cache(maxsize=None)
-def build_render_primitive(r: &#34;Renderer&#34;):
+@functools.partial(jax.jit, static_argnums=(0,))
+def _render_custom_call(r: &#34;Renderer&#34;, poses, idx):
+    return _build_render_primitive(r).bind(poses, idx)
+
+
+@functools.lru_cache(maxsize=None)
+def _build_render_primitive(r: &#34;Renderer&#34;):
     _register_custom_calls()
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
@@ -416,7 +263,7 @@ def build_render_primitive(r: &#34;Renderer&#34;):
             raise ValueError(f&#34;Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}&#34;)
         if poses.shape[-2:] != (4, 4):
             raise ValueError(f&#34;Unexpected poses shape: {poses.shape}&#34;)
-        renders, dummy = render_custom_call(r, poses, indices)
+        renders, dummy = _render_custom_call(r, poses, indices)
 
         renders = renders.reshape(size_1, size_2, *renders.shape[1:])
         out_axes = 0, None
@@ -437,192 +284,34 @@ def build_render_primitive(r: &#34;Renderer&#34;):
     
     return _render_prim</code></pre>
 </details>
-</dd>
-<dt id="bayes3d.renderer.project_cloud_to_pixels"><code class="name flex">
-<span>def <span class="ident">project_cloud_to_pixels</span></span>(<span>point_cloud, intrinsics)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Project a point cloud to pixels.</p>
-<h2 id="args">Args</h2>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
-<dt><strong><code>point_cloud</code></strong> :&ensp;<code>jnp.ndarray</code></dt>
-<dd>The point cloud. Shape (N, 3)</dd>
-<dt><strong><code>intrinsics</code></strong> :&ensp;<code><a title="bayes3d.camera.Intrinsics" href="camera.html#bayes3d.camera.Intrinsics">Intrinsics</a></code></dt>
-<dd>The camera intrinsics.</dd>
-</dl>
-<h2 id="outputs">Outputs</h2>
-<p>jnp.ndarray: The pixels. Shape (N, 2)</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def project_cloud_to_pixels(point_cloud, intrinsics):
-    &#34;&#34;&#34;Project a point cloud to pixels.
-    
-    Args:
-        point_cloud (jnp.ndarray): The point cloud. Shape (N, 3)
-        intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
-    Outputs:
-        jnp.ndarray: The pixels. Shape (N, 2)
-    &#34;&#34;&#34;
-    point_cloud_normalized = point_cloud / point_cloud[:, 2].reshape(-1, 1)
-    temp1 = point_cloud_normalized[:, :2] * jnp.array([intrinsics.fx,intrinsics.fy])
-    pixels = temp1 + jnp.array([intrinsics.cx, intrinsics.cy])
-    return pixels</code></pre>
-</details>
-</dd>
-<dt id="bayes3d.renderer.render_custom_call"><code class="name flex">
-<span>def <span class="ident">render_custom_call</span></span>(<span>r: <a title="bayes3d.renderer.Renderer" href="#bayes3d.renderer.Renderer">Renderer</a>, poses, idx)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@functools.partial(jax.jit, static_argnums=(0,))
-def render_custom_call(r: &#34;Renderer&#34;, poses, idx):
-    return build_render_primitive(r).bind(poses, idx)</code></pre>
-</details>
-</dd>
-<dt id="bayes3d.renderer.render_point_cloud"><code class="name flex">
-<span>def <span class="ident">render_point_cloud</span></span>(<span>point_cloud, intrinsics, pixel_smudge=0)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def render_point_cloud(point_cloud, intrinsics, pixel_smudge=0):
-    transformed_cloud = point_cloud
-    point_cloud = jnp.vstack([jnp.zeros((1, 3)), transformed_cloud])
-    pixels = project_cloud_to_pixels(point_cloud, intrinsics)
-    x, y = jnp.meshgrid(jnp.arange(intrinsics.width), jnp.arange(intrinsics.height))
-    matches = (jnp.abs(x[:, :, None] - pixels[:, 0]) &lt;= pixel_smudge) &amp; (jnp.abs(y[:, :, None] - pixels[:, 1]) &lt;= pixel_smudge)
-    matches = matches * (intrinsics.far * 2.0 - point_cloud[:,-1][None, None, :])
-    a = jnp.argmax(matches, axis=-1)    
-    return point_cloud[a]</code></pre>
-</details>
-</dd>
-<dt id="bayes3d.renderer.render_point_cloud_batched"><code class="name flex">
-<span>def <span class="ident">render_point_cloud_batched</span></span>(<span>point_cloud, intrinsics, NUM_PER, pixel_smudge=0)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def render_point_cloud_batched(point_cloud, intrinsics, NUM_PER, pixel_smudge=0):
-    all_images = []
-    num_iters = jnp.ceil(point_cloud.shape[0] / NUM_PER).astype(jnp.int32)
-    for i in tqdm(range(num_iters)):
-        img = j.render_point_cloud(point_cloud[i*NUM_PER:i*NUM_PER+NUM_PER], intrinsics)
-        img = img.at[img[:,:,2] &lt; intrinsics.near].set(intrinsics.far)
-        all_images.append(img)
-    all_images_stack = jnp.stack(all_images,axis=-2)
-    best = all_images_stack[:,:,:,2].argmin(-1)
-    img = all_images_stack[
-        np.arange(intrinsics.height)[:, None],
-        np.arange(intrinsics.width)[None, :],
-        best,
-        :
-    ]
-    return img</code></pre>
-</details>
-</dd>
 <dt id="bayes3d.renderer.setup_renderer"><code class="name flex">
 <span>def <span class="ident">setup_renderer</span></span>(<span>intrinsics, num_layers=1024)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Setup the renderer.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>intrinsics</code></strong> :&ensp;<code><a title="bayes3d.camera.Intrinsics" href="camera.html#bayes3d.camera.Intrinsics">Intrinsics</a></code></dt>
+<dd>The camera intrinsics.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def setup_renderer(intrinsics, num_layers=1024):
+    &#34;&#34;&#34;Setup the renderer.
+    Args:
+        intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.    
+    &#34;&#34;&#34;
     b.RENDERER = Renderer(intrinsics, num_layers=num_layers)</code></pre>
-</details>
-</dd>
-<dt id="bayes3d.renderer.transform_image_zeros"><code class="name flex">
-<span>def <span class="ident">transform_image_zeros</span></span>(<span>image_jnp, intrinsics)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def transform_image_zeros(image_jnp, intrinsics):
-    image_jnp_2 = jnp.concatenate(
-        [
-            j.t3d.unproject_depth(image_jnp[:,:,2], intrinsics),
-            image_jnp[:,:,3:]
-        ],
-        axis=-1
-    )
-    return image_jnp_2</code></pre>
-</details>
-</dd>
-<dt id="bayes3d.renderer.transform_image_zeros_jit"><code class="name flex">
-<span>def <span class="ident">transform_image_zeros_jit</span></span>(<span>image_jnp, intrinsics)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def transform_image_zeros(image_jnp, intrinsics):
-    image_jnp_2 = jnp.concatenate(
-        [
-            j.t3d.unproject_depth(image_jnp[:,:,2], intrinsics),
-            image_jnp[:,:,3:]
-        ],
-        axis=-1
-    )
-    return image_jnp_2</code></pre>
-</details>
-</dd>
-<dt id="bayes3d.renderer.transform_image_zeros_parallel"><code class="name flex">
-<span>def <span class="ident">transform_image_zeros_parallel</span></span>(<span>image_jnp, intrinsics)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def transform_image_zeros(image_jnp, intrinsics):
-    image_jnp_2 = jnp.concatenate(
-        [
-            j.t3d.unproject_depth(image_jnp[:,:,2], intrinsics),
-            image_jnp[:,:,3:]
-        ],
-        axis=-1
-    )
-    return image_jnp_2</code></pre>
-</details>
-</dd>
-<dt id="bayes3d.renderer.transform_image_zeros_parallel_jit"><code class="name flex">
-<span>def <span class="ident">transform_image_zeros_parallel_jit</span></span>(<span>image_jnp, intrinsics)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def transform_image_zeros(image_jnp, intrinsics):
-    image_jnp_2 = jnp.concatenate(
-        [
-            j.t3d.unproject_depth(image_jnp[:,:,2], intrinsics),
-            image_jnp[:,:,3:]
-        ],
-        axis=-1
-    )
-    return image_jnp_2</code></pre>
 </details>
 </dd>
 </dl>
@@ -641,7 +330,7 @@ def render_custom_call(r: &#34;Renderer&#34;, poses, idx):
 <dt><strong><code>intrinsics</code></strong> :&ensp;<code><a title="bayes3d.camera.Intrinsics" href="camera.html#bayes3d.camera.Intrinsics">Intrinsics</a></code></dt>
 <dd>The camera intrinsics.</dd>
 <dt><strong><code>num_layers</code></strong> :&ensp;<code>int</code>, optional</dt>
-<dd>The number of layers to use for rendering. Defaults to 1024.</dd>
+<dd>The number of scenes to render in parallel. Defaults to 1024.</dd>
 </dl></div>
 <details class="source">
 <summary>
@@ -653,7 +342,7 @@ def render_custom_call(r: &#34;Renderer&#34;, poses, idx):
         
         Args:
             intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
-            num_layers (int, optional): The number of layers to use for rendering. Defaults to 1024.
+            num_layers (int, optional): The number of scenes to render in parallel. Defaults to 1024.
         &#34;&#34;&#34;
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
@@ -736,8 +425,8 @@ def render_custom_call(r: &#34;Renderer&#34;, poses, idx):
             jnp.ndarray: The rendered images. Shape (N, H, W, 4) where N is the number of scenes
                          the final dimension is the segmentation image.
         &#34;&#34;&#34;
-        images_jnp = render_custom_call(self, poses, indices)[0]
-        return transform_image_zeros_parallel(images_jnp, self.intrinsics)
+        images_jnp = _render_custom_call(self, poses, indices)[0]
+        return _transform_image_zeros_parallel(images_jnp, self.intrinsics)
 
     def render(self, poses, indices):
         &#34;&#34;&#34;Render a single scene.
@@ -915,8 +604,8 @@ the final dimension is the segmentation image.</p></div>
         jnp.ndarray: The rendered images. Shape (N, H, W, 4) where N is the number of scenes
                      the final dimension is the segmentation image.
     &#34;&#34;&#34;
-    images_jnp = render_custom_call(self, poses, indices)[0]
-    return transform_image_zeros_parallel(images_jnp, self.intrinsics)</code></pre>
+    images_jnp = _render_custom_call(self, poses, indices)[0]
+    return _transform_image_zeros_parallel(images_jnp, self.intrinsics)</code></pre>
 </details>
 </dd>
 </dl>
@@ -937,16 +626,7 @@ the final dimension is the segmentation image.</p></div>
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
-<li><code><a title="bayes3d.renderer.build_render_primitive" href="#bayes3d.renderer.build_render_primitive">build_render_primitive</a></code></li>
-<li><code><a title="bayes3d.renderer.project_cloud_to_pixels" href="#bayes3d.renderer.project_cloud_to_pixels">project_cloud_to_pixels</a></code></li>
-<li><code><a title="bayes3d.renderer.render_custom_call" href="#bayes3d.renderer.render_custom_call">render_custom_call</a></code></li>
-<li><code><a title="bayes3d.renderer.render_point_cloud" href="#bayes3d.renderer.render_point_cloud">render_point_cloud</a></code></li>
-<li><code><a title="bayes3d.renderer.render_point_cloud_batched" href="#bayes3d.renderer.render_point_cloud_batched">render_point_cloud_batched</a></code></li>
 <li><code><a title="bayes3d.renderer.setup_renderer" href="#bayes3d.renderer.setup_renderer">setup_renderer</a></code></li>
-<li><code><a title="bayes3d.renderer.transform_image_zeros" href="#bayes3d.renderer.transform_image_zeros">transform_image_zeros</a></code></li>
-<li><code><a title="bayes3d.renderer.transform_image_zeros_jit" href="#bayes3d.renderer.transform_image_zeros_jit">transform_image_zeros_jit</a></code></li>
-<li><code><a title="bayes3d.renderer.transform_image_zeros_parallel" href="#bayes3d.renderer.transform_image_zeros_parallel">transform_image_zeros_parallel</a></code></li>
-<li><code><a title="bayes3d.renderer.transform_image_zeros_parallel_jit" href="#bayes3d.renderer.transform_image_zeros_parallel_jit">transform_image_zeros_parallel_jit</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
