@@ -1,7 +1,7 @@
 from typing import Tuple
 
 import functools
-import bayes3d.nvdiffrast.common as dr
+import bayes3d.rendering.nvdiffrast.common as dr
 import torch
 from torch.utils import dlpack
 import bayes3d.camera

@@ -40,7 +40,7 @@ print("Number of frames: ", poses.shape[0])
 observed_images = b.RENDERER.render_many(poses[:,None,...],  jnp.array([0]))
 print("observed_images.shape", observed_images.shape)
 
-translation_deltas = j.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
+translation_deltas = j.utils.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
 rotation_deltas = jax.vmap(lambda key: j.distributions.gaussian_vmf(key, 0.00001, 800.0))(
     jax.random.split(jax.random.PRNGKey(3), 100)
 )

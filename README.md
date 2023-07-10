@@ -8,9 +8,13 @@ git submodule update --init --recursive
 conda create -n bayes3d python=3.9
 conda activate bayes3d
 pip install -r requirements.txt
-pip install -r genjax/requirements.txt
-pip install -e genjax
 pip install -e .
+```
+
+(optionally install genjax)
+```
+pip install -r assets/genjax/requirements.txt
+pip install -e assets/genjax
 ```
 
 ```
@@ -20,7 +24,7 @@ pip install jax==0.4.7 https://storage.googleapis.com/jax-releases/cuda11/jaxlib
 
 To get assets:
 ```
-bash download.sh
+bash scripts/download.sh
 ```
 
 ## Test

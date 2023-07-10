@@ -1,0 +1,165 @@
+# Copyright 2022 MIT Probabilistic Computing Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+site_name: Gen ⊗ JAX
+site_url: https://probcomp.github.io/genjax/
+repo_url: https://github.com/probcomp/genjax
+copyright: Copyright &copy; 2023 MIT Probabilistic Computing Project
+
+nav:
+  #  - Home: 
+  #      - index.md
+  #      - Comparisons to Gen.jl: genjax/diff_jl.md
+  - Inference notebooks: genjax/notebooks.md
+  - Library reference:
+      - genjax/library/index.md
+      - Core: 
+          - genjax/library/core/index.md
+          - Core datatypes: genjax/library/core/datatypes.md
+          - Generative datatypes: genjax/library/core/generative.md
+          - Interpreters: genjax/library/core/interpreters.md
+      - Generative function languages: 
+          - genjax/library/generative_functions/index.md
+          - Distributions: 
+              - genjax/library/generative_functions/distributions/index.md
+              - SciPy: genjax/library/generative_functions/distributions/scipy.md
+              - TensorFlow Distributions: genjax/library/generative_functions/distributions/tfd.md
+              - Custom: genjax/library/generative_functions/distributions/custom/index.md
+        #              - Coryx: genjax/library/generative_functions/distributions/coryx.md
+        #              - GenSP: genjax/library/generative_functions/distributions/gensp.md
+          - Builtin language: genjax/library/generative_functions/builtin.md
+          - Combinators: 
+              - genjax/library/generative_functions/combinators/index.md
+              - Map combinator: genjax/library/generative_functions/combinators/map.md
+              - Unfold combinator: genjax/library/generative_functions/combinators/unfold.md
+              - Switch combinator: genjax/library/generative_functions/combinators/switch.md
+      - Extension modules: 
+          - genjax/library/extensions/index.md
+          - Gaussian processes: genjax/library/extensions/tinygp.md
+          - HMC/NUTS: genjax/library/extensions/blackjax.md
+    #      - Inference: 
+    #          - genjax/library/inference/index.md
+    #          - Importance sampling: genjax/library/inference/is.md
+    #          - Markov chain Monte Carlo: genjax/library/inference/mcmc.md
+    #          - Variational inference: genjax/library/inference/vi.md
+    #      - Differentiable programming:
+    #          - genjax/library/diff_prog/index.md
+    #          - Differentiable state: genjax/library/diff_prog/state.md
+    #          - Automatic differentiation of expected values: genjax/library/diff_prog/adev.md
+  - For developers:
+      - Code of conduct: codeofconduct.md
+      - Contributing: contributing.md
+      - License: license.md
+
+theme:
+  name: material
+  logo: assets/img/gen-logo.png
+  favicon: assets/img/gen-logo.png
+  icon:
+    repo: fontawesome/brands/github
+  font:
+    text: Atkinson Hyperlegible 
+  features:
+    - optimize
+    - typeset
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    - content.code.select
+    - content.tooltips
+    - content.tabs.link
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - navigation.tracking
+    - navigation.instant
+    - navigation.path
+    - navigation.prune
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: white
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+      
+watch:
+  - src/genjax
+
+plugins:
+  - search
+  - offline
+  - markdown-exec
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: date
+  - mkdocstrings:
+      enabled: !ENV [ENABLE_MKDOCSTRINGS, true]
+      custom_templates: templates
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+
+extra:
+  generator: false
+
+extra_css: 
+  - css/fonts.css
+  - css/custom.css
+  - css/mkdocstrings.css
+
+extra_javascript:
+  - js/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+markdown_extensions:
+  - attr_list
+  - md_in_html
+  - admonition
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - toc:
+      permalink: true
