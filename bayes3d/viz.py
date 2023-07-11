@@ -6,7 +6,7 @@ import numpy as np
 import bayes3d.utils
 import matplotlib.pyplot as plt
 import matplotlib
-from matplotlib.aanimation import animation
+# from matplotlib.animation import animation
 import graphviz
 import distinctipy
 import jax.numpy as jnp
@@ -39,25 +39,25 @@ def make_gif_from_pil_images(images, filename):
         loop=0,
     )
 
-def ipython_display_video(frames, framerate=30):
-    # input type: PIL frames
-    height, width, _ = frames[0].shape
-    dpi = 70
-    orig_backend = matplotlib.get_backend()
-    matplotlib.use('Agg')  # Switch to headless 'Agg' to inhibit figure rendering.
-    fig, ax = plt.subplots(1, 1, figsize=(width / dpi, height / dpi), dpi=dpi)
-    matplotlib.use(orig_backend)  # Switch back to the original backend.
-    ax.set_axis_off()
-    ax.set_aspect('equal')
-    ax.set_position([0, 0, 1, 1])
-    im = ax.imshow(frames[0])
-    def update(frame):
-        im.set_data(frame)
-        return [im]
-    interval = 1000/framerate
-    anim = animation.FuncAnimation(fig=fig, func=update, frames=frames,
-                                    interval=interval, blit=True, repeat=True)
-    return HTML(anim.to_html5_video())
+# def ipython_display_video(frames, framerate=30):
+#     # input type: PIL frames
+#     height, width, _ = frames[0].shape
+#     dpi = 70
+#     orig_backend = matplotlib.get_backend()
+#     matplotlib.use('Agg')  # Switch to headless 'Agg' to inhibit figure rendering.
+#     fig, ax = plt.subplots(1, 1, figsize=(width / dpi, height / dpi), dpi=dpi)
+#     matplotlib.use(orig_backend)  # Switch back to the original backend.
+#     ax.set_axis_off()
+#     ax.set_aspect('equal')
+#     ax.set_position([0, 0, 1, 1])
+#     im = ax.imshow(frames[0])
+#     def update(frame):
+#         im.set_data(frame)
+#         return [im]
+#     interval = 1000/framerate
+#     anim = animation.FuncAnimation(fig=fig, func=update, frames=frames,
+#                                     interval=interval, blit=True, repeat=True)
+#     return HTML(anim.to_html5_video())
 
 def load_image_from_file(filename):
     return Image(filename)
