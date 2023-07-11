@@ -1,1 +1,1 @@
-pdoc --html --output-dir ../docs ../bayes3d --force
+pdoc --html --output-dir docs bayes3d --force

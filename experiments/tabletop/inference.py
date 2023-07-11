@@ -78,10 +78,23 @@ c2f_contact_update_jit = jax.jit(c2f_contact_update, static_argnames=("number",)
 
 V_VARIANT = 0
 O_VARIANT = 0
+HIERARCHICAL_BAYES = True
 
-for scene_id in tqdm(range(94,200)):
+for scene_id in tqdm(range(200)):
+    if HIERARCHICAL_BAYES:
+        filename = f"data/inferred_hb_{scene_id}.joblib"
+    else:
+        filename = f"data/inferred_{V_VARIANT}_{O_VARIANT}_{scene_id}.joblib"
+
+    if os.path.exists(filename):
+        continue
+
     print("GPU Memory: ", b.utils.get_gpu_memory())
-    V_GRID, O_GRID = jnp.array([VARIANCE_GRID[V_VARIANT]]), jnp.array([OUTLIER_GRID[O_VARIANT]])
+    if HIERARCHICAL_BAYES:
+        V_GRID = VARIANCE_GRID
+        O_GRID = OUTLIER_GRID
+    else:
+        V_GRID, O_GRID = jnp.array([VARIANCE_GRID[V_VARIANT]]), jnp.array([OUTLIER_GRID[O_VARIANT]])
 
     gt_trace = importance_jit(key, *joblib.load(f"data/trace_{scene_id}.joblib"))[1][1]
     choices = gt_trace.get_choices()
@@ -113,6 +126,6 @@ for scene_id in tqdm(range(94,200)):
     print(b.genjax.get_indices(gt_trace))
     print(b.genjax.get_indices(trace))
 
-    joblib.dump((trace.get_choices(), trace.get_args()), f"data/inferred_{V_VARIANT}_{O_VARIANT}_{scene_id}.joblib")
+    joblib.dump((trace.get_choices(), trace.get_args()), filename)
     del trace
     del gt_trace

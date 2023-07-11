@@ -35,13 +35,6 @@ from .transforms_3d import (
 )
 from jax.scipy.special import logsumexp
 
-
-def gaussian_pose(key, covar):
-    translation = tfp.distributions.MultivariateNormalFullCovariance(jnp.zeros(3), covar).sample(seed=key)
-    return jnp.vstack(
-        [jnp.hstack([jnp.eye(3), translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
-    )
-
 def vmf(key, concentration):
     translation =jnp.zeros(3)
     quat = tfp.distributions.VonMisesFisher(
@@ -53,17 +46,7 @@ def vmf(key, concentration):
     )
 vmf_jit = jax.jit(vmf)
 
-def gaussian_vmf_cov(key, covar, concentration):
-    translation = tfp.distributions.MultivariateNormalFullCovariance(jnp.zeros(3), covar).sample(seed=key)
-    quat = tfp.distributions.VonMisesFisher(
-        jnp.array([1.0, 0.0, 0.0, 0.0]), concentration
-    ).sample(seed=key)
-    rot_matrix =  quaternion_to_rotation_matrix(quat)
-    return jnp.vstack(
-        [jnp.hstack([rot_matrix, translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
-    )
-
-def gaussian_vmf(key, var, concentration):
+def gaussian_vmf_zero_mean(key, var, concentration):
     translation = tfp.distributions.MultivariateNormalDiag(jnp.zeros(3), jnp.ones(3) * var).sample(seed=key)
     quat = tfp.distributions.VonMisesFisher(
         jnp.array([1.0, 0.0, 0.0, 0.0]), concentration
@@ -72,10 +55,9 @@ def gaussian_vmf(key, var, concentration):
     return jnp.vstack(
         [jnp.hstack([rot_matrix, translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
     )
-    
 
-def gaussian_vmf_sample(key, pose_mean, var, concentration):
-    return pose_mean.dot(gaussian_vmf(key, var, concentration))
+def gaussian_vmf(key, pose_mean, var, concentration):
+    return pose_mean.dot(gaussian_vmf_zero_mean(key, var, concentration))
 
 def gaussian_vmf_logpdf(pose, pose_mean, var, concentration):
     translation_prob = tfp.distributions.MultivariateNormalDiag(pose_mean[:3,3], jnp.ones(3) * var).log_prob(pose[:3,3])
@@ -88,7 +70,7 @@ def gaussian_vmf_logpdf(pose, pose_mean, var, concentration):
 
 def gaussian_vmf_mixture_sample(key, pose_means, log_weights, var, concentration):
     idx = tfp.distributions.Categorical(logits=log_weights).sample(seed=key)
-    return gaussian_vmf_sample(key, pose_means[idx], var, concentration)
+    return gaussian_vmf(key, pose_means[idx], var, concentration)
 
 def gaussian_vmf_mixture_logpdf(key, pose, pose_means, log_weights, var, concentration):
     log_probs = jax.vmap(gaussian_vmf_logpdf, in_axes=(None, 0, None, None))(pose, pose_means, var, concentration)
@@ -115,24 +97,8 @@ def gaussian_vmf_logpdf(pose, pose_mean, var, concentration):
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
-<dt id="bayes3d.distributions.gaussian_pose"><code class="name flex">
-<span>def <span class="ident">gaussian_pose</span></span>(<span>key, covar)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def gaussian_pose(key, covar):
-    translation = tfp.distributions.MultivariateNormalFullCovariance(jnp.zeros(3), covar).sample(seed=key)
-    return jnp.vstack(
-        [jnp.hstack([jnp.eye(3), translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
-    )</code></pre>
-</details>
-</dd>
 <dt id="bayes3d.distributions.gaussian_vmf"><code class="name flex">
-<span>def <span class="ident">gaussian_vmf</span></span>(<span>key, var, concentration)</span>
+<span>def <span class="ident">gaussian_vmf</span></span>(<span>key, pose_mean, var, concentration)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -140,35 +106,8 @@ def gaussian_vmf_logpdf(pose, pose_mean, var, concentration):
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def gaussian_vmf(key, var, concentration):
-    translation = tfp.distributions.MultivariateNormalDiag(jnp.zeros(3), jnp.ones(3) * var).sample(seed=key)
-    quat = tfp.distributions.VonMisesFisher(
-        jnp.array([1.0, 0.0, 0.0, 0.0]), concentration
-    ).sample(seed=key)
-    rot_matrix =  quaternion_to_rotation_matrix(quat)
-    return jnp.vstack(
-        [jnp.hstack([rot_matrix, translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
-    )</code></pre>
-</details>
-</dd>
-<dt id="bayes3d.distributions.gaussian_vmf_cov"><code class="name flex">
-<span>def <span class="ident">gaussian_vmf_cov</span></span>(<span>key, covar, concentration)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def gaussian_vmf_cov(key, covar, concentration):
-    translation = tfp.distributions.MultivariateNormalFullCovariance(jnp.zeros(3), covar).sample(seed=key)
-    quat = tfp.distributions.VonMisesFisher(
-        jnp.array([1.0, 0.0, 0.0, 0.0]), concentration
-    ).sample(seed=key)
-    rot_matrix =  quaternion_to_rotation_matrix(quat)
-    return jnp.vstack(
-        [jnp.hstack([rot_matrix, translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
-    )</code></pre>
+<pre><code class="python">def gaussian_vmf(key, pose_mean, var, concentration):
+    return pose_mean.dot(gaussian_vmf_zero_mean(key, var, concentration))</code></pre>
 </details>
 </dd>
 <dt id="bayes3d.distributions.gaussian_vmf_logpdf"><code class="name flex">
@@ -216,11 +155,11 @@ def gaussian_vmf_logpdf(pose, pose_mean, var, concentration):
 </summary>
 <pre><code class="python">def gaussian_vmf_mixture_sample(key, pose_means, log_weights, var, concentration):
     idx = tfp.distributions.Categorical(logits=log_weights).sample(seed=key)
-    return gaussian_vmf_sample(key, pose_means[idx], var, concentration)</code></pre>
+    return gaussian_vmf(key, pose_means[idx], var, concentration)</code></pre>
 </details>
 </dd>
-<dt id="bayes3d.distributions.gaussian_vmf_sample"><code class="name flex">
-<span>def <span class="ident">gaussian_vmf_sample</span></span>(<span>key, pose_mean, var, concentration)</span>
+<dt id="bayes3d.distributions.gaussian_vmf_zero_mean"><code class="name flex">
+<span>def <span class="ident">gaussian_vmf_zero_mean</span></span>(<span>key, var, concentration)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -228,8 +167,15 @@ def gaussian_vmf_logpdf(pose, pose_mean, var, concentration):
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def gaussian_vmf_sample(key, pose_mean, var, concentration):
-    return pose_mean.dot(gaussian_vmf(key, var, concentration))</code></pre>
+<pre><code class="python">def gaussian_vmf_zero_mean(key, var, concentration):
+    translation = tfp.distributions.MultivariateNormalDiag(jnp.zeros(3), jnp.ones(3) * var).sample(seed=key)
+    quat = tfp.distributions.VonMisesFisher(
+        jnp.array([1.0, 0.0, 0.0, 0.0]), concentration
+    ).sample(seed=key)
+    rot_matrix =  quaternion_to_rotation_matrix(quat)
+    return jnp.vstack(
+        [jnp.hstack([rot_matrix, translation.reshape(3,1) ]), jnp.array([0.0, 0.0, 0.0, 1.0])]
+    )</code></pre>
 </details>
 </dd>
 <dt id="bayes3d.distributions.vmf"><code class="name flex">
@@ -290,13 +236,11 @@ def gaussian_vmf_logpdf(pose, pose_mean, var, concentration):
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
-<li><code><a title="bayes3d.distributions.gaussian_pose" href="#bayes3d.distributions.gaussian_pose">gaussian_pose</a></code></li>
 <li><code><a title="bayes3d.distributions.gaussian_vmf" href="#bayes3d.distributions.gaussian_vmf">gaussian_vmf</a></code></li>
-<li><code><a title="bayes3d.distributions.gaussian_vmf_cov" href="#bayes3d.distributions.gaussian_vmf_cov">gaussian_vmf_cov</a></code></li>
 <li><code><a title="bayes3d.distributions.gaussian_vmf_logpdf" href="#bayes3d.distributions.gaussian_vmf_logpdf">gaussian_vmf_logpdf</a></code></li>
 <li><code><a title="bayes3d.distributions.gaussian_vmf_mixture_logpdf" href="#bayes3d.distributions.gaussian_vmf_mixture_logpdf">gaussian_vmf_mixture_logpdf</a></code></li>
 <li><code><a title="bayes3d.distributions.gaussian_vmf_mixture_sample" href="#bayes3d.distributions.gaussian_vmf_mixture_sample">gaussian_vmf_mixture_sample</a></code></li>
-<li><code><a title="bayes3d.distributions.gaussian_vmf_sample" href="#bayes3d.distributions.gaussian_vmf_sample">gaussian_vmf_sample</a></code></li>
+<li><code><a title="bayes3d.distributions.gaussian_vmf_zero_mean" href="#bayes3d.distributions.gaussian_vmf_zero_mean">gaussian_vmf_zero_mean</a></code></li>
 <li><code><a title="bayes3d.distributions.vmf" href="#bayes3d.distributions.vmf">vmf</a></code></li>
 <li><code><a title="bayes3d.distributions.vmf_jit" href="#bayes3d.distributions.vmf_jit">vmf_jit</a></code></li>
 </ul>

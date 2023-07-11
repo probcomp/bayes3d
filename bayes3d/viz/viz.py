@@ -54,7 +54,7 @@ def get_depth_image(image, min=None, max=None, cmap=None):
     img = Image.fromarray(
         np.rint(cmap(depth) * 255.0).astype(np.int8), mode="RGBA"
     )
-    return img
+    return img.convert("RGB")
 
 def add_rgba_dimension(particles_rendered):
     if particles_rendered.shape[-1] == 3:
@@ -73,7 +73,7 @@ def get_rgb_image(image, max=255.0):
             image / max * 255.0
         ).astype(np.int8),
         mode=image_type,
-    ).convert("RGBA")
+    ).convert("RGB")
     return img
 
 def overlay_image(img_1, img_2, alpha=0.5):
