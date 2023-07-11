@@ -40,7 +40,7 @@ observed_images = b.RENDERER.render_many(poses[:,None,...],  jnp.array([0]))
 print("observed_images.shape", observed_images.shape)
 
 translation_deltas = b.utils.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
-rotation_deltas = jax.vmap(lambda key: b.distributions.gaussian_vmf(key, 0.00001, 800.0))(
+rotation_deltas = jax.vmap(lambda key: b.distributions.gaussian_vmf_zero_mean(key, 0.00001, 800.0))(
     jax.random.split(jax.random.PRNGKey(3), 100)
 )
 
@@ -75,6 +75,6 @@ viz_images = [
     )
     for (r, d) in zip(rerendered_images, observed_images)
 ]
-b.make_gif(viz_images, "demo.gif")
+b.make_gif(viz_images, "assets/demo.gif")
 
 from IPython import embed; embed()
