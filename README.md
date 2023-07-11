@@ -1,5 +1,8 @@
 # Bayes3D
 
+[![](https://img.shields.io/badge/docs-stable-blue.svg?style=flat-square)](https://probcomp.github.io/bayes3d/bayes3d/)
+
+
 
 ## Setup
 
