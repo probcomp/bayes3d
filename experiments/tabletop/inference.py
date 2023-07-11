@@ -33,14 +33,6 @@ for idx in range(1,22):
 
 b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(), "sample_objs/cube.obj"), scaling_factor=1.0/1000000000.0)
 
-table_pose = b.t3d.inverse_pose(
-    b.t3d.transform_from_pos_target_up(
-        jnp.array([0.0, 2.0, 1.20]),
-        jnp.array([0.0, 0.0, 0.0]),
-        jnp.array([0.0, 0.0, 1.0]),
-    )
-)
-
 VARIANCE_GRID = jnp.array([0.000001, 0.000001, 0.00001])
 OUTLIER_GRID = jnp.array([0.0001, 0.001, 0.01])
 # VARIANCE_GRID = jnp.array([0.001])
@@ -49,7 +41,7 @@ OUTLIER_VOLUME = 100.0
 
 grid_params = [
     (0.2, jnp.pi, (11,11,11)), (0.1, jnp.pi/3, (11,11,11)), (0.05, 0.0, (11,11,1)),
-    (0.05, jnp.pi/5, (11,11,11)), (0.02, 2*jnp.pi, (5,5,51))
+    (0.05, jnp.pi/5, (11,11,11)), (0.02, 2*jnp.pi, (5,5,51)), (0.02, jnp.pi/5, (11,11,11))
 ]
 contact_param_gridding_schedule = [
     b.utils.make_translation_grid_enumeration_3d(
@@ -77,7 +69,7 @@ def c2f_contact_update(trace_, key,  number, contact_param_deltas, VARIANCE_GRID
 c2f_contact_update_jit = jax.jit(c2f_contact_update, static_argnames=("number",))
 
 V_VARIANT = 0
-O_VARIANT = 1
+O_VARIANT = 0
 HIERARCHICAL_BAYES = True
 
 for scene_id in tqdm(range(200)):
@@ -96,10 +88,13 @@ for scene_id in tqdm(range(200)):
     else:
         V_GRID, O_GRID = jnp.array([VARIANCE_GRID[V_VARIANT]]), jnp.array([OUTLIER_GRID[O_VARIANT]])
 
+    print(V_GRID, O_GRID)
+
     gt_trace = importance_jit(key, *joblib.load(f"data/trace_{scene_id}.joblib"))[1][1]
     choices = gt_trace.get_choices()
     key, (_,trace) = importance_jit(key, choices, (jnp.arange(1), jnp.arange(22), *gt_trace.get_args()[2:]))
 
+    all_all_paths = []
     for _ in range(3):
         all_paths = []
         for obj_id in tqdm(range(len(b.RENDERER.meshes)-1)):
@@ -117,6 +112,7 @@ for scene_id in tqdm(range(200)):
             all_paths.append(
                 path
             )
+        all_all_paths.append(all_paths)
         
         scores = jnp.array([t[-1].get_score() for t in all_paths])
         print(scores)
