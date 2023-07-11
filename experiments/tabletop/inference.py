@@ -41,8 +41,8 @@ table_pose = b.t3d.inverse_pose(
     )
 )
 
-VARIANCE_GRID = jnp.array([0.00001, 0.0001, 0.001])
-OUTLIER_GRID = jnp.array([0.01, 0.001, 0.0001])
+VARIANCE_GRID = jnp.array([0.000001, 0.000001, 0.00001])
+OUTLIER_GRID = jnp.array([0.0001, 0.001, 0.01])
 # VARIANCE_GRID = jnp.array([0.001])
 # OUTLIER_GRID = jnp.array([ 0.0001])
 OUTLIER_VOLUME = 100.0
@@ -77,7 +77,7 @@ def c2f_contact_update(trace_, key,  number, contact_param_deltas, VARIANCE_GRID
 c2f_contact_update_jit = jax.jit(c2f_contact_update, static_argnames=("number",))
 
 V_VARIANT = 0
-O_VARIANT = 0
+O_VARIANT = 1
 HIERARCHICAL_BAYES = True
 
 for scene_id in tqdm(range(200)):
