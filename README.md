@@ -39,3 +39,18 @@ python demo.py
 and view `demo.gif`
 
 ![](assets/demo.gif)
+
+
+## GCP Setup Instructions
+
+Get images `tf-2-12-gpu-debian-11-py310`, on NVIDIA V100
+
+sudo /opt/deeplearning/install-driver.sh
+
+
+# Helpful commands
+
+```
+# Check CuDNN version
+cat /usr/local/cuda/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
+```
