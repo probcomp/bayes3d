@@ -13,12 +13,6 @@ pip install -r requirements.txt
 pip install -e assets/genjax
 ```
 
-(optionally install genjax)
-```
-pip install -r assets/genjax/requirements.txt
-pip install -e assets/genjax
-```
-
 Install JAX:
 ```
 pip uninstall jax jaxlib
@@ -31,17 +25,6 @@ Download assets:
 ```
 bash scripts/download.sh
 ```
-
-## Test
-
-To test successful setup run:
-```
-python demo.py
-```
-and view `demo.gif`
-
-![](assets/demo.gif)
-
 
 ## GCP Setup Instructions
 

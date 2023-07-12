@@ -88,8 +88,8 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
         jnp.linalg.inv(camera_pose) @ poses , indices
     )[...,:3]
 
-    variance = genjax.distributions.tfp_uniform(0.00001, 0.01) @ &#34;variance&#34;
-    outlier_prob  = genjax.distributions.tfp_uniform(0.00001, 0.01) @ &#34;outlier_prob&#34;
+    variance = genjax.distributions.tfp_uniform(0.0000001, 0.1) @ &#34;variance&#34;
+    outlier_prob  = genjax.distributions.tfp_uniform(0.00000001, 0.1) @ &#34;outlier_prob&#34;
     image = image_likelihood(rendered, variance, outlier_prob, outlier_volume) @ &#34;image&#34;
     return rendered, indices, poses, parents, contact_params, faces_parents, faces_child, root_poses
 
