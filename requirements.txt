@@ -19,7 +19,6 @@ torch
 torchvision
 torchaudio
 sklearn
-pickle
 zmq
 tqdm
 jupyterlab
