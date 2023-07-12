@@ -3,17 +3,14 @@
 [![](https://img.shields.io/badge/docs-stable-blue.svg?style=flat-square)](https://probcomp.github.io/bayes3d/bayes3d/)
 
 
-
-
-## Setup
+## Setup Instructions
 
 ```
 git clone https://github.com/probcomp/bayes3d.git
-git submodule update --init --recursive
 conda create -n bayes3d python=3.9
 conda activate bayes3d
 pip install -r requirements.txt
-pip install -e .
+pip install -e assets/genjax
 ```
 
 (optionally install genjax)

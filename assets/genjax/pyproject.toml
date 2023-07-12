@@ -6,7 +6,6 @@ authors = [
   "McCoy R. Becker <mccoyb@mit.edu>, MIT Probabilistic Computing Project <probcomp-assist@csail.mit.edu>",
 ]
 license = "Apache 2.0"
-readme = "README.md"
 homepage = "https://github.com/probcomp/genjax"
 repository = "https://github.com/probcomp/genjax"
 documentation = "https://probcomp.github.io/genjax/"
@@ -17,7 +16,7 @@ Changelog = "https://github.com/probcomp/genjax/releases"
 
 [tool.poetry.dependencies]
 python = ">=3.8,<4.0"
-jax = "^0.4.10"
+jax = "^0.4.7"
 numpy = "^1.24.0"
 tensorflow-probability = "^0.19.0"
 rich = "^12.6.0"
