@@ -19,7 +19,8 @@ gdown
 torch
 torchvision
 torchaudio
-pickle5
+sklearn
+pickle
 zmq
 tqdm
 jupyterlab

@@ -30,6 +30,7 @@ def gaussian_vmf_zero_mean(key, var, concentration):
 
 def gaussian_vmf(key, pose_mean, var, concentration):
     return pose_mean.dot(gaussian_vmf_zero_mean(key, var, concentration))
+gaussian_vmf_jit = jax.jit(gaussian_vmf)
 
 def gaussian_vmf_logpdf(pose, pose_mean, var, concentration):
     translation_prob = tfp.distributions.MultivariateNormalDiag(pose_mean[:3,3], jnp.ones(3) * var).log_prob(pose[:3,3])
@@ -39,6 +40,8 @@ def gaussian_vmf_logpdf(pose, pose_mean, var, concentration):
         quat_mean, concentration
     ).log_prob(quat)
     return translation_prob + quat_prob
+gaussian_vmf_logpdf_jit = jax.jit(gaussian_vmf_logpdf)
+
 
 def gaussian_vmf_mixture_sample(key, pose_means, log_weights, var, concentration):
     idx = tfp.distributions.Categorical(logits=log_weights).sample(seed=key)

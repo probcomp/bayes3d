@@ -132,3 +132,6 @@ def make_enumerator(addresses):
     def enumerator_score(trace, key, *args):
         return enumerator(trace, key, *args).get_score()
     return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))
+
+def make_unknown_change_argdiffs(trace):
+    return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))

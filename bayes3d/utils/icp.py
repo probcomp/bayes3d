@@ -5,7 +5,6 @@ from bayes3d.transforms_3d import (
 )
 import jax
 import functools
-import open3d as o3d
 import numpy as np
 
 def get_nearest_neighbor(
@@ -50,7 +49,7 @@ def icp(render_func, init_pose, obs_img, outer_iterations, inner_iterations):
 
 # Get transform to apply to a to make it close to b
 def icp_open3d(a,b):
-    import open3d as od3
+    import open3d as o3d
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(a)
 

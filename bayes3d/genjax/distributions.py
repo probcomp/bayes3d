@@ -7,7 +7,7 @@ import bayes3d as b
 @dataclass
 class GaussianVMFPose(ExactDensity):
     def sample(self, key, pose_mean, var, concentration, **kwargs):
-        return b.distributions.gaussian_vmf_sample(key, pose_mean, var, concentration)
+        return b.distributions.gaussian_vmf(key, pose_mean, var, concentration)
 
     def logpdf(self, pose, pose_mean, var, concentration, **kwargs):
 
