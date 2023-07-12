@@ -10,7 +10,7 @@ def trimesh_to_o3d_triangle_mesh(trimesh_mesh):
     mesh.triangle_normals = o3d.utility.Vector3dVector(np.array(trimesh_mesh.face_normals))
     return mesh
 
-class O3DVis(object):
+class Open3DVisualizer(object):
     def __init__(self, intrinsics):
         self.render = o3d.visualization.rendering.OffscreenRenderer(intrinsics.width, intrinsics.height)
         # self.set_background(np.array([0.0, 0.0, 0.0, 0.0]))
