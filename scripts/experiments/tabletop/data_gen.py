@@ -44,7 +44,10 @@ key = jax.random.PRNGKey(500)
 
 importance_jit = jax.jit(b.genjax.model.importance)
 
-for scene_id in tqdm(range(200)):
+scene_id = 0
+while True:
+    if scene_id >= 100:
+        break
     key, (_,trace) = importance_jit(key, genjax.choice_map({
         "parent_0": -1,
         "parent_1": 0,
@@ -66,4 +69,8 @@ for scene_id in tqdm(range(200)):
         jnp.array([jnp.array([-0.2, -0.2, -2*jnp.pi]), jnp.array([0.2, 0.2, 2*jnp.pi])]),
         b.RENDERER.model_box_dims, OUTLIER_VOLUME)
     )
+    if (b.genjax.get_indices(trace) == 21).sum() > 1:
+        continue
+    
     joblib.dump((trace.get_choices(), trace.get_args()), f"data/trace_{scene_id}.joblib")
+    scene_id += 1

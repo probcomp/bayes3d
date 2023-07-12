@@ -167,14 +167,13 @@ threedp3_likelihood_multi_r_full_hierarchical_bayes_jit = jax.jit(jax.vmap(jax.v
 @functools.partial(
     jnp.vectorize,
     signature='(m)->()',
-    excluded=(1,2,3,4,5,6,7,),
+    excluded=(1,2,3,4,5,6,),
 )
 def gausssian_mixture_vectorize(
     ij,
     observed_xyz: jnp.ndarray,
     rendered_xyz_padded: jnp.ndarray,
     variance,
-    num_mixture_components,
     outlier_prob: float,
     outlier_volume: float,
     filter_size: int,
@@ -188,7 +187,7 @@ def gausssian_mixture_vectorize(
             distances,
             loc=0.0,
             scale=jnp.sqrt(variance)
-        ).sum(-1) - jnp.log(num_mixture_components)
+        ).sum(-1) - jnp.log((2*filter_size + 1)**2)
     )
     return jnp.logaddexp(probability + jnp.log(1.0 - outlier_prob), jnp.log(outlier_prob) - jnp.log(outlier_volume))
 
@@ -200,15 +199,13 @@ def threedp3_likelihood_per_pixel(
     outlier_volume,
     filter_size
 ):
-    num_mixture_components = observed_xyz.shape[0] * observed_xyz.shape[1]
-
     rendered_xyz_padded = jax.lax.pad(rendered_xyz,  -100.0, ((filter_size,filter_size,0,),(filter_size,filter_size,0,),(0,0,0,)))
     jj, ii = jnp.meshgrid(jnp.arange(observed_xyz.shape[1]), jnp.arange(observed_xyz.shape[0]))
     indices = jnp.stack([ii,jj],axis=-1)
     log_probabilities = gausssian_mixture_vectorize(
         indices, observed_xyz,
         rendered_xyz_padded,
-        variance, num_mixture_components, outlier_prob, outlier_volume, filter_size
+        variance, outlier_prob, outlier_volume, filter_size
     )
     return log_probabilities
 

@@ -33,15 +33,15 @@ for idx in range(1,22):
 
 b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(), "sample_objs/cube.obj"), scaling_factor=1.0/1000000000.0)
 
-VARIANCE_GRID = jnp.array([0.000001, 0.000001, 0.00001])
+OUTLIER_VOLUME = 100.0
+VARIANCE_GRID = jnp.array([0.000001, 0.00001, 0.0001])
 OUTLIER_GRID = jnp.array([0.0001, 0.001, 0.01])
 # VARIANCE_GRID = jnp.array([0.001])
 # OUTLIER_GRID = jnp.array([ 0.0001])
-OUTLIER_VOLUME = 100.0
 
 grid_params = [
     (0.2, jnp.pi, (11,11,11)), (0.1, jnp.pi/3, (11,11,11)), (0.05, 0.0, (11,11,1)),
-    (0.05, jnp.pi/5, (11,11,11)), (0.02, 2*jnp.pi, (5,5,51)), (0.02, jnp.pi/5, (11,11,11))
+    (0.05, jnp.pi/5, (11,11,11)), (0.02, 2*jnp.pi, (5,5,51)), (0.02, jnp.pi/5, (11,11,11)), (0.005, jnp.pi/10, (11,11,11))
 ]
 contact_param_gridding_schedule = [
     b.utils.make_translation_grid_enumeration_3d(
@@ -71,8 +71,9 @@ c2f_contact_update_jit = jax.jit(c2f_contact_update, static_argnames=("number",)
 V_VARIANT = 0
 O_VARIANT = 0
 HIERARCHICAL_BAYES = True
+NUM_SCENES = 100
 
-for scene_id in tqdm(range(200)):
+for scene_id in tqdm(range(NUM_SCENES)):
     if HIERARCHICAL_BAYES:
         filename = f"data/inferred_hb_{scene_id}.joblib"
     else:
