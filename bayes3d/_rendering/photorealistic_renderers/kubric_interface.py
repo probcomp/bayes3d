@@ -10,7 +10,17 @@ import os
 # 3. Then adapt the subprocess call below to make the docker call and instead of calling examples/helloworld.py, it should be calling photorealistric_renderers/kubric_exec.py
 # 4. In the final part of this function load the rgb and depth data that Kubric generated, and return it
 
-def render_multiobject_parallel(mesh_paths, poses, intrinsics, scaling_factor=1.0, lighting=5.0):
+def render_many(mesh_paths, poses, intrinsics, scaling_factor=1.0, lighting=5.0):
+    """Render a scene with multiple objects in it through kubric.
+
+    Args:
+        mesh_paths (list): List of paths to meshes.
+        poses (jnp.ndarray): Array of poses of shape (num_frames, num_objects, 4, 4).
+        intrinsics (b.camera.Intrinsics): Camera intrinsics.
+    Returns:
+        list: List of rendered RGBD images.    
+    """
+
     #asset intrinsics are compatible with Blender camera parameters
     assert intrinsics.fx == intrinsics.fy, "fx and fy must be equal"
     assert intrinsics.cx == intrinsics.width/2, "cx must be width/2"
@@ -18,12 +28,12 @@ def render_multiobject_parallel(mesh_paths, poses, intrinsics, scaling_factor=1.
 
     K = j.camera.K_from_intrinsics(intrinsics)
     poses_pos_quat_all = []
-    for ii in range(poses.shape[1]):
+    for scene_index in range(poses.shape[0]):
         poses_pos_quat = []
-        for jj in range(poses.shape[0]):
+        for object_index in range(poses.shape[1]):
             poses_pos_quat.append((
-                np.array(poses[jj, ii,:3,3]),
-                np.array(j.t3d.rotation_matrix_to_quaternion(poses[jj,ii,:3,:3]))
+                np.array(poses[scene_index, object_index,:3,3]),
+                np.array(j.t3d.rotation_matrix_to_quaternion(poses[scene_index,object_index,:3,:3]))
             ))
         poses_pos_quat_all.append(poses_pos_quat)
 
@@ -55,13 +65,12 @@ def render_multiobject_parallel(mesh_paths, poses, intrinsics, scaling_factor=1.
     command_strings = "".join([
         f""" --volume {os.path.dirname(p)}:{os.path.dirname(p)} """ for p in mesh_paths
     ])
-    
-    command_string2 = f""" kubricdockerhub/kubruntu /usr/bin/python3 {path}/jax3dp3/photorealistic_renderers/_kubric_exec_parallel.py"""
+    command_string2 = f""" kubricdockerhub/kubruntu /usr/bin/python3 {path}/photorealistic_renderers/_kubric_exec_parallel.py"""
     print(command_string + command_strings + command_string2)
     subprocess.run([command_string + command_strings + command_string2], shell=True)
 
     rgbd_images = []
-    for i in range(poses.shape[1]):
+    for i in range(poses.shape[0]):
         data = np.load(f"/tmp/{i}.npz")
         rgb, seg, depth = data["rgba"], data["segmentation"][...,0], data["depth"][:,:,0]
         depth[depth > intrinsics.far] = intrinsics.far
