@@ -1,3 +1,0 @@
-[submodule "bayes3d/cosypose_baseline/cosypose"]
-	path = bayes3d/cosypose_baseline/cosypose
-	url = https://github.com/Simple-Robotics/cosypose.git
