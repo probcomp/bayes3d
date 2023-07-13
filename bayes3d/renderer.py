@@ -116,6 +116,9 @@ class Renderer(object):
             torch.tensor(triangles.astype(np.int32), device='cuda'),
         )
 
+    def _render_many(self, poses, indices):
+        return _render_custom_call(self, poses, indices)[0]
+
     def render_many(self, poses, indices):
         """Render many scenes in parallel.
         
