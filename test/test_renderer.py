@@ -2,13 +2,12 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 import bayes3d as b
-import bayes3d as j
 import trimesh
 import os
 import time
 
 
-intrinsics = j.Intrinsics(
+intrinsics = b.Intrinsics(
     300,
     300,
     200.0,200.0,
@@ -16,14 +15,14 @@ intrinsics = j.Intrinsics(
     0.001, 50.0
 )
 b.setup_renderer(intrinsics)
-renderer = j.RENDERER
+renderer = b.RENDERER
 
 r = 0.1
 outlier_prob = 0.01
 max_depth = 15.0
 
-renderer.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/cube.obj"))
-renderer.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/sphere.obj"))
+renderer.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"))
+renderer.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/sphere.obj"))
 
 
 
@@ -54,14 +53,14 @@ indices = jnp.array( [0, 1])
 
 
 multiobject_scene_img = renderer.render(gt_poses_all[-1, ...], jnp.array([0, 1]))
-multiobject_viz = j.get_depth_image(multiobject_scene_img[:,:,2], max=max_depth)
+multiobject_viz = b.get_depth_image(multiobject_scene_img[:,:,2], max=max_depth)
 
 multiobject_scene_parallel_img = renderer.render_many(gt_poses_all, jnp.array([0, 1]))
-multiobject_parallel_viz = j.get_depth_image(multiobject_scene_parallel_img[-1,::,:,2], max=max_depth)
+multiobject_parallel_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,::,:,2], max=max_depth)
 
-segmentation_viz = j.get_depth_image(multiobject_scene_parallel_img[-1,:,:,3], max=4.0)
+segmentation_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,:,:,3], max=4.0)
 
-j.multi_panel(
+b.multi_panel(
     [multiobject_viz, multiobject_parallel_viz, segmentation_viz]
 ).save("test_renderer.png")
 
