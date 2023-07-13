@@ -116,9 +116,6 @@ class Renderer(object):
             torch.tensor(triangles.astype(np.int32), device='cuda'),
         )
 
-    def _render_many(self, poses, indices):
-        return _render_custom_call(self, poses, indices)[0]
-
     def render_many(self, poses, indices):
         """Render many scenes in parallel.
         
@@ -152,14 +149,17 @@ class Renderer(object):
 # Useful reference for understanding the custom calls setup:
 #   https://github.com/dfm/extending-jax
 
+@functools.lru_cache
 def _register_custom_calls():
     for _name, _value in dr._get_plugin(gl=True).registrations().items():
         xla_client.register_custom_call_target(_name, _value, platform="gpu")
 
+@functools.partial(jax.jit, static_argnums=(0,))
 def _render_custom_call(r: "Renderer", poses, idx):
     return _build_render_primitive(r).bind(poses, idx)
 
 
+@functools.lru_cache(maxsize=None)
 def _build_render_primitive(r: "Renderer"):
     _register_custom_calls()
     # For JIT compilation we need a function to evaluate the shape and dtype of the
@@ -209,12 +209,37 @@ def _build_render_primitive(r: "Renderer"):
             # The inputs:
             operands=[poses, indices],
             # Layout specification:
-            operand_layouts=[(3, 2, 1, 0), (0,)],
+            operand_layouts=[(3, 2, 0, 1), (0,)],
             result_layouts=[(3, 2, 1, 0), ()],
             # GPU specific additional data
             backend_config=opaque
         )
 
+
+    # ************************************
+    # *  SUPPORT FOR BATCHING WITH VMAP  *
+    # ************************************
+    def _render_batch(args, axes):
+        poses, indices = args 
+
+        if poses.ndim != 5:
+            raise NotImplementedError("Underlying primitive must operate on 4D poses.")  
+     
+        poses = jnp.moveaxis(poses, axes[0], 0)
+        size_1 = poses.shape[0]
+        size_2 = poses.shape[1]
+        num_objects = poses.shape[2]
+        poses = poses.reshape(size_1 * size_2, num_objects, 4, 4)
+
+        if poses.shape[1] != indices.shape[0]:
+            raise ValueError(f"Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}")
+        if poses.shape[-2:] != (4, 4):
+            raise ValueError(f"Unexpected poses shape: {poses.shape}")
+        renders, dummy = _render_custom_call(r, poses, indices)
+
+        renders = renders.reshape(size_1, size_2, *renders.shape[1:])
+        out_axes = 0, None
+        return (renders, dummy), out_axes
 
 
     # *********************************************
@@ -227,5 +252,6 @@ def _build_render_primitive(r: "Renderer"):
 
     # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_render_prim, _render_lowering, platform="gpu")
+    batching.primitive_batchers[_render_prim] = _render_batch
     
     return _render_prim
