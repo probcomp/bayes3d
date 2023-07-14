@@ -47,3 +47,4 @@ assert not jnp.all(img[0,:,:,2] == 0.0)
 
 multiobject_scene_img = renderer._render_many(jnp.tile(poses, (2,1,1,1)), jnp.array([1]))[0]
 b.get_depth_image(multiobject_scene_img[:,:,2]).save("0.png")
+assert not jnp.all( multiobject_scene_img[:,:,2] == 0.0)

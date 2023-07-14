@@ -552,7 +552,9 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
 
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
-            NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(pose_array, 0, 0, posePtr + num_images*16*object_idx + start_pose_idx*16, poses_on_this_iter*16*sizeof(float), cudaMemcpyDeviceToDevice));
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(
+                pose_array, 0, 0, posePtr + num_images*16*object_idx + start_pose_idx*16,
+                poses_on_this_iter*16*sizeof(float), cudaMemcpyDeviceToDevice, stream));
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
             glUniform1f(1, object_idx+1.0);
             
@@ -575,7 +577,7 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
         p.extent.height = s.img_height;
         p.extent.depth = poses_on_this_iter;
         p.kind = cudaMemcpyDeviceToDevice;
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3D(&p));
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, s.cudaColorBuffer, stream));
     }
 
@@ -606,6 +608,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
     std::vector<int> indices;
     indices.resize(d.num_objects);
+    cudaStreamSynchronize(stream);
     auto indices_cpu = torch::from_blob(
         obj_idx,
         {d.num_objects},
@@ -625,6 +628,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
                       /*proj=*/std::vector<float>(d.proj, d.proj + 16),
                       /*indices=*/indices,
                       /*out=*/out);
+    cudaStreamSynchronize(stream);
 }
 
 
