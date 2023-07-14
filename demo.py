@@ -75,6 +75,6 @@ viz_images = [
     )
     for (r, d) in zip(rerendered_images, observed_images)
 ]
-b.make_gif(viz_images, "assets/demo.gif")
+b.make_gif_from_pil_images(viz_images, "assets/demo.gif")
 
 from IPython import embed; embed()

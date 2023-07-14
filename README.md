@@ -6,9 +6,11 @@
 
 ```
 git clone https://github.com/probcomp/bayes3d.git
-python3 -m venv venv
+conda create -n bayes3d python=3.9
+conda activate bayes3d
 pip install -r requirements.txt
 pip install -e assets/genjax
+pip install -e .
 ```
 
 Install JAX:
