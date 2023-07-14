@@ -95,6 +95,8 @@ class Renderer(object):
         
         bounding_box_dims, bounding_box_pose = bayes3d.utils.aabb(mesh.vertices)
         if center_mesh:
+            if not jnp.isclose(bounding_box_pose[:3,3], 0.0).all():
+                print(f"Centering mesh with translation {bounding_box_pose[:3,3]}")
             mesh.vertices = mesh.vertices - bounding_box_pose[:3,3]
 
         self.meshes.append(mesh)

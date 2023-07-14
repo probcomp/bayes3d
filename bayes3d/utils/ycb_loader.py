@@ -119,6 +119,6 @@ def get_test_img(scene_id, img_id, ycb_dir):
             cam_pose,
             intrinsics
         ),
-        gt_ids, jnp.array(gt_poses), masks
+        jnp.array(gt_ids), jnp.array(gt_poses), masks
     )
 
