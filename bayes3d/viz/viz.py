@@ -15,18 +15,13 @@ GREEN = np.array([0.0, 1.0, 0.0])
 BLUE = np.array([0.0, 0.0, 1.0])
 BLACK = np.array([0.0, 0.0, 0.0])
 
-def make_gif(images, filename):
-    images[0].save(
-        fp=filename,
-        format="GIF",
-        append_images=images,
-        save_all=True,
-        duration=100,
-        loop=0,
-    )
-
-
 def make_gif_from_pil_images(images, filename):
+    """Save a list of PIL images as a GIF.
+    
+    Args:
+        images (list): List of PIL images.
+        filename (str): Filename to save GIF to.
+    """
     images[0].save(
         fp=filename,
         format="GIF",
@@ -37,10 +32,20 @@ def make_gif_from_pil_images(images, filename):
     )
 
 def load_image_from_file(filename):
+    """Load an image from a file."""
     return Image(filename)
 
-
 def get_depth_image(image, min=None, max=None, cmap=None):
+    """Convert a depth image to a PIL image.
+    
+    Args:
+        image (np.ndarray): Depth image. Shape (H, W).
+        min (float): Minimum depth value for colormap.
+        max (float): Maximum depth value for colormap.
+        cmap (matplotlib.colors.Colormap): Colormap to use.
+    Returns:
+        PIL.Image: Depth image visualized as a PIL image.
+    """
     if cmap is None:
         cmap = plt.get_cmap('turbo')
     if min is None:
@@ -56,13 +61,15 @@ def get_depth_image(image, min=None, max=None, cmap=None):
     )
     return img.convert("RGB")
 
-def add_rgba_dimension(particles_rendered):
-    if particles_rendered.shape[-1] == 3:
-        p = jnp.concatenate([particles_rendered, 255.0 * jnp.ones((*particles_rendered.shape[:2],1))],axis=-1)
-        return p
-    return particles_rendered
-
 def get_rgb_image(image, max=255.0):
+    """Convert an RGB image to a PIL image.
+    
+    Args:
+        image (np.ndarray): RGB image. Shape (H, W, 3).
+        max (float): Maximum value for colormap.
+    Returns:
+        PIL.Image: RGB image visualized as a PIL image.
+    """
     if image.shape[-1] == 3:
         image_type = "RGB"
     else:
@@ -76,17 +83,62 @@ def get_rgb_image(image, max=255.0):
     ).convert("RGB")
     return img
 
+def add_rgba_dimension(image):
+    """Add an alpha channel to a particle image if it doesn't already have one.
+    
+    Args:
+        image (np.ndarray): Particle image. Shape (H, W, 3) or (H, W, 4).
+    """
+    if image.shape[-1] == 3:
+        p = jnp.concatenate([image, 255.0 * jnp.ones((*image.shape[:2],1))],axis=-1)
+        return p
+    return image
+
 def overlay_image(img_1, img_2, alpha=0.5):
+    """Overlay two images.
+    
+    Args:
+        img_1 (PIL.Image): First image.
+        img_2 (PIL.Image): Second image.
+        alpha (float): Alpha value for blending.
+    Returns:
+        PIL.Image: Overlayed image.
+    """
     return Image.blend(img_1, img_2, alpha=alpha)
 
 def resize_image(img, h, w):
+    """Resize an image.
+
+    Args:
+        img (PIL.Image): Image to resize.
+        h (int): Height of resized image.
+        w (int): Width of resized image.
+    Returns:
+        PIL.Image: Resized image.
+    """
     return img.resize((w, h))
 
 def scale_image(img, factor):
+    """Scale an image.
+    
+    Args:
+        img (PIL.Image): Image to scale.
+        factor (float): Scale factor.
+    Returns:
+        PIL.Image: Scaled image.
+    """
     w,h = img.size
     return img.resize((int(w * factor), int(h * factor)))
 
 def vstack_images(images, border = 10):
+    """Stack images vertically.
+
+    Args:
+        images (list): List of PIL images.
+        border (int): Border between images.
+    Returns:
+        PIL.Image: Stacked image.
+    """
     max_w = 0
     sum_h = (len(images)-1)*border
     for img in images:
@@ -103,6 +155,14 @@ def vstack_images(images, border = 10):
     return full_image
 
 def hstack_images(images, border = 10):
+    """Stack images horizontally.
+
+    Args:
+        images (list): List of PIL images.
+        border (int): Border between images.
+    Returns:
+        PIL.Image: Stacked image.
+    """
     max_h = 0
     sum_w = (len(images)-1)*border
     for img in images:
@@ -119,6 +179,16 @@ def hstack_images(images, border = 10):
     return full_image
 
 def hvstack_images(images, h, w, border=10):
+    """Stack images in a grid.
+
+    Args:
+        images (list): List of PIL images.
+        h (int): Number of rows.
+        w (int): Number of columns.
+        border (int): Border between images.
+    Returns:
+        PIL.Image: Stacked image. 
+    """
     assert len(images) == h * w
 
     images_to_vstack = []
@@ -129,10 +199,21 @@ def hvstack_images(images, h, w, border=10):
     
     return vstack_images(images_to_vstack)
 
-
-####
-
 def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsize=40, label_fontsize=30,  bottom_fontsize=20, middle_width=10):
+    """Combine multiple images into a single image.
+    
+    Args:
+        images (list): List of PIL images.
+        labels (list): List of labels for each image.
+        title (str): Title for image.
+        bottom_text (str): Text for bottom of image.
+        title_fontsize (int): Font size for title.
+        label_fontsize (int): Font size for labels.
+        bottom_fontsize (int): Font size for bottom text.
+        middle_width (int): Width of border between images.
+    Returns:
+        PIL.Image: Combined image.
+    """
     num_images = len(images)
     w = images[0].width
     h = images[0].height
@@ -202,26 +283,26 @@ def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsiz
 
     return dst
 
-
-def multi_panel_vertical(images, middle_width=10, title_border=20, fontsize=20):
-    num_images = len(images)
-    w = images[0].width
-    h = images[0].height
-    dst = Image.new(
-        "RGBA", (w, num_images * h + (num_images - 1) * middle_width + title_border), (255, 255, 255, 255)
-    )
-    for (j, img) in enumerate(images):
-        dst.paste(
-            img,
-            (0, title_border + j * h + j * middle_width)
-        )
-
-    return dst
-    
 def distinct_colors(num_colors, pastel_factor=0.5):
+    """Get a list of distinct colors.
+    
+    Args:
+        num_colors (int): Number of colors to generate.
+        pastel_factor (float): Pastel factor.
+    Returns:
+        list: List of colors.
+    """
     return [np.array(i) for i in distinctipy.get_colors(num_colors, pastel_factor=pastel_factor)]
 
 def viz_graph(num_nodes, edges, filename, node_names=None):
+    """Visualize a graph.
+    
+    Args:
+        num_nodes (int): Number of nodes in graph.
+        edges (list): List of edges in graph.
+        filename (str): Filename to save graph to.
+        node_names (list): List of node names.
+    """
     if node_names is None:
         node_names = [str(i) for i in range(num_nodes)]
 
