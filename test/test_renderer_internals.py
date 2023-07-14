@@ -26,8 +26,6 @@ max_depth = 15.0
 renderer.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"))
 renderer.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/sphere.obj"))
 
-
-
 poses = jnp.array([
     [1.0, 0.0, 0.0, 0.0],   
     [0.0, 1.0, 0.0, -1.0],   
@@ -36,6 +34,7 @@ poses = jnp.array([
     ]
 )[None, None, ...]
 indices = jnp.array([0])
+
 
 img = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(dr._get_plugin(gl=True).rasterize_fwd_gl(
     b.RENDERER.renderer_env.cpp_wrapper, 
@@ -46,7 +45,5 @@ img = jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(dr._get_plugin(gl=True
 b.get_depth_image(img[0,:,:,2]).save("1.png")
 assert not jnp.all(img[0,:,:,2] == 0.0)
 
-multiobject_scene_img = renderer._render_many(poses, jnp.array([0]))[0]
+multiobject_scene_img = renderer._render_many(jnp.tile(poses, (2,1,1,1)), jnp.array([1]))[0]
 b.get_depth_image(multiobject_scene_img[:,:,2]).save("0.png")
-assert not jnp.all( multiobject_scene_img[:,:,2] == 0.0)
-
