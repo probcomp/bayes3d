@@ -1,9 +1,8 @@
-# Bayes3D
+![Untitled-2](https://github.com/probcomp/bayes3d/assets/66085644/b99496a7-8efd-42a4-9550-fad0f8ff596d)
 
-[![](https://img.shields.io/badge/docs-stable-blue.svg?style=flat-square)](https://probcomp.github.io/bayes3d/bayes3d/)
+**[Documentation](https://probcomp.github.io/bayes3d/bayes3d/)**
 
-
-## Setup Instructions
+# Installation
 
 ```
 git clone https://github.com/probcomp/bayes3d.git
@@ -25,18 +24,4 @@ pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-re
 Download assets:
 ```
 bash scripts/download.sh
-```
-
-## GCP Setup Instructions
-
-Get images `tf-2-12-gpu-debian-11-py310`, on NVIDIA V100
-
-sudo /opt/deeplearning/install-driver.sh
-
-
-# Helpful commands
-
-```
-# Check CuDNN version
-cat /usr/local/cuda/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
 ```
