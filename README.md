@@ -3,8 +3,8 @@
 
 **[Documentation](https://probcomp.github.io/bayes3d/bayes3d/)**
 
-# Installation
-
+## Installation
+### Python Environment
 ```
 git clone https://github.com/probcomp/bayes3d.git
 conda create -n bayes3d python=3.9
@@ -13,8 +13,7 @@ pip install -r requirements.txt
 pip install -e assets/genjax
 pip install -e .
 ```
-
-Install JAX:
+### JAX Installation
 ```
 pip install --upgrade pip
 
@@ -23,8 +22,7 @@ pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-re
 # CUDA 11 installation
 pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
-
-Download assets:
+### Download Assets
 ```
 bash scripts/download.sh
 ```
