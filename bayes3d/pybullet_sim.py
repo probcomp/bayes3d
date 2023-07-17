@@ -6,6 +6,7 @@ import bayes3d as b
 import bayes3d.transforms_3d as t3d
 import imageio
 from scipy.spatial.transform import Rotation as R
+import matplotlib.pyplot as plt
 from PIL import Image
 
 def o3d_to_pybullet_position(o3d_position):
@@ -58,7 +59,7 @@ def pybullet_render(scene):
     pyb_sim = PybulletSimulator(camera=scene.camera, floor = scene.floor)
     for body in scene.bodies.values():
         pyb_sim.add_body_to_simulation(body)
-    image_rgb, depth, _ = pyb_sim.capture_image(scene.camera)
+    image_rgb, depth, segm = pyb_sim.capture_image(scene.camera)
     pyb_sim.close()
     image = Image.fromarray(image_rgb)
     depth = depth - (min(depth.flatten()))
@@ -66,7 +67,7 @@ def pybullet_render(scene):
     depth = depth * 255
     depth = depth.astype(np.uint8)
     depth = Image.fromarray(depth)
-    return image, depth
+    return image, depth, segm
 
 def create_box(pose, scale = [1,1,1], restitution=1, friction=0, velocity=0, angular_velocity = [0,0,0], id=None):
     """
@@ -158,7 +159,7 @@ def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0
     return make_body_from_obj_pose(obj_path, pose, id=id, friction=friction, restitution=restitution, velocity=velocity, scale=scale, angular_velocity=angular_velocity)
 
 class Body:
-    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=0.8, friction=0, damping=0, transparency=1, velocity=[0,0,0], angular_velocity = [0,0,0],mass=1, texture=None, color=[1, 0, 0], scale=None):
+    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=0.8, friction=0, damping=0, transparency=1, velocity=[0,0,0], angular_velocity = [0,0,0],mass=1, texture=None, color=[1, 0, 0], scale=None, occluder=False):
         self.id = object_id
         self.pose = pose
         self.restitution = restitution
@@ -175,6 +176,7 @@ class Body:
         self.scale = scale
         self.forces = {} # maps from a timestep to a vector of force to apply 
         self.velocity_changes = {} 
+        self.occluder = occluder
 
     # Getter methods
     def get_id(self):
@@ -264,6 +266,9 @@ class Body:
 
     def set_scale(self, scale):
         self.scale = scale
+    
+    def set_occluder(self, occluder):
+        self.occluder = occluder
 
     def add_force(self, force_vector, start_timestep, end_timestep = None, step = None): 
         self.forces[start_timestep] = {"force" : force_vector, "end_timestep" : end_timestep, "step" : step}
@@ -442,7 +447,7 @@ class Camera(object):
         return f"Camera: position_target = {self.position_target}, position={self.position}, target={self.target}, pose={self.pose}, near={self.near}, far={self.far}, fov={self.fov}, width={self.width}, height={self.height}, up_vector={self.up_vector}, distance={self.distance}, yaw={self.yaw}, pitch={self.pitch}, roll={self.roll}, intrinsics={self.intrinsics}"
     
 class PybulletSimulator(object):
-    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True, forces = None, dv = None, track_poses = True):
+    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True, forces = None, dv = None):
         # only build pybullet when needed 
         import pybullet as p
         import pybullet_data
@@ -453,15 +458,16 @@ class PybulletSimulator(object):
         self.step_count = 0
         self.frames = [] 
         self.depth = []
+        self.segm = []
         self.pyb_id_to_body_id = {}
         self.body_id_to_pyb_id = {}
         self.body_poses = {}
+        self.body_velocities = {} 
         self.camera = camera
         self.downsampling = downsampling
         self.floor = floor 
         self.initial_timestep_to_forces = forces 
         self.timestep_to_dv = dv
-        self.track_poses = track_poses
 
         # Set up the simulation environment
         self.p.resetSimulation(physicsClientId=self.client)
@@ -476,15 +482,16 @@ class PybulletSimulator(object):
 
         # setup timestep to forces mapping
         self.timestep_to_body_force = {}
-        for init_timestep in self.initial_timestep_to_forces.keys():
-            for body_id, force_info in self.initial_timestep_to_forces[init_timestep]:
-                # if force_info["end_timestep"] is None, assign it to init_timestep
-                end_timestep = force_info["end_timestep"] or init_timestep
-                # if force_info["step"] is None, assign it to 1
-                step = force_info["step"] or 1
-                for timestep in range(init_timestep, end_timestep + 1, step):
-                    # Use setdefault() to simplify appending to the dictionary
-                    self.timestep_to_body_force.setdefault(timestep, []).append((body_id, force_info["force"]))
+        if self.initial_timestep_to_forces is not None:
+            for init_timestep in self.initial_timestep_to_forces.keys():
+                for body_id, force_info in self.initial_timestep_to_forces[init_timestep]:
+                    # if force_info["end_timestep"] is None, assign it to init_timestep
+                    end_timestep = force_info["end_timestep"] or init_timestep
+                    # if force_info["step"] is None, assign it to 1
+                    step = force_info["step"] or 1
+                    for timestep in range(init_timestep, end_timestep + 1, step):
+                        # Use setdefault() to simplify appending to the dictionary
+                        self.timestep_to_body_force.setdefault(timestep, []).append((body_id, force_info["force"]))
 
 
     
@@ -538,7 +545,7 @@ class PybulletSimulator(object):
         # Set initial velocity if specified
         if body.velocity != [0,0,0] or body.angular_velocity != [0,0,0]:
             self.p.resetBaseVelocity(pyb_id, linearVelocity=body.velocity, angularVelocity = body.angular_velocity, physicsClientId=self.client)
-# 
+
         # If texture is specified, load it
         if body.texture is not None:
             textureId = self.p.loadTexture(body.texture, physicsClientId=self.client)
@@ -548,6 +555,7 @@ class PybulletSimulator(object):
         self.pyb_id_to_body_id[pyb_id] = body.id
         self.body_id_to_pyb_id[body.id] = pyb_id
         self.body_poses[body.id] = []
+        self.body_velocities[body.id] = [] 
 
     def check_collision(self):
         for body in self.pyb_id_to_body_id.keys():
@@ -568,7 +576,7 @@ class PybulletSimulator(object):
                 self.p.resetBaseVelocity(id_in_sim, linearVelocity=dv, physicsClientId=self.client)
         self.p.stepSimulation(physicsClientId=self.client)
     
-    def update_body_poses(self):
+    def update_body_info(self):
         for pyb_id in self.pyb_id_to_body_id.keys():
             position, orientation = self.p.getBasePositionAndOrientation(pyb_id, physicsClientId=self.client)
             orientation = self.p.getMatrixFromQuaternion(orientation)
@@ -577,6 +585,10 @@ class PybulletSimulator(object):
             pose[:3, :3] = orientation
             pose[:3, 3] = position
             self.body_poses[self.pyb_id_to_body_id[pyb_id]].append(pose)
+
+            velocity, ang_velocity = self.p.getBaseVelocity(pyb_id, physicsClientId=self.client)
+            mapping = {"velocity": velocity, "angular_velocity": ang_velocity}
+            self.body_velocities[self.pyb_id_to_body_id[pyb_id]].append(mapping)
     
     def simulate(self, steps): 
         # returns frames, poses of objects over time
@@ -585,8 +597,8 @@ class PybulletSimulator(object):
                 rgb, depth, segm = self.capture_image(self.camera)
                 self.frames.append(rgb)
                 self.depth.append(depth)
-                if self.track_poses:
-                    self.update_body_poses()
+                self.segm.append(segm)
+                self.update_body_info()
             self.step_simulation()
         self.close()
     
@@ -619,10 +631,10 @@ class PybulletSimulator(object):
         segmentation = np.array(segmentation).reshape((camera.height, camera.width))
         return rgb, depth_buffer, segmentation
     
-    def create_gif(self, path, fps=15):
+    def create_gif(self, path, fps=30):
         imageio.mimwrite(path, self.frames, duration = (1000 * (1/fps)))
 
-    def create_depth_gif(self, path, fps=15):
+    def create_depth_gif(self, path, fps=30):
         depth_frames = []
         for depth in self.depth:
             depth = depth - (min(depth.flatten()))
@@ -631,9 +643,16 @@ class PybulletSimulator(object):
             depth = depth.astype(np.uint8)
             depth_frames.append(depth)
         imageio.mimwrite(path, depth_frames, duration = (1000 * (1/fps)))
-        
-    def set_velocity(self, obj_id):
-        return
+
+    def create_seg_gif(self, path, fps=30): 
+        seg_frames = []
+        num_classes = len(self.pyb_id_to_body_id) + 2 # 2 for background and floor
+        cmap = plt.cm.get_cmap('tab10', num_classes)
+        for seg in self.segm:
+            class_image = cmap(seg)
+            class_image = (class_image[:, :, :3] * 255).astype(np.uint8)
+            seg_frames.append(class_image)
+        imageio.mimwrite(path, seg_frames, duration = (1000 * (1/fps)))
     
     # adjusts the timestep of the simulation
     def set_timestep(self, dt):
@@ -650,5 +669,8 @@ class PybulletSimulator(object):
         self.p.disconnect(self.client)
     
     # returns a mapping of body_id to poses over time
-    def get_object_poses(self):
+    def get_body_poses(self):
         return self.body_poses
+    
+    def get_body_velocities(self): 
+        return self.body_velocities
