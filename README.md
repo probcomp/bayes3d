@@ -1,5 +1,5 @@
 
-![logo](https://github.com/probcomp/bayes3d/assets/66085644/e79f1773-b56d-4329-b418-fe3005fe216b)
+![logo](https://github.com/probcomp/bayes3d/assets/66085644/bf4e3d42-2d70-40fa-b980-04bd4e18bf2b)
 
 **[Documentation](https://probcomp.github.io/bayes3d/bayes3d/)**
 
