@@ -43,18 +43,13 @@ GREEN = np.array([0.0, 1.0, 0.0])
 BLUE = np.array([0.0, 0.0, 1.0])
 BLACK = np.array([0.0, 0.0, 0.0])
 
-def make_gif(images, filename):
-    images[0].save(
-        fp=filename,
-        format=&#34;GIF&#34;,
-        append_images=images,
-        save_all=True,
-        duration=100,
-        loop=0,
-    )
-
-
 def make_gif_from_pil_images(images, filename):
+    &#34;&#34;&#34;Save a list of PIL images as a GIF.
+    
+    Args:
+        images (list): List of PIL images.
+        filename (str): Filename to save GIF to.
+    &#34;&#34;&#34;
     images[0].save(
         fp=filename,
         format=&#34;GIF&#34;,
@@ -65,10 +60,20 @@ def make_gif_from_pil_images(images, filename):
     )
 
 def load_image_from_file(filename):
+    &#34;&#34;&#34;Load an image from a file.&#34;&#34;&#34;
     return Image(filename)
 
-
 def get_depth_image(image, min=None, max=None, cmap=None):
+    &#34;&#34;&#34;Convert a depth image to a PIL image.
+    
+    Args:
+        image (np.ndarray): Depth image. Shape (H, W).
+        min (float): Minimum depth value for colormap.
+        max (float): Maximum depth value for colormap.
+        cmap (matplotlib.colors.Colormap): Colormap to use.
+    Returns:
+        PIL.Image: Depth image visualized as a PIL image.
+    &#34;&#34;&#34;
     if cmap is None:
         cmap = plt.get_cmap(&#39;turbo&#39;)
     if min is None:
@@ -84,13 +89,15 @@ def get_depth_image(image, min=None, max=None, cmap=None):
     )
     return img.convert(&#34;RGB&#34;)
 
-def add_rgba_dimension(particles_rendered):
-    if particles_rendered.shape[-1] == 3:
-        p = jnp.concatenate([particles_rendered, 255.0 * jnp.ones((*particles_rendered.shape[:2],1))],axis=-1)
-        return p
-    return particles_rendered
-
 def get_rgb_image(image, max=255.0):
+    &#34;&#34;&#34;Convert an RGB image to a PIL image.
+    
+    Args:
+        image (np.ndarray): RGB image. Shape (H, W, 3).
+        max (float): Maximum value for colormap.
+    Returns:
+        PIL.Image: RGB image visualized as a PIL image.
+    &#34;&#34;&#34;
     if image.shape[-1] == 3:
         image_type = &#34;RGB&#34;
     else:
@@ -104,17 +111,62 @@ def get_rgb_image(image, max=255.0):
     ).convert(&#34;RGB&#34;)
     return img
 
+def add_rgba_dimension(image):
+    &#34;&#34;&#34;Add an alpha channel to a particle image if it doesn&#39;t already have one.
+    
+    Args:
+        image (np.ndarray): Particle image. Shape (H, W, 3) or (H, W, 4).
+    &#34;&#34;&#34;
+    if image.shape[-1] == 3:
+        p = jnp.concatenate([image, 255.0 * jnp.ones((*image.shape[:2],1))],axis=-1)
+        return p
+    return image
+
 def overlay_image(img_1, img_2, alpha=0.5):
+    &#34;&#34;&#34;Overlay two images.
+    
+    Args:
+        img_1 (PIL.Image): First image.
+        img_2 (PIL.Image): Second image.
+        alpha (float): Alpha value for blending.
+    Returns:
+        PIL.Image: Overlayed image.
+    &#34;&#34;&#34;
     return Image.blend(img_1, img_2, alpha=alpha)
 
 def resize_image(img, h, w):
+    &#34;&#34;&#34;Resize an image.
+
+    Args:
+        img (PIL.Image): Image to resize.
+        h (int): Height of resized image.
+        w (int): Width of resized image.
+    Returns:
+        PIL.Image: Resized image.
+    &#34;&#34;&#34;
     return img.resize((w, h))
 
 def scale_image(img, factor):
+    &#34;&#34;&#34;Scale an image.
+    
+    Args:
+        img (PIL.Image): Image to scale.
+        factor (float): Scale factor.
+    Returns:
+        PIL.Image: Scaled image.
+    &#34;&#34;&#34;
     w,h = img.size
     return img.resize((int(w * factor), int(h * factor)))
 
 def vstack_images(images, border = 10):
+    &#34;&#34;&#34;Stack images vertically.
+
+    Args:
+        images (list): List of PIL images.
+        border (int): Border between images.
+    Returns:
+        PIL.Image: Stacked image.
+    &#34;&#34;&#34;
     max_w = 0
     sum_h = (len(images)-1)*border
     for img in images:
@@ -131,6 +183,14 @@ def vstack_images(images, border = 10):
     return full_image
 
 def hstack_images(images, border = 10):
+    &#34;&#34;&#34;Stack images horizontally.
+
+    Args:
+        images (list): List of PIL images.
+        border (int): Border between images.
+    Returns:
+        PIL.Image: Stacked image.
+    &#34;&#34;&#34;
     max_h = 0
     sum_w = (len(images)-1)*border
     for img in images:
@@ -147,6 +207,16 @@ def hstack_images(images, border = 10):
     return full_image
 
 def hvstack_images(images, h, w, border=10):
+    &#34;&#34;&#34;Stack images in a grid.
+
+    Args:
+        images (list): List of PIL images.
+        h (int): Number of rows.
+        w (int): Number of columns.
+        border (int): Border between images.
+    Returns:
+        PIL.Image: Stacked image. 
+    &#34;&#34;&#34;
     assert len(images) == h * w
 
     images_to_vstack = []
@@ -157,10 +227,21 @@ def hvstack_images(images, h, w, border=10):
     
     return vstack_images(images_to_vstack)
 
-
-####
-
 def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsize=40, label_fontsize=30,  bottom_fontsize=20, middle_width=10):
+    &#34;&#34;&#34;Combine multiple images into a single image.
+    
+    Args:
+        images (list): List of PIL images.
+        labels (list): List of labels for each image.
+        title (str): Title for image.
+        bottom_text (str): Text for bottom of image.
+        title_fontsize (int): Font size for title.
+        label_fontsize (int): Font size for labels.
+        bottom_fontsize (int): Font size for bottom text.
+        middle_width (int): Width of border between images.
+    Returns:
+        PIL.Image: Combined image.
+    &#34;&#34;&#34;
     num_images = len(images)
     w = images[0].width
     h = images[0].height
@@ -230,26 +311,26 @@ def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsiz
 
     return dst
 
-
-def multi_panel_vertical(images, middle_width=10, title_border=20, fontsize=20):
-    num_images = len(images)
-    w = images[0].width
-    h = images[0].height
-    dst = Image.new(
-        &#34;RGBA&#34;, (w, num_images * h + (num_images - 1) * middle_width + title_border), (255, 255, 255, 255)
-    )
-    for (j, img) in enumerate(images):
-        dst.paste(
-            img,
-            (0, title_border + j * h + j * middle_width)
-        )
-
-    return dst
-    
 def distinct_colors(num_colors, pastel_factor=0.5):
+    &#34;&#34;&#34;Get a list of distinct colors.
+    
+    Args:
+        num_colors (int): Number of colors to generate.
+        pastel_factor (float): Pastel factor.
+    Returns:
+        list: List of colors.
+    &#34;&#34;&#34;
     return [np.array(i) for i in distinctipy.get_colors(num_colors, pastel_factor=pastel_factor)]
 
 def viz_graph(num_nodes, edges, filename, node_names=None):
+    &#34;&#34;&#34;Visualize a graph.
+    
+    Args:
+        num_nodes (int): Number of nodes in graph.
+        edges (list): List of edges in graph.
+        filename (str): Filename to save graph to.
+        node_names (list): List of node names.
+    &#34;&#34;&#34;
     if node_names is None:
         node_names = [str(i) for i in range(num_nodes)]
 
@@ -286,31 +367,61 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="bayes3d.viz.viz.add_rgba_dimension"><code class="name flex">
-<span>def <span class="ident">add_rgba_dimension</span></span>(<span>particles_rendered)</span>
+<span>def <span class="ident">add_rgba_dimension</span></span>(<span>image)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Add an alpha channel to a particle image if it doesn't already have one.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>image</code></strong> :&ensp;<code>np.ndarray</code></dt>
+<dd>Particle image. Shape (H, W, 3) or (H, W, 4).</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def add_rgba_dimension(particles_rendered):
-    if particles_rendered.shape[-1] == 3:
-        p = jnp.concatenate([particles_rendered, 255.0 * jnp.ones((*particles_rendered.shape[:2],1))],axis=-1)
+<pre><code class="python">def add_rgba_dimension(image):
+    &#34;&#34;&#34;Add an alpha channel to a particle image if it doesn&#39;t already have one.
+    
+    Args:
+        image (np.ndarray): Particle image. Shape (H, W, 3) or (H, W, 4).
+    &#34;&#34;&#34;
+    if image.shape[-1] == 3:
+        p = jnp.concatenate([image, 255.0 * jnp.ones((*image.shape[:2],1))],axis=-1)
         return p
-    return particles_rendered</code></pre>
+    return image</code></pre>
 </details>
 </dd>
 <dt id="bayes3d.viz.viz.distinct_colors"><code class="name flex">
 <span>def <span class="ident">distinct_colors</span></span>(<span>num_colors, pastel_factor=0.5)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Get a list of distinct colors.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>num_colors</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of colors to generate.</dd>
+<dt><strong><code>pastel_factor</code></strong> :&ensp;<code>float</code></dt>
+<dd>Pastel factor.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>list</code></dt>
+<dd>List of colors.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def distinct_colors(num_colors, pastel_factor=0.5):
+    &#34;&#34;&#34;Get a list of distinct colors.
+    
+    Args:
+        num_colors (int): Number of colors to generate.
+        pastel_factor (float): Pastel factor.
+    Returns:
+        list: List of colors.
+    &#34;&#34;&#34;
     return [np.array(i) for i in distinctipy.get_colors(num_colors, pastel_factor=pastel_factor)]</code></pre>
 </details>
 </dd>
@@ -318,12 +429,38 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">get_depth_image</span></span>(<span>image, min=None, max=None, cmap=None)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Convert a depth image to a PIL image.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>image</code></strong> :&ensp;<code>np.ndarray</code></dt>
+<dd>Depth image. Shape (H, W).</dd>
+<dt><strong><code>min</code></strong> :&ensp;<code>float</code></dt>
+<dd>Minimum depth value for colormap.</dd>
+<dt><strong><code>max</code></strong> :&ensp;<code>float</code></dt>
+<dd>Maximum depth value for colormap.</dd>
+<dt><strong><code>cmap</code></strong> :&ensp;<code>matplotlib.colors.Colormap</code></dt>
+<dd>Colormap to use.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>PIL.Image</code></dt>
+<dd>Depth image visualized as a PIL image.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def get_depth_image(image, min=None, max=None, cmap=None):
+    &#34;&#34;&#34;Convert a depth image to a PIL image.
+    
+    Args:
+        image (np.ndarray): Depth image. Shape (H, W).
+        min (float): Minimum depth value for colormap.
+        max (float): Maximum depth value for colormap.
+        cmap (matplotlib.colors.Colormap): Colormap to use.
+    Returns:
+        PIL.Image: Depth image visualized as a PIL image.
+    &#34;&#34;&#34;
     if cmap is None:
         cmap = plt.get_cmap(&#39;turbo&#39;)
     if min is None:
@@ -344,12 +481,32 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">get_rgb_image</span></span>(<span>image, max=255.0)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Convert an RGB image to a PIL image.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>image</code></strong> :&ensp;<code>np.ndarray</code></dt>
+<dd>RGB image. Shape (H, W, 3).</dd>
+<dt><strong><code>max</code></strong> :&ensp;<code>float</code></dt>
+<dd>Maximum value for colormap.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>PIL.Image</code></dt>
+<dd>RGB image visualized as a PIL image.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def get_rgb_image(image, max=255.0):
+    &#34;&#34;&#34;Convert an RGB image to a PIL image.
+    
+    Args:
+        image (np.ndarray): RGB image. Shape (H, W, 3).
+        max (float): Maximum value for colormap.
+    Returns:
+        PIL.Image: RGB image visualized as a PIL image.
+    &#34;&#34;&#34;
     if image.shape[-1] == 3:
         image_type = &#34;RGB&#34;
     else:
@@ -368,12 +525,32 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">hstack_images</span></span>(<span>images, border=10)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Stack images horizontally.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>images</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of PIL images.</dd>
+<dt><strong><code>border</code></strong> :&ensp;<code>int</code></dt>
+<dd>Border between images.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>PIL.Image</code></dt>
+<dd>Stacked image.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def hstack_images(images, border = 10):
+    &#34;&#34;&#34;Stack images horizontally.
+
+    Args:
+        images (list): List of PIL images.
+        border (int): Border between images.
+    Returns:
+        PIL.Image: Stacked image.
+    &#34;&#34;&#34;
     max_h = 0
     sum_w = (len(images)-1)*border
     for img in images:
@@ -394,12 +571,38 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">hvstack_images</span></span>(<span>images, h, w, border=10)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Stack images in a grid.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>images</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of PIL images.</dd>
+<dt><strong><code>h</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of rows.</dd>
+<dt><strong><code>w</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of columns.</dd>
+<dt><strong><code>border</code></strong> :&ensp;<code>int</code></dt>
+<dd>Border between images.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>PIL.Image</code></dt>
+<dd>Stacked image.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def hvstack_images(images, h, w, border=10):
+    &#34;&#34;&#34;Stack images in a grid.
+
+    Args:
+        images (list): List of PIL images.
+        h (int): Number of rows.
+        w (int): Number of columns.
+        border (int): Border between images.
+    Returns:
+        PIL.Image: Stacked image. 
+    &#34;&#34;&#34;
     assert len(images) == h * w
 
     images_to_vstack = []
@@ -415,45 +618,39 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">load_image_from_file</span></span>(<span>filename)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Load an image from a file.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def load_image_from_file(filename):
+    &#34;&#34;&#34;Load an image from a file.&#34;&#34;&#34;
     return Image(filename)</code></pre>
-</details>
-</dd>
-<dt id="bayes3d.viz.viz.make_gif"><code class="name flex">
-<span>def <span class="ident">make_gif</span></span>(<span>images, filename)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def make_gif(images, filename):
-    images[0].save(
-        fp=filename,
-        format=&#34;GIF&#34;,
-        append_images=images,
-        save_all=True,
-        duration=100,
-        loop=0,
-    )</code></pre>
 </details>
 </dd>
 <dt id="bayes3d.viz.viz.make_gif_from_pil_images"><code class="name flex">
 <span>def <span class="ident">make_gif_from_pil_images</span></span>(<span>images, filename)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Save a list of PIL images as a GIF.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>images</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of PIL images.</dd>
+<dt><strong><code>filename</code></strong> :&ensp;<code>str</code></dt>
+<dd>Filename to save GIF to.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def make_gif_from_pil_images(images, filename):
+    &#34;&#34;&#34;Save a list of PIL images as a GIF.
+    
+    Args:
+        images (list): List of PIL images.
+        filename (str): Filename to save GIF to.
+    &#34;&#34;&#34;
     images[0].save(
         fp=filename,
         format=&#34;GIF&#34;,
@@ -468,12 +665,50 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">multi_panel</span></span>(<span>images, labels=None, title=None, bottom_text=None, title_fontsize=40, label_fontsize=30, bottom_fontsize=20, middle_width=10)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Combine multiple images into a single image.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>images</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of PIL images.</dd>
+<dt><strong><code>labels</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of labels for each image.</dd>
+<dt><strong><code>title</code></strong> :&ensp;<code>str</code></dt>
+<dd>Title for image.</dd>
+<dt><strong><code>bottom_text</code></strong> :&ensp;<code>str</code></dt>
+<dd>Text for bottom of image.</dd>
+<dt><strong><code>title_fontsize</code></strong> :&ensp;<code>int</code></dt>
+<dd>Font size for title.</dd>
+<dt><strong><code>label_fontsize</code></strong> :&ensp;<code>int</code></dt>
+<dd>Font size for labels.</dd>
+<dt><strong><code>bottom_fontsize</code></strong> :&ensp;<code>int</code></dt>
+<dd>Font size for bottom text.</dd>
+<dt><strong><code>middle_width</code></strong> :&ensp;<code>int</code></dt>
+<dd>Width of border between images.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>PIL.Image</code></dt>
+<dd>Combined image.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def multi_panel(images, labels=None, title=None, bottom_text=None, title_fontsize=40, label_fontsize=30,  bottom_fontsize=20, middle_width=10):
+    &#34;&#34;&#34;Combine multiple images into a single image.
+    
+    Args:
+        images (list): List of PIL images.
+        labels (list): List of labels for each image.
+        title (str): Title for image.
+        bottom_text (str): Text for bottom of image.
+        title_fontsize (int): Font size for title.
+        label_fontsize (int): Font size for labels.
+        bottom_fontsize (int): Font size for bottom text.
+        middle_width (int): Width of border between images.
+    Returns:
+        PIL.Image: Combined image.
+    &#34;&#34;&#34;
     num_images = len(images)
     w = images[0].width
     h = images[0].height
@@ -544,41 +779,39 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
     return dst</code></pre>
 </details>
 </dd>
-<dt id="bayes3d.viz.viz.multi_panel_vertical"><code class="name flex">
-<span>def <span class="ident">multi_panel_vertical</span></span>(<span>images, middle_width=10, title_border=20, fontsize=20)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def multi_panel_vertical(images, middle_width=10, title_border=20, fontsize=20):
-    num_images = len(images)
-    w = images[0].width
-    h = images[0].height
-    dst = Image.new(
-        &#34;RGBA&#34;, (w, num_images * h + (num_images - 1) * middle_width + title_border), (255, 255, 255, 255)
-    )
-    for (j, img) in enumerate(images):
-        dst.paste(
-            img,
-            (0, title_border + j * h + j * middle_width)
-        )
-
-    return dst</code></pre>
-</details>
-</dd>
 <dt id="bayes3d.viz.viz.overlay_image"><code class="name flex">
 <span>def <span class="ident">overlay_image</span></span>(<span>img_1, img_2, alpha=0.5)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Overlay two images.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>img_1</code></strong> :&ensp;<code>PIL.Image</code></dt>
+<dd>First image.</dd>
+<dt><strong><code>img_2</code></strong> :&ensp;<code>PIL.Image</code></dt>
+<dd>Second image.</dd>
+<dt><strong><code>alpha</code></strong> :&ensp;<code>float</code></dt>
+<dd>Alpha value for blending.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>PIL.Image</code></dt>
+<dd>Overlayed image.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def overlay_image(img_1, img_2, alpha=0.5):
+    &#34;&#34;&#34;Overlay two images.
+    
+    Args:
+        img_1 (PIL.Image): First image.
+        img_2 (PIL.Image): Second image.
+        alpha (float): Alpha value for blending.
+    Returns:
+        PIL.Image: Overlayed image.
+    &#34;&#34;&#34;
     return Image.blend(img_1, img_2, alpha=alpha)</code></pre>
 </details>
 </dd>
@@ -586,12 +819,35 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">resize_image</span></span>(<span>img, h, w)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Resize an image.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>img</code></strong> :&ensp;<code>PIL.Image</code></dt>
+<dd>Image to resize.</dd>
+<dt><strong><code>h</code></strong> :&ensp;<code>int</code></dt>
+<dd>Height of resized image.</dd>
+<dt><strong><code>w</code></strong> :&ensp;<code>int</code></dt>
+<dd>Width of resized image.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>PIL.Image</code></dt>
+<dd>Resized image.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def resize_image(img, h, w):
+    &#34;&#34;&#34;Resize an image.
+
+    Args:
+        img (PIL.Image): Image to resize.
+        h (int): Height of resized image.
+        w (int): Width of resized image.
+    Returns:
+        PIL.Image: Resized image.
+    &#34;&#34;&#34;
     return img.resize((w, h))</code></pre>
 </details>
 </dd>
@@ -599,12 +855,32 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">scale_image</span></span>(<span>img, factor)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Scale an image.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>img</code></strong> :&ensp;<code>PIL.Image</code></dt>
+<dd>Image to scale.</dd>
+<dt><strong><code>factor</code></strong> :&ensp;<code>float</code></dt>
+<dd>Scale factor.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>PIL.Image</code></dt>
+<dd>Scaled image.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def scale_image(img, factor):
+    &#34;&#34;&#34;Scale an image.
+    
+    Args:
+        img (PIL.Image): Image to scale.
+        factor (float): Scale factor.
+    Returns:
+        PIL.Image: Scaled image.
+    &#34;&#34;&#34;
     w,h = img.size
     return img.resize((int(w * factor), int(h * factor)))</code></pre>
 </details>
@@ -613,12 +889,31 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">viz_graph</span></span>(<span>num_nodes, edges, filename, node_names=None)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Visualize a graph.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>num_nodes</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of nodes in graph.</dd>
+<dt><strong><code>edges</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of edges in graph.</dd>
+<dt><strong><code>filename</code></strong> :&ensp;<code>str</code></dt>
+<dd>Filename to save graph to.</dd>
+<dt><strong><code>node_names</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of node names.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def viz_graph(num_nodes, edges, filename, node_names=None):
+    &#34;&#34;&#34;Visualize a graph.
+    
+    Args:
+        num_nodes (int): Number of nodes in graph.
+        edges (list): List of edges in graph.
+        filename (str): Filename to save graph to.
+        node_names (list): List of node names.
+    &#34;&#34;&#34;
     if node_names is None:
         node_names = [str(i) for i in range(num_nodes)]
 
@@ -651,12 +946,32 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <span>def <span class="ident">vstack_images</span></span>(<span>images, border=10)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Stack images vertically.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>images</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of PIL images.</dd>
+<dt><strong><code>border</code></strong> :&ensp;<code>int</code></dt>
+<dd>Border between images.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>PIL.Image</code></dt>
+<dd>Stacked image.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def vstack_images(images, border = 10):
+    &#34;&#34;&#34;Stack images vertically.
+
+    Args:
+        images (list): List of PIL images.
+        border (int): Border between images.
+    Returns:
+        PIL.Image: Stacked image.
+    &#34;&#34;&#34;
     max_w = 0
     sum_h = (len(images)-1)*border
     for img in images:
@@ -698,10 +1013,8 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
 <li><code><a title="bayes3d.viz.viz.hstack_images" href="#bayes3d.viz.viz.hstack_images">hstack_images</a></code></li>
 <li><code><a title="bayes3d.viz.viz.hvstack_images" href="#bayes3d.viz.viz.hvstack_images">hvstack_images</a></code></li>
 <li><code><a title="bayes3d.viz.viz.load_image_from_file" href="#bayes3d.viz.viz.load_image_from_file">load_image_from_file</a></code></li>
-<li><code><a title="bayes3d.viz.viz.make_gif" href="#bayes3d.viz.viz.make_gif">make_gif</a></code></li>
 <li><code><a title="bayes3d.viz.viz.make_gif_from_pil_images" href="#bayes3d.viz.viz.make_gif_from_pil_images">make_gif_from_pil_images</a></code></li>
 <li><code><a title="bayes3d.viz.viz.multi_panel" href="#bayes3d.viz.viz.multi_panel">multi_panel</a></code></li>
-<li><code><a title="bayes3d.viz.viz.multi_panel_vertical" href="#bayes3d.viz.viz.multi_panel_vertical">multi_panel_vertical</a></code></li>
 <li><code><a title="bayes3d.viz.viz.overlay_image" href="#bayes3d.viz.viz.overlay_image">overlay_image</a></code></li>
 <li><code><a title="bayes3d.viz.viz.resize_image" href="#bayes3d.viz.viz.resize_image">resize_image</a></code></li>
 <li><code><a title="bayes3d.viz.viz.scale_image" href="#bayes3d.viz.viz.scale_image">scale_image</a></code></li>

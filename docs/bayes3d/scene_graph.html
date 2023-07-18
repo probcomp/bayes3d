@@ -29,6 +29,75 @@
 <pre><code class="python">import jax.numpy as jnp
 import jax
 import bayes3d.transforms_3d as t3d
+from collections import namedtuple
+ 
+class SceneGraph(namedtuple(&#39;SceneGraph&#39;, [&#39;root_poses&#39;, &#39;box_dimensions&#39;, &#39;parents&#39;, &#39;contact_params&#39;, &#39;face_parent&#39;, &#39;face_child&#39;])):
+    &#34;&#34;&#34;Scene graph data structure.
+    
+    Args:
+        root_poses: Array of root poses. Shape (N,4,4).
+        box_dimensions: Array of bounding box dimensions. Shape (N,3).
+        parents: Array of parent indices. Shape (N,).
+        contact_params: (N,3) array of contact parameters.
+        face_parent: (N,) array of parent face indices.
+        face_child: (N,) array of child face indices.
+    &#34;&#34;&#34;
+
+    def get_poses(self):
+        return poses_from_scene_graph(
+            self.root_poses,
+            self.box_dimensions,
+            self.parents,
+            self.contact_params,
+            self.face_parent,
+            self.face_child,
+        )
+    
+    def visualize(self, filename, node_names=None, colors=None):
+        import graphviz
+        import matplotlib
+        import distinctipy
+
+        scene_graph = self
+        num_nodes = len(scene_graph.root_poses)
+
+        if node_names is None:
+            node_names = [f&#34;node_{i}&#34; for i in range(len(scene_graph.root_poses))]
+        if colors is None:
+            colors = distinctipy.get_colors(num_nodes, pastel_factor=0.7)
+
+        g_out = graphviz.Digraph()
+        g_out.attr(&#34;node&#34;, style=&#34;filled&#34;)
+
+        for i in range(num_nodes):
+            g_out.node(f&#34;{i}&#34;, node_names[i], fillcolor=matplotlib.colors.to_hex(colors[i]))
+
+        edges = []
+        edge_label = []
+        for i,parent in enumerate(scene_graph.parents):
+            if parent == -1:
+                continue
+            edges.append((parent, i))
+            contact_string = f&#34;contact:\n&#34; + &#34; &#34;.join([f&#34;{x:.2f}&#34; for x in scene_graph.contact_params[i]])
+            contact_string += f&#34;\nfaces\n{scene_graph.face_parent[i]}-{scene_graph.face_child[i]}&#34; 
+            edge_label.append(contact_string)
+
+        for (i,j) in edges:
+            if i==-1:
+                continue
+            g_out.edge(f&#34;{i}&#34;,f&#34;{j}&#34;, label=edge_label[i])
+
+        max_width_px = 2000
+        max_height_px = 2000
+        dpi = 200
+
+        g_out.attr(&#34;graph&#34;,
+                    # See https://graphviz.gitlab.io/_pages/doc/info/attrs.html#a:size
+                    size=&#34;{},{}!&#34;.format(max_width_px / dpi, max_height_px / dpi),
+                    dpi=f&#34;{dpi}&#34;)
+        filename_prefix, filetype = filename.split(&#34;.&#34;)
+        g_out.render(filename_prefix, format=filetype)
+
 
 def get_contact_planes(dimensions):
     return jnp.stack(
@@ -71,22 +140,22 @@ relative_pose_from_edge_parallel_jit = jax.jit(
     )
 )
 
-def iter(poses, box_dims, parent, child, contact_params, face_parent, face_child):
-    parent_plane = get_contact_planes(box_dims[parent])[face_parent]
+def iter(root_poses, box_dimensions, parent, child, contact_params, face_parent, face_child):
+    parent_plane = get_contact_planes(box_dimensions[parent])[face_parent]
     relative = parent_plane.dot(
-        relative_pose_from_edge(contact_params, face_child, box_dims[child])
+        relative_pose_from_edge(contact_params, face_child, box_dimensions[child])
     )
     return (
-        poses[parent].dot(relative) * (parent != -1)
+        root_poses[parent].dot(relative) * (parent != -1)
         +
-        poses[child] * (parent == -1)
+        root_poses[child] * (parent == -1)
     )
 
-def poses_from_scene_graph(start_poses, box_dims, parents, contact_params, face_parent, face_child):
+def poses_from_scene_graph(root_poses, box_dimensions, parents, contact_params, face_parent, face_child):
     def _f(poses, _):
-        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0, 0, 0))(poses, box_dims, parents, jnp.arange(parents.shape[0]), contact_params, face_parent, face_child)
+        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0, 0, 0))(poses, box_dimensions, parents, jnp.arange(parents.shape[0]), contact_params, face_parent, face_child)
         return (new_poses, new_poses)
-    return jax.lax.scan(_f, start_poses, jnp.ones(parents.shape[0]))[0]
+    return jax.lax.scan(_f, root_poses, jnp.ones(parents.shape[0]))[0]
 poses_from_scene_graph_jit = jax.jit(poses_from_scene_graph)
 
     </code></pre>
@@ -128,7 +197,7 @@ poses_from_scene_graph_jit = jax.jit(poses_from_scene_graph)
 </details>
 </dd>
 <dt id="bayes3d.scene_graph.iter"><code class="name flex">
-<span>def <span class="ident">iter</span></span>(<span>poses, box_dims, parent, child, contact_params, face_parent, face_child)</span>
+<span>def <span class="ident">iter</span></span>(<span>root_poses, box_dimensions, parent, child, contact_params, face_parent, face_child)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -136,20 +205,20 @@ poses_from_scene_graph_jit = jax.jit(poses_from_scene_graph)
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def iter(poses, box_dims, parent, child, contact_params, face_parent, face_child):
-    parent_plane = get_contact_planes(box_dims[parent])[face_parent]
+<pre><code class="python">def iter(root_poses, box_dimensions, parent, child, contact_params, face_parent, face_child):
+    parent_plane = get_contact_planes(box_dimensions[parent])[face_parent]
     relative = parent_plane.dot(
-        relative_pose_from_edge(contact_params, face_child, box_dims[child])
+        relative_pose_from_edge(contact_params, face_child, box_dimensions[child])
     )
     return (
-        poses[parent].dot(relative) * (parent != -1)
+        root_poses[parent].dot(relative) * (parent != -1)
         +
-        poses[child] * (parent == -1)
+        root_poses[child] * (parent == -1)
     )</code></pre>
 </details>
 </dd>
 <dt id="bayes3d.scene_graph.poses_from_scene_graph"><code class="name flex">
-<span>def <span class="ident">poses_from_scene_graph</span></span>(<span>start_poses, box_dims, parents, contact_params, face_parent, face_child)</span>
+<span>def <span class="ident">poses_from_scene_graph</span></span>(<span>root_poses, box_dimensions, parents, contact_params, face_parent, face_child)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -157,15 +226,15 @@ poses_from_scene_graph_jit = jax.jit(poses_from_scene_graph)
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def poses_from_scene_graph(start_poses, box_dims, parents, contact_params, face_parent, face_child):
+<pre><code class="python">def poses_from_scene_graph(root_poses, box_dimensions, parents, contact_params, face_parent, face_child):
     def _f(poses, _):
-        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0, 0, 0))(poses, box_dims, parents, jnp.arange(parents.shape[0]), contact_params, face_parent, face_child)
+        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0, 0, 0))(poses, box_dimensions, parents, jnp.arange(parents.shape[0]), contact_params, face_parent, face_child)
         return (new_poses, new_poses)
-    return jax.lax.scan(_f, start_poses, jnp.ones(parents.shape[0]))[0]</code></pre>
+    return jax.lax.scan(_f, root_poses, jnp.ones(parents.shape[0]))[0]</code></pre>
 </details>
 </dd>
 <dt id="bayes3d.scene_graph.poses_from_scene_graph_jit"><code class="name flex">
-<span>def <span class="ident">poses_from_scene_graph_jit</span></span>(<span>start_poses, box_dims, parents, contact_params, face_parent, face_child)</span>
+<span>def <span class="ident">poses_from_scene_graph_jit</span></span>(<span>root_poses, box_dimensions, parents, contact_params, face_parent, face_child)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -173,11 +242,11 @@ poses_from_scene_graph_jit = jax.jit(poses_from_scene_graph)
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def poses_from_scene_graph(start_poses, box_dims, parents, contact_params, face_parent, face_child):
+<pre><code class="python">def poses_from_scene_graph(root_poses, box_dimensions, parents, contact_params, face_parent, face_child):
     def _f(poses, _):
-        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0, 0, 0))(poses, box_dims, parents, jnp.arange(parents.shape[0]), contact_params, face_parent, face_child)
+        new_poses = jax.vmap(iter, in_axes=(None, None, 0, 0, 0, 0, 0))(poses, box_dimensions, parents, jnp.arange(parents.shape[0]), contact_params, face_parent, face_child)
         return (new_poses, new_poses)
-    return jax.lax.scan(_f, start_poses, jnp.ones(parents.shape[0]))[0]</code></pre>
+    return jax.lax.scan(_f, root_poses, jnp.ones(parents.shape[0]))[0]</code></pre>
 </details>
 </dd>
 <dt id="bayes3d.scene_graph.relative_pose_from_edge"><code class="name flex">
@@ -258,6 +327,184 @@ poses_from_scene_graph_jit = jax.jit(poses_from_scene_graph)
 </dl>
 </section>
 <section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="bayes3d.scene_graph.SceneGraph"><code class="flex name class">
+<span>class <span class="ident">SceneGraph</span></span>
+<span>(</span><span>root_poses, box_dimensions, parents, contact_params, face_parent, face_child)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Scene graph data structure.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>root_poses</code></strong></dt>
+<dd>Array of root poses. Shape (N,4,4).</dd>
+<dt><strong><code>box_dimensions</code></strong></dt>
+<dd>Array of bounding box dimensions. Shape (N,3).</dd>
+<dt><strong><code>parents</code></strong></dt>
+<dd>Array of parent indices. Shape (N,).</dd>
+<dt><strong><code>contact_params</code></strong></dt>
+<dd>(N,3) array of contact parameters.</dd>
+<dt><strong><code>face_parent</code></strong></dt>
+<dd>(N,) array of parent face indices.</dd>
+<dt><strong><code>face_child</code></strong></dt>
+<dd>(N,) array of child face indices.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class SceneGraph(namedtuple(&#39;SceneGraph&#39;, [&#39;root_poses&#39;, &#39;box_dimensions&#39;, &#39;parents&#39;, &#39;contact_params&#39;, &#39;face_parent&#39;, &#39;face_child&#39;])):
+    &#34;&#34;&#34;Scene graph data structure.
+    
+    Args:
+        root_poses: Array of root poses. Shape (N,4,4).
+        box_dimensions: Array of bounding box dimensions. Shape (N,3).
+        parents: Array of parent indices. Shape (N,).
+        contact_params: (N,3) array of contact parameters.
+        face_parent: (N,) array of parent face indices.
+        face_child: (N,) array of child face indices.
+    &#34;&#34;&#34;
+
+    def get_poses(self):
+        return poses_from_scene_graph(
+            self.root_poses,
+            self.box_dimensions,
+            self.parents,
+            self.contact_params,
+            self.face_parent,
+            self.face_child,
+        )
+    
+    def visualize(self, filename, node_names=None, colors=None):
+        import graphviz
+        import matplotlib
+        import distinctipy
+
+        scene_graph = self
+        num_nodes = len(scene_graph.root_poses)
+
+        if node_names is None:
+            node_names = [f&#34;node_{i}&#34; for i in range(len(scene_graph.root_poses))]
+        if colors is None:
+            colors = distinctipy.get_colors(num_nodes, pastel_factor=0.7)
+
+        g_out = graphviz.Digraph()
+        g_out.attr(&#34;node&#34;, style=&#34;filled&#34;)
+
+        for i in range(num_nodes):
+            g_out.node(f&#34;{i}&#34;, node_names[i], fillcolor=matplotlib.colors.to_hex(colors[i]))
+
+        edges = []
+        edge_label = []
+        for i,parent in enumerate(scene_graph.parents):
+            if parent == -1:
+                continue
+            edges.append((parent, i))
+            contact_string = f&#34;contact:\n&#34; + &#34; &#34;.join([f&#34;{x:.2f}&#34; for x in scene_graph.contact_params[i]])
+            contact_string += f&#34;\nfaces\n{scene_graph.face_parent[i]}-{scene_graph.face_child[i]}&#34; 
+            edge_label.append(contact_string)
+
+        for (i,j) in edges:
+            if i==-1:
+                continue
+            g_out.edge(f&#34;{i}&#34;,f&#34;{j}&#34;, label=edge_label[i])
+
+        max_width_px = 2000
+        max_height_px = 2000
+        dpi = 200
+
+        g_out.attr(&#34;graph&#34;,
+                    # See https://graphviz.gitlab.io/_pages/doc/info/attrs.html#a:size
+                    size=&#34;{},{}!&#34;.format(max_width_px / dpi, max_height_px / dpi),
+                    dpi=f&#34;{dpi}&#34;)
+        filename_prefix, filetype = filename.split(&#34;.&#34;)
+        g_out.render(filename_prefix, format=filetype)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>builtins.tuple</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="bayes3d.scene_graph.SceneGraph.get_poses"><code class="name flex">
+<span>def <span class="ident">get_poses</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_poses(self):
+    return poses_from_scene_graph(
+        self.root_poses,
+        self.box_dimensions,
+        self.parents,
+        self.contact_params,
+        self.face_parent,
+        self.face_child,
+    )</code></pre>
+</details>
+</dd>
+<dt id="bayes3d.scene_graph.SceneGraph.visualize"><code class="name flex">
+<span>def <span class="ident">visualize</span></span>(<span>self, filename, node_names=None, colors=None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def visualize(self, filename, node_names=None, colors=None):
+    import graphviz
+    import matplotlib
+    import distinctipy
+
+    scene_graph = self
+    num_nodes = len(scene_graph.root_poses)
+
+    if node_names is None:
+        node_names = [f&#34;node_{i}&#34; for i in range(len(scene_graph.root_poses))]
+    if colors is None:
+        colors = distinctipy.get_colors(num_nodes, pastel_factor=0.7)
+
+    g_out = graphviz.Digraph()
+    g_out.attr(&#34;node&#34;, style=&#34;filled&#34;)
+
+    for i in range(num_nodes):
+        g_out.node(f&#34;{i}&#34;, node_names[i], fillcolor=matplotlib.colors.to_hex(colors[i]))
+
+    edges = []
+    edge_label = []
+    for i,parent in enumerate(scene_graph.parents):
+        if parent == -1:
+            continue
+        edges.append((parent, i))
+        contact_string = f&#34;contact:\n&#34; + &#34; &#34;.join([f&#34;{x:.2f}&#34; for x in scene_graph.contact_params[i]])
+        contact_string += f&#34;\nfaces\n{scene_graph.face_parent[i]}-{scene_graph.face_child[i]}&#34; 
+        edge_label.append(contact_string)
+
+    for (i,j) in edges:
+        if i==-1:
+            continue
+        g_out.edge(f&#34;{i}&#34;,f&#34;{j}&#34;, label=edge_label[i])
+
+    max_width_px = 2000
+    max_height_px = 2000
+    dpi = 200
+
+    g_out.attr(&#34;graph&#34;,
+                # See https://graphviz.gitlab.io/_pages/doc/info/attrs.html#a:size
+                size=&#34;{},{}!&#34;.format(max_width_px / dpi, max_height_px / dpi),
+                dpi=f&#34;{dpi}&#34;)
+    filename_prefix, filetype = filename.split(&#34;.&#34;)
+    g_out.render(filename_prefix, format=filetype)</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
 </section>
 </article>
 <nav id="sidebar">
@@ -280,6 +527,17 @@ poses_from_scene_graph_jit = jax.jit(poses_from_scene_graph)
 <li><code><a title="bayes3d.scene_graph.relative_pose_from_edge" href="#bayes3d.scene_graph.relative_pose_from_edge">relative_pose_from_edge</a></code></li>
 <li><code><a title="bayes3d.scene_graph.relative_pose_from_edge_jit" href="#bayes3d.scene_graph.relative_pose_from_edge_jit">relative_pose_from_edge_jit</a></code></li>
 <li><code><a title="bayes3d.scene_graph.relative_pose_from_edge_parallel_jit" href="#bayes3d.scene_graph.relative_pose_from_edge_parallel_jit">relative_pose_from_edge_parallel_jit</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="bayes3d.scene_graph.SceneGraph" href="#bayes3d.scene_graph.SceneGraph">SceneGraph</a></code></h4>
+<ul class="">
+<li><code><a title="bayes3d.scene_graph.SceneGraph.get_poses" href="#bayes3d.scene_graph.SceneGraph.get_poses">get_poses</a></code></li>
+<li><code><a title="bayes3d.scene_graph.SceneGraph.visualize" href="#bayes3d.scene_graph.SceneGraph.visualize">visualize</a></code></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

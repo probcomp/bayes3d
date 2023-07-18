@@ -35,7 +35,7 @@ import bayes3d as b
 @dataclass
 class GaussianVMFPose(ExactDensity):
     def sample(self, key, pose_mean, var, concentration, **kwargs):
-        return b.distributions.gaussian_vmf_sample(key, pose_mean, var, concentration)
+        return b.distributions.gaussian_vmf(key, pose_mean, var, concentration)
 
     def logpdf(self, pose, pose_mean, var, concentration, **kwargs):
 
@@ -60,7 +60,7 @@ class ImageLikelihood(ExactDensity):
         return img
 
     def logpdf(self, image, s, variance, outlier_prob, outlier_volume):
-        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 1)
+        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 2)
 
 @dataclass
 class ContactParamsUniform(ExactDensity):
@@ -217,7 +217,7 @@ print(console.render(tr))
 <pre><code class="python">@dataclass
 class GaussianVMFPose(ExactDensity):
     def sample(self, key, pose_mean, var, concentration, **kwargs):
-        return b.distributions.gaussian_vmf_sample(key, pose_mean, var, concentration)
+        return b.distributions.gaussian_vmf(key, pose_mean, var, concentration)
 
     def logpdf(self, pose, pose_mean, var, concentration, **kwargs):
 
@@ -296,7 +296,7 @@ print(console.render(tr))
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def sample(self, key, pose_mean, var, concentration, **kwargs):
-    return b.distributions.gaussian_vmf_sample(key, pose_mean, var, concentration)</code></pre>
+    return b.distributions.gaussian_vmf(key, pose_mean, var, concentration)</code></pre>
 </details>
 </dd>
 </dl>
@@ -316,7 +316,7 @@ class ImageLikelihood(ExactDensity):
         return img
 
     def logpdf(self, image, s, variance, outlier_prob, outlier_volume):
-        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 1)</code></pre>
+        return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 2)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -341,7 +341,7 @@ that value under the distribution.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def logpdf(self, image, s, variance, outlier_prob, outlier_volume):
-    return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 1)</code></pre>
+    return b.threedp3_likelihood(image, s, variance, outlier_prob, outlier_volume, 2)</code></pre>
 </details>
 </dd>
 <dt id="bayes3d.genjax.distributions.ImageLikelihood.sample"><code class="name flex">

@@ -159,7 +159,10 @@ def make_enumerator(addresses):
     
     def enumerator_score(trace, key, *args):
         return enumerator(trace, key, *args).get_score()
-    return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))</code></pre>
+    return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))
+
+def make_unknown_change_argdiffs(trace):
+    return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))</code></pre>
 </details>
 </section>
 <section>
@@ -324,6 +327,19 @@ def make_enumerator(addresses):
     return tuple(cold if j != i else hot for j in range(n))</code></pre>
 </details>
 </dd>
+<dt id="bayes3d.genjax.model.make_unknown_change_argdiffs"><code class="name flex">
+<span>def <span class="ident">make_unknown_change_argdiffs</span></span>(<span>trace)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def make_unknown_change_argdiffs(trace):
+    return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))</code></pre>
+</details>
+</dd>
 <dt id="bayes3d.genjax.model.multivmap"><code class="name flex">
 <span>def <span class="ident">multivmap</span></span>(<span>f, args=None)</span>
 </code></dt>
@@ -399,7 +415,7 @@ def make_enumerator(addresses):
 </ul>
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
-<ul class="two-column">
+<ul class="">
 <li><code><a title="bayes3d.genjax.model.add_object" href="#bayes3d.genjax.model.add_object">add_object</a></code></li>
 <li><code><a title="bayes3d.genjax.model.get_contact_params" href="#bayes3d.genjax.model.get_contact_params">get_contact_params</a></code></li>
 <li><code><a title="bayes3d.genjax.model.get_faces_child" href="#bayes3d.genjax.model.get_faces_child">get_faces_child</a></code></li>
@@ -411,6 +427,7 @@ def make_enumerator(addresses):
 <li><code><a title="bayes3d.genjax.model.get_root_poses" href="#bayes3d.genjax.model.get_root_poses">get_root_poses</a></code></li>
 <li><code><a title="bayes3d.genjax.model.make_enumerator" href="#bayes3d.genjax.model.make_enumerator">make_enumerator</a></code></li>
 <li><code><a title="bayes3d.genjax.model.make_onehot" href="#bayes3d.genjax.model.make_onehot">make_onehot</a></code></li>
+<li><code><a title="bayes3d.genjax.model.make_unknown_change_argdiffs" href="#bayes3d.genjax.model.make_unknown_change_argdiffs">make_unknown_change_argdiffs</a></code></li>
 <li><code><a title="bayes3d.genjax.model.multivmap" href="#bayes3d.genjax.model.multivmap">multivmap</a></code></li>
 <li><code><a title="bayes3d.genjax.model.print_trace" href="#bayes3d.genjax.model.print_trace">print_trace</a></code></li>
 <li><code><a title="bayes3d.genjax.model.viz_trace_meshcat" href="#bayes3d.genjax.model.viz_trace_meshcat">viz_trace_meshcat</a></code></li>
