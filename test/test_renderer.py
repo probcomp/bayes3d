@@ -14,7 +14,7 @@ intrinsics = b.Intrinsics(
     150.0,150.0,
     0.001, 50.0
 )
-b.setup_renderer(intrinsics)
+b.setup_renderer(intrinsics, num_layers=1)
 renderer = b.RENDERER
 
 r = 0.1
@@ -56,13 +56,15 @@ multiobject_scene_img = renderer.render(gt_poses_all[-1, ...], jnp.array([0, 1])
 multiobject_viz = b.get_depth_image(multiobject_scene_img[:,:,2], max=max_depth)
 
 multiobject_scene_parallel_img = renderer.render_many(gt_poses_all, jnp.array([0, 1]))
-multiobject_parallel_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,::,:,2], max=max_depth)
+multiobject_parallel_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,:,:,2], max=max_depth)
 
 segmentation_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,:,:,3], max=4.0)
 
+images = [b.get_depth_image(multiobject_scene_parallel_img[i,:,:,2], max=max_depth) for i in range(num_parallel_frames)]
 b.multi_panel(
-    [multiobject_viz, multiobject_parallel_viz, segmentation_viz]
+    [multiobject_viz, multiobject_parallel_viz, segmentation_viz] + images
 ).save("test_renderer.png")
+
 
 def test_segmentation_produces_sensical_outputs():
     assert jnp.allclose(multiobject_scene_parallel_img[-1,:,:,3].max(), 2.0)

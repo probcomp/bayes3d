@@ -474,11 +474,11 @@ void jax_load_vertices(cudaStream_t stream,
 }
 
 
-torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int>& indices,  void* out = nullptr)
+void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, const float* pose, uint num_objects, uint num_images, const std::vector<float>& proj, const std::vector<int>& indices,  void* out = nullptr)
 {
-    NVDR_CHECK_DEVICE(pose);
-    NVDR_CHECK_CONTIGUOUS(pose);
-    NVDR_CHECK_F32(pose);
+    // NVDR_CHECK_DEVICE(pose);
+    // NVDR_CHECK_CONTIGUOUS(pose);
+    // NVDR_CHECK_F32(pose);
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -490,8 +490,8 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
         setGLContext(s.glctx);
 
 
-    uint num_objects = pose.size(0);
-    uint num_images = pose.size(1);
+    // uint num_objects = pose.size(0);
+    // uint num_images = pose.size(1);
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
@@ -512,21 +512,7 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
 
-    // std::cout << height << " " << width << " " << num_images << " after !!" << std::endl;
-    torch::Tensor output_torch_tensor;
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    if (out == nullptr) {
-        output_torch_tensor = torch::empty({num_images, s.img_height, s.img_width,4}, opts);
-    } else {
-        output_torch_tensor = torch::from_blob(
-            out,
-            {num_images, s.img_height, s.img_width, 4}, 
-            /*strides=*/{s.img_height * s.img_width * 4, s.img_width * 4, 4, 1}, 
-            /*deleter=*/[](void*){},
-            opts);
-    }
-
-    const float* posePtr = pose.data_ptr<float>(); 
+    const float* posePtr = pose;
     for(int start_pose_idx=0; start_pose_idx < num_images; start_pose_idx+=s.num_layers)
     {
         int poses_on_this_iter = std::min(num_images-start_pose_idx, s.num_layers);
@@ -564,12 +550,11 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
 
 
         // Draw!
-
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, s.cudaColorBuffer, stream));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[0], 0, 0));
         cudaMemcpy3DParms p = {0};
         p.srcArray = array;
-        p.dstPtr.ptr = output_torch_tensor.data_ptr<float>() + start_pose_idx*s.img_height*s.img_width*4;
+        p.dstPtr.ptr = ((float * )out) + start_pose_idx*s.img_height*s.img_width*4;
         p.dstPtr.pitch = s.img_width * 4 * sizeof(float);
         p.dstPtr.xsize = s.img_width;
         p.dstPtr.ysize = s.img_height;
@@ -585,13 +570,13 @@ torch::Tensor _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& st
     if (stateWrapper.automatic)
         releaseGLContext();
 
-    return output_torch_tensor;
+    return;
 }
 
 
-torch::Tensor rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pose, const std::vector<float>& proj, const std::vector<int>& indices) {
-    return _rasterize_fwd_gl(at::cuda::getCurrentCUDAStream(), stateWrapper, pose, proj, indices, nullptr);
-}
+// void rasterize_fwd_gl(RasterizeGLStateWrapper& stateWrapper, cudaArray_t pose, const std::vector<float>& proj, const std::vector<int>& indices) {
+//     return _rasterize_fwd_gl(at::cuda::getCurrentCUDAStream(), stateWrapper, pose, proj, indices, nullptr);
+// }
 
 
 void jax_rasterize_fwd_gl(cudaStream_t stream,
@@ -606,25 +591,18 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     void *obj_idx = buffers[1];
     void *out = buffers[2];
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
+
     std::vector<int> indices;
     indices.resize(d.num_objects);
     cudaStreamSynchronize(stream);
-    auto indices_cpu = torch::from_blob(
-        obj_idx,
-        {d.num_objects},
-        /*stride=*/{1},
-        /*deleter=*/std::function<void(void*)>([](void*){}),
-        torch::dtype(torch::kInt32).device(torch::kCUDA)
-    ).to(torch::kCPU);
-    std::memcpy(&indices[0], indices_cpu.data_ptr<int>(), d.num_objects * sizeof(int));
+
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&indices[0], obj_idx, d.num_objects * sizeof(int), cudaMemcpyDeviceToHost));
+
     _rasterize_fwd_gl(stream,
                       stateWrapper,
-                      /*pose=*/torch::from_blob(
-                          pose,
-                          {d.num_objects, d.num_images, 4, 4},
-                          /*stride=*/{d.num_images * 16, 16, 4, 1},
-                          /*deleter=*/std::function<void(void*)>([](void*){}),
-                          opts),
+                      reinterpret_cast<const float *>(pose),
+                      d.num_objects,
+                      d.num_images,
                       /*proj=*/std::vector<float>(d.proj, d.proj + 16),
                       /*indices=*/indices,
                       /*out=*/out);
@@ -654,7 +632,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // Ops.
     m.def("setup", &setup, "rasterize forward op (opengl)");
     m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
-    m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
+    // m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
     m.def("registrations", &Registrations, "custom call registrations");
     m.def("build_setup_descriptor",
           [](RasterizeGLStateWrapper& stateWrapper,
