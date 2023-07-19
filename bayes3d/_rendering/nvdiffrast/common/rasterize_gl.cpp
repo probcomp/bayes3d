@@ -8,7 +8,7 @@
 
 #include "rasterize_gl.h"
 #include "glutil.h"
-#include "torch_common.inl"
+// #include "torch_common.inl"
 #include "torch_types.h"
 #include "common.h"
 #include <tuple>
@@ -363,31 +363,31 @@ void jax_setup(cudaStream_t stream,
 
 
 void _load_vertices_fwd(cudaStream_t stream, 
-                        RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri)
+                        RasterizeGLStateWrapper& stateWrapper, const float * pos, uint num_vertices, const int * tri, uint num_triangles)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
+    // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     // cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
 
-    // Check inputs.
-    NVDR_CHECK_DEVICE(pos, tri);
-    NVDR_CHECK_CONTIGUOUS(pos, tri);
-    NVDR_CHECK_F32(pos);
-    NVDR_CHECK_I32(tri);
+    // // Check inputs.
+    // NVDR_CHECK_DEVICE(pos, tri);
+    // NVDR_CHECK_CONTIGUOUS(pos, tri);
+    // NVDR_CHECK_F32(pos);
+    // NVDR_CHECK_I32(tri);
 
     // Check that GL context was created for the correct GPU.
-    NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
+    // NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
 
     // Determine number of outputs
 
     // Determine instance mode and check input dimensions.
-    NVDR_CHECK(pos.sizes().size() == 2 && pos.size(0) > 0 && pos.size(1) == 4, "range mode - pos must have shape [>0, 4]");
-    NVDR_CHECK(tri.sizes().size() == 2 && tri.size(0) > 0 && tri.size(1) == 3, "tri must have shape [>0, 3]");
+    // NVDR_CHECK(pos.sizes().size() == 2 && pos.size(0) > 0 && pos.size(1) == 4, "range mode - pos must have shape [>0, 4]");
+    // NVDR_CHECK(tri.sizes().size() == 2 && tri.size(0) > 0 && tri.size(1) == 3, "tri must have shape [>0, 3]");
 
 
     // Get position and triangle buffer sizes in int32/float32.
-    int posCount = 4 * pos.size(0);
-    int triCount = 3 * tri.size(0);
+    int posCount = 4 * num_vertices;
+    int triCount = 3 * num_triangles;
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
@@ -426,9 +426,8 @@ void _load_vertices_fwd(cudaStream_t stream,
     NVDR_CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, s.triCounts[s.model_counter] * sizeof(int32_t), NULL, GL_DYNAMIC_DRAW));
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterBuffer(&s.cudaTriBuffer, s.glTriBuffer, cudaGraphicsRegisterFlagsWriteDiscard));
 
-    const float* posPtr = pos.data_ptr<float>();
-    const int32_t* triPtr = tri.data_ptr<int32_t>();
-    int vtxPerInstance = pos.size(1);
+    const float* posPtr = pos;
+    const int32_t* triPtr = tri;
 
     // Copy both position and triangle buffers.
     void* glPosPtr = NULL;
@@ -448,12 +447,6 @@ void _load_vertices_fwd(cudaStream_t stream,
     s.model_counter = s.model_counter + 1;
 }
 
-void load_vertices_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri)
-{
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-    return _load_vertices_fwd(stream, stateWrapper, pos, tri);
-}
-
 void jax_load_vertices(cudaStream_t stream,
                        void **buffers,
                        const char *opaque, std::size_t opaque_len)
@@ -462,15 +455,7 @@ void jax_load_vertices(cudaStream_t stream,
         *UnpackDescriptor<LoadVerticesCustomCallDescriptor>(opaque, opaque_len);
     RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
     // std::cerr << "load_vertices: " << d.num_vertices << "," << d.num_triangles << "\n";
-    torch::Tensor pos = torch::from_blob(
-        buffers[0], {d.num_vertices, 4}, /*strides=*/{4, 1}, 
-        std::function<void(void*)>([](void*){}), 
-        torch::dtype(torch::kFloat32).device(torch::kCUDA));
-    torch::Tensor tri = torch::from_blob(
-        buffers[1], {d.num_triangles, 3}, /*strides=*/{3, 1}, 
-        std::function<void(void*)>([](void*){}), 
-        torch::dtype(torch::kInt32).device(torch::kCUDA));
-    _load_vertices_fwd(stream, stateWrapper, pos, tri);
+    _load_vertices_fwd(stream, stateWrapper, reinterpret_cast<const float *>(buffers[0]), d.num_vertices, reinterpret_cast<const int *>(buffers[1]), d.num_triangles);
 }
 
 
@@ -617,6 +602,8 @@ pybind11::capsule EncapsulateFunction(T* fn) {
 
 pybind11::dict Registrations() {
   pybind11::dict dict;
+  dict["jax_setup"] = EncapsulateFunction(jax_setup);
+  dict["jax_load_vertices"] = EncapsulateFunction(jax_load_vertices);
   dict["jax_rasterize_fwd_gl"] = EncapsulateFunction(jax_rasterize_fwd_gl);
   return dict;
 }
@@ -630,8 +617,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         .def("release_context", &RasterizeGLStateWrapper::releaseContext);
 
     // Ops.
-    m.def("setup", &setup, "rasterize forward op (opengl)");
-    m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
+    // m.def("setup", &setup, "rasterize forward op (opengl)");
+    // m.def("load_vertices_fwd", &load_vertices_fwd, "rasterize forward op (opengl)");
     // m.def("rasterize_fwd_gl", &rasterize_fwd_gl, "rasterize forward op (opengl)");
     m.def("registrations", &Registrations, "custom call registrations");
     m.def("build_setup_descriptor",

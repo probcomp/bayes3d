@@ -2,8 +2,6 @@ from typing import Tuple
 
 import functools
 import bayes3d._rendering.nvdiffrast.common as dr
-import torch
-from torch.utils import dlpack
 import bayes3d.camera
 import bayes3d as j
 import bayes3d as b
@@ -16,7 +14,6 @@ from jax.abstract_arrays import ShapedArray
 from jax.interpreters import batching, mlir, xla
 from jax.lib import xla_client
 import numpy as np
-import jax.dlpack
 from jaxlib.hlo_helpers import custom_call
 from tqdm import tqdm
 
@@ -57,10 +54,8 @@ class Renderer(object):
             intrinsics.near, intrinsics.far
         ).reshape(-1))
 
-        dr._get_plugin(gl=True).setup(
-            self.renderer_env.cpp_wrapper,
-            intrinsics.height, intrinsics.width, num_layers
-        )
+        build_setup_primitive(self,intrinsics.height, intrinsics.width, num_layers).bind()
+
 
         self.meshes =[]
         self.mesh_names =[]
@@ -112,11 +107,8 @@ class Renderer(object):
         vertices = np.array(mesh.vertices)
         vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)
         triangles = np.array(mesh.faces)
-        dr._get_plugin(gl=True).load_vertices_fwd(
-            self.renderer_env.cpp_wrapper, 
-            torch.tensor(vertices.astype("f"), device='cuda'),
-            torch.tensor(triangles.astype(np.int32), device='cuda'),
-        )
+        prim = build_load_vertices_primitive(self)
+        prim.bind(jnp.float32(vertices), jnp.int32(triangles))
 
     def _render_many(self, poses, indices):
         return _render_custom_call(self, poses, indices)[0]
@@ -260,3 +252,110 @@ def _build_render_primitive(r: "Renderer"):
     batching.primitive_batchers[_render_prim] = _render_batch
     
     return _render_prim
+
+
+
+
+@functools.lru_cache(maxsize=None)
+def build_setup_primitive(r: "Renderer", h, w, num_layers):
+    _register_custom_calls()
+    # print('build_setup_primitive')
+    
+    # For JIT compilation we need a function to evaluate the shape and dtype of the
+    # outputs of our op for some given inputs
+    def _setup_abstract():
+        # print('setup abstract eval')
+        dtype = dtypes.canonicalize_dtype(np.float32)
+        return [ShapedArray((), dtype), ShapedArray((), dtype)]
+
+    # Provide an MLIR "lowering" of the load_vertices primitive.
+    def _setup_lowering(ctx):
+        # print('lowering setup!')
+
+        opaque = dr._get_plugin(gl=True).build_setup_descriptor(
+            r.renderer_env.cpp_wrapper, h, w, num_layers)
+
+        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(np.dtype(np.float32)))
+        op_name = "jax_setup"
+        return custom_call(
+            op_name,
+            # Output types
+            out_types=[scalar_dummy, scalar_dummy],
+            # The inputs:
+            operands=[],
+            # Layout specification:
+            operand_layouts=[],
+            result_layouts=[(), ()],
+            # GPU specific additional data
+            backend_config=opaque
+        )
+
+    # *********************************************
+    # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
+    # *********************************************
+    _prim = core.Primitive(f"setup__{id(r)}")
+    _prim.multiple_results = True
+    _prim.def_impl(functools.partial(xla.apply_primitive, _prim))
+    _prim.def_abstract_eval(_setup_abstract)
+
+    # Connect the XLA translation rules for JIT compilation
+    mlir.register_lowering(_prim, _setup_lowering, platform="gpu")
+    
+    return _prim
+
+
+@functools.lru_cache(maxsize=None)
+def build_load_vertices_primitive(r: "Renderer"):
+    _register_custom_calls()
+    # print('build_load_vertices_primitive')
+    
+    # For JIT compilation we need a function to evaluate the shape and dtype of the
+    # outputs of our op for some given inputs
+    def _load_vertices_abstract(vertices, triangles):
+        # print('load_vertices abstract eval:', vertices, triangles)
+        dtype = dtypes.canonicalize_dtype(np.float32)
+        return [ShapedArray((), dtype), ShapedArray((), dtype)]
+
+    # Provide an MLIR "lowering" of the load_vertices primitive.
+    def _load_vertices_lowering(ctx, vertices, triangles):
+        # print('lowering load_vertices!')
+        # Extract the numpy type of the inputs
+        vertices_aval, triangles_aval = ctx.avals_in
+
+        if np.dtype(vertices_aval.dtype) != np.float32:
+            raise NotImplementedError(f"Unsupported vertices dtype {np_dtype}")
+        if np.dtype(triangles_aval.dtype) != np.int32:
+            raise NotImplementedError(f"Unsupported triangles dtype {np_dtype}")
+
+        opaque = dr._get_plugin(gl=True).build_load_vertices_descriptor(
+            r.renderer_env.cpp_wrapper, vertices_aval.shape[0], triangles_aval.shape[0])
+
+        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(np.dtype(np.float32)))
+        op_name = "jax_load_vertices"
+        return custom_call(
+            op_name,
+            # Output types
+            out_types=[scalar_dummy, scalar_dummy],
+            # The inputs:
+            operands=[vertices, triangles],
+            # Layout specification:
+            operand_layouts=[(1, 0), (1, 0)],
+            result_layouts=[(), ()],
+            # GPU specific additional data
+            backend_config=opaque
+        )
+
+    # *********************************************
+    # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
+    # *********************************************
+    _prim = core.Primitive(f"load_vertices__{id(r)}")
+    _prim.multiple_results = True
+    _prim.def_impl(functools.partial(xla.apply_primitive, _prim))
+    _prim.def_abstract_eval(_load_vertices_abstract)
+
+    # Connect the XLA translation rules for JIT compilation
+    mlir.register_lowering(_prim, _load_vertices_lowering, platform="gpu")
+    
+    return _prim
+
+
