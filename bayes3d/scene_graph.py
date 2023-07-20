@@ -44,6 +44,7 @@ class SceneGraph(namedtuple('SceneGraph', ['root_poses', 'box_dimensions', 'pare
         for i in range(num_nodes):
             g_out.node(f"{i}", node_names[i], fillcolor=matplotlib.colors.to_hex(colors[i]))
 
+
         edges = []
         edge_label = []
         for i,parent in enumerate(scene_graph.parents):
@@ -51,13 +52,13 @@ class SceneGraph(namedtuple('SceneGraph', ['root_poses', 'box_dimensions', 'pare
                 continue
             edges.append((parent, i))
             contact_string = f"contact:\n" + " ".join([f"{x:.2f}" for x in scene_graph.contact_params[i]])
-            contact_string += f"\nfaces\n{scene_graph.face_parent[i]}-{scene_graph.face_child[i]}" 
+            contact_string += f"\nfaces\n{scene_graph.face_parent[i].item()} --- {scene_graph.face_child[i].item()}" 
             edge_label.append(contact_string)
 
-        for (i,j) in edges:
+        for ((i,j),label) in zip(edges, edge_label):
             if i==-1:
                 continue
-            g_out.edge(f"{i}",f"{j}", label=edge_label[i])
+            g_out.edge(f"{i}",f"{j}", label=label)
 
         max_width_px = 2000
         max_height_px = 2000
@@ -70,6 +71,41 @@ class SceneGraph(namedtuple('SceneGraph', ['root_poses', 'box_dimensions', 'pare
         filename_prefix, filetype = filename.split(".")
         g_out.render(filename_prefix, format=filetype)
 
+def create_floating_scene_graph(scene_graph):
+    """Create a new scene graph with the same structure, but with all objects floating.
+
+    Returns:
+        A new scene graph with the same structure, but with all objects floating.
+    """
+    return SceneGraph(
+        root_poses=scene_graph.get_poses(),
+        box_dimensions=scene_graph.box_dimensions,
+        parents=jnp.full(scene_graph.parents.shape, -1),
+        contact_params=jnp.zeros(scene_graph.contact_params.shape),
+        face_parent=jnp.zeros(scene_graph.face_parent.shape, dtype=jnp.int32),
+        face_child=jnp.zeros(scene_graph.face_child.shape, dtype=jnp.int32),
+    )
+
+
+def add_edge_scene_graph(scene_graph, parent, child, face_parent, face_child, contact_params):
+    print(parent, child, face_parent, face_child)
+    N = scene_graph.get_poses().shape[0]
+    sg_parents = jnp.array(scene_graph.parents)
+    sg_parents = sg_parents.at[child].set(parent)
+    sg_contact_params = jnp.array(scene_graph.contact_params)
+    sg_contact_params = sg_contact_params.at[child].set(contact_params)
+    sg_face_parent = jnp.array(scene_graph.face_parent)
+    sg_face_parent = sg_face_parent.at[child].set(face_parent)
+    sg_face_child = jnp.array(scene_graph.face_child)
+    sg_face_child = sg_face_child.at[child].set(face_child)
+    return SceneGraph(
+        root_poses=scene_graph.get_poses(),
+        box_dimensions=scene_graph.box_dimensions,
+        parents=sg_parents,
+        contact_params=sg_contact_params,
+        face_parent=sg_face_parent,
+        face_child=sg_face_child,
+    )
 
 def get_contact_planes(dimensions):
     return jnp.stack(
@@ -87,6 +123,14 @@ def get_contact_planes(dimensions):
             # right
             t3d.transform_from_pos(jnp.array([dimensions[0]/2.0, 0.0, 0.0])).dot(t3d.transform_from_axis_angle(jnp.array([0.0, 1.0, 0.0]), jnp.pi/2)),
         ]
+    )
+
+def contact_params_to_pose(contact_params):
+    x,y,angle = contact_params
+    return t3d.transform_from_pos(jnp.array([x,y, 0.0])).dot(
+        t3d.transform_from_axis_angle(jnp.array([1.0, 1.0, 0.0]), jnp.pi).dot(
+            t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), angle)
+        )
     )
 
 def relative_pose_from_edge(
@@ -130,4 +174,15 @@ def poses_from_scene_graph(root_poses, box_dimensions, parents, contact_params, 
     return jax.lax.scan(_f, root_poses, jnp.ones(parents.shape[0]))[0]
 poses_from_scene_graph_jit = jax.jit(poses_from_scene_graph)
 
-    
+def closest_approximate_contact_params(parent_contact_plane, child_contact_plane):
+    contact_pose = t3d.inverse_pose(parent_contact_plane) @ child_contact_plane
+    (x, y, _) = contact_pose[:3,3]
+    pose_ = (
+        t3d.inverse_pose(t3d.transform_from_axis_angle(jnp.array([1.0, 1.0, 0.0]), jnp.pi)) @ 
+        contact_pose
+    )
+    quaternion = t3d.rotation_matrix_to_quaternion(pose_[:3,:3])
+    angle = 2 * jnp.arctan2(quaternion[3], quaternion[0])
+    inferred_contact_params = jnp.array([x,y,angle])
+    slack = t3d.inverse_pose(contact_params_to_pose(inferred_contact_params)) @ contact_pose
+    return inferred_contact_params, slack

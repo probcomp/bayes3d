@@ -12,6 +12,19 @@ from jax.scipy.special import logsumexp
 import time
 import subprocess as sp
 import os
+import inspect
+
+def make_onehot(n, i, hot=1, cold=0):
+    return tuple(cold if j != i else hot for j in range(n))
+
+def multivmap(f, args=None):
+    if args is None:
+        args = (True,) * len(inspect.signature(f).parameters)
+    multivmapped = f
+    for (i, ismapped) in reversed(list(enumerate(args))):
+        if ismapped:
+            multivmapped = jax.vmap(multivmapped, in_axes=make_onehot(len(args), i, hot=0, cold=None))
+    return multivmapped
 
 
 def time_code_block(func, args):
