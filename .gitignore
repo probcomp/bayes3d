@@ -1,4 +1,5 @@
 venv/*
+*.joblib
 *.gif
 *.png
 */__pycache__/*

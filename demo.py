@@ -1,7 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
-import bayes3d as j
 import bayes3d as b
 import time
 from PIL import Image
@@ -23,49 +22,27 @@ intrinsics = b.Intrinsics(
 )
 
 b.setup_renderer(intrinsics)
-b.RENDERER.add_mesh_from_file(os.path.join(j.utils.get_assets_dir(),"sample_objs/cube.obj"))
+b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"))
 
 num_frames = 60
 
-gt_poses = [
-    jnp.array([
-    [1.0, 0.0, 0.0, -3.0], 
-    [0.0, 1.0, 0.0, -3.0],   
-    [0.0, 0.0, 1.0, 4.0],   
-    [0.0, 0.0, 0.0, 1.0],   
-    ]
+poses = [b.t3d.transform_from_pos(jnp.array([-3.0, -3.0, 4.0]))]
+delta_pose = b.t3d.transform_from_rot_and_pos(
+    R.from_euler('zyx', [1.0, -0.1, -2.0], degrees=True).as_matrix(),
+    jnp.array([0.09, 0.05, 0.02])
 )
-]
-rot = R.from_euler('zyx', [1.0, -0.1, -2.0], degrees=True).as_matrix()
-delta_pose =     jnp.array([
-    [1.0, 0.0, 0.0, 0.09],   
-    [0.0, 1.0, 0.0, 0.05],   
-    [0.0, 0.0, 1.0, 0.02],   
-    [0.0, 0.0, 0.0, 1.0],   
-    ]
+for t in range(num_frames-1):
+    poses.append(poses[-1].dot(delta_pose))
+poses = jnp.stack(poses)
+print("Number of frames: ", poses.shape[0])
+
+observed_images = b.RENDERER.render_many(poses[:,None,...],  jnp.array([0]))
+print("observed_images.shape", observed_images.shape)
+
+translation_deltas = b.utils.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
+rotation_deltas = jax.vmap(lambda key: b.distributions.gaussian_vmf_zero_mean(key, 0.00001, 800.0))(
+    jax.random.split(jax.random.PRNGKey(3), 100)
 )
-delta_pose = delta_pose.at[:3,:3].set(jnp.array(rot))
-
-for t in range(num_frames):
-    gt_poses.append(gt_poses[-1].dot(delta_pose))
-gt_poses = jnp.stack(gt_poses)
-print("gt_poses.shape", gt_poses.shape)
-
-
-gt_images = b.RENDERER.render_many(gt_poses[:,None,...],  jnp.array([0]))
-print("gt_images.shape", gt_images.shape)
-print("non-zero D-channel pixels in img 0:", (gt_images[0,:,:,-1] > 0 ).sum())
-
-translation_deltas = j.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
-key = jax.random.PRNGKey(3)
-rotation_deltas = jax.vmap(lambda key: j.distributions.gaussian_vmf(key, 0.00001, 800.0))(
-    jax.random.split(key, 100)
-)
-
-# jax.vmap(b.RENDERER.render_parallel, in_axes=(0, None))
-
-pose_estimate = gt_poses[0]
-
 
 def update_pose_estimate(pose_estimate, gt_image):
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, translation_deltas)
@@ -80,26 +57,24 @@ def update_pose_estimate(pose_estimate, gt_image):
     return pose_estimate, pose_estimate
 
 inference_program = jax.jit(lambda p,x: jax.lax.scan(update_pose_estimate, p,x)[1])
-inferred_poses = inference_program(gt_poses[0], gt_images)
+inferred_poses = inference_program(poses[0], observed_images)
 
 start = time.time()
-pose_estimates_over_time = inference_program(gt_poses[0], gt_images)
+pose_estimates_over_time = inference_program(poses[0], observed_images)
 end = time.time()
 print ("Time elapsed:", end - start)
-print ("FPS:", gt_poses.shape[0] / (end - start))
+print ("FPS:", poses.shape[0] / (end - start))
 
 
-viz_images = []
 max_depth = 10.0
-
 rerendered_images = b.RENDERER.render_many(pose_estimates_over_time[:, None, ...], jnp.array([0]))
 viz_images = [
-    j.viz.multi_panel(
-        [j.viz.get_depth_image(d[:,:,2]), j.viz.get_depth_image(r[:,:,2])],
+    b.viz.multi_panel(
+        [b.viz.get_depth_image(d[:,:,2]), b.viz.get_depth_image(r[:,:,2])],
         ["Ground Truth", "Inferred Reconstruction"],
     )
-    for (r, d) in zip(rerendered_images, gt_images)
+    for (r, d) in zip(rerendered_images, observed_images)
 ]
-j.make_gif(viz_images, "demo.gif")
+b.make_gif_from_pil_images(viz_images, "assets/demo.gif")
 
 from IPython import embed; embed()
