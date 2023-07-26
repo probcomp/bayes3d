@@ -10,7 +10,7 @@ import jax
 # --- creating the model dir from the working directory
 model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")
 print(f"{model_dir} exists: {os.path.exists(model_dir)}")
-model_names = j.ycb_loader.MODEL_NAMES
+model_names = j.utils.ycb_loader.MODEL_NAMES
 IDX = 13
 name = model_names[IDX]
 print(name)
@@ -23,7 +23,7 @@ camera_pose = j.t3d.transform_from_pos_target_up(
 
 
 bop_ycb_dir = os.path.join(j.utils.get_assets_dir(), "bop/ycbv")
-rgbd, gt_ids, gt_poses, masks = j.ycb_loader.get_test_img('52', '1', bop_ycb_dir)
+rgbd, gt_ids, gt_poses, masks = j.utils.ycb_loader.get_test_img('52', '1', bop_ycb_dir)
 intrinsics = j.Intrinsics(
     height=rgbd.intrinsics.height,
     width=rgbd.intrinsics.width,

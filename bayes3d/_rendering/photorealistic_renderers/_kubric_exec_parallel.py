@@ -51,10 +51,7 @@ for scene_number in range(len(poses)):
     # --- create perspective camera 
     scene += kb.PerspectiveCamera(name="camera",
         position =camera_pose[0],quaternion=camera_pose[1], focal_length=focal_length, sensor_width=sensor_width)
-    scene += kb.DirectionalLight(
-        name="sun", position=(0, -0.0, 0),
-        look_at=(0, 0, 1), intensity=intensity
-    )
+    scene += kb.PointLight(name='sun', position=camera_pose[0], intensity=intensity)
 
     for obj_number in range(len(poses[scene_number])):
         obj = kb.FileBasedObject(
