@@ -1,5 +1,3 @@
-import pybullet as p
-import pybullet_data
 import numpy as np
 import jax.numpy as jnp
 import open3d as o3d
@@ -8,6 +6,7 @@ import bayes3d as b
 import bayes3d.transforms_3d as t3d
 import imageio
 from scipy.spatial.transform import Rotation as R
+import matplotlib.pyplot as plt
 from PIL import Image
 
 def o3d_to_pybullet_position(o3d_position):
@@ -60,7 +59,7 @@ def pybullet_render(scene):
     pyb_sim = PybulletSimulator(camera=scene.camera, floor = scene.floor)
     for body in scene.bodies.values():
         pyb_sim.add_body_to_simulation(body)
-    image_rgb, depth, _ = pyb_sim.capture_image(scene.camera)
+    image_rgb, depth, segm = pyb_sim.capture_image(scene.camera)
     pyb_sim.close()
     image = Image.fromarray(image_rgb)
     depth = depth - (min(depth.flatten()))
@@ -68,7 +67,7 @@ def pybullet_render(scene):
     depth = depth * 255
     depth = depth.astype(np.uint8)
     depth = Image.fromarray(depth)
-    return image, depth
+    return image, depth, segm
 
 def create_box(pose, scale = [1,1,1], restitution=1, friction=0, velocity=0, angular_velocity = [0,0,0], id=None):
     """
@@ -160,7 +159,7 @@ def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0
     return make_body_from_obj_pose(obj_path, pose, id=id, friction=friction, restitution=restitution, velocity=velocity, scale=scale, angular_velocity=angular_velocity)
 
 class Body:
-    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=0.8, friction=0, damping=0, transparency=1, velocity=[0,0,0], angular_velocity = [0,0,0],mass=1, texture=None, color=[1, 0, 0], scale=None):
+    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=0.8, friction=0, damping=0, transparency=1, velocity=[0,0,0], angular_velocity = [0,0,0],mass=1, texture=None, color=[1, 0, 0], scale=None, occluder=False):
         self.id = object_id
         self.pose = pose
         self.restitution = restitution
@@ -175,6 +174,9 @@ class Body:
         self.file_dir = file_dir
         self.mesh = mesh
         self.scale = scale
+        self.forces = {} # maps from a timestep to a vector of force to apply 
+        self.velocity_changes = {} 
+        self.occluder = occluder
 
     # Getter methods
     def get_id(self):
@@ -264,7 +266,37 @@ class Body:
 
     def set_scale(self, scale):
         self.scale = scale
+    
+    def set_occluder(self, occluder):
+        self.occluder = occluder
 
+    def add_force(self, force_vector, start_timestep, end_timestep = None, step = None): 
+        self.forces[start_timestep] = {"force" : force_vector, "end_timestep" : end_timestep, "step" : step}
+        return self.forces
+    
+    def remove_force(self, timestep):
+        if timestep not in self.forces.keys():
+            raise ValueError("No force applied at this timestep")
+        else:
+            del self.forces[timestep]
+        return self.forces
+    
+    def add_velocity_change(self, velocity_change, timestep):
+        self.velocity_changes[timestep] = velocity_change
+        return self.velocity_changes
+    
+    def remove_velocity_change(self, timestep):
+        if timestep not in self.velocity_changes.keys():
+            raise ValueError("No velocity change applied at this timestep")
+        else:
+            del self.velocity_changes[timestep]
+        return self.velocity_changes
+    
+    def get_forces(self):
+        return self.forces
+    
+    def get_velocity_changes(self):
+        return self.velocity_changes
 
     # Miscellaneous methods
     def get_fields(self):
@@ -285,7 +317,8 @@ class Scene:
         self.floor = floor
         self.pyb_sim = None
         self.downsampling = downsampling
-
+        self.timestep_to_forces = {}
+        self.timestep_to_dv = {}
 
     def add_body(self, body: Body):
         self.bodies[body.id] = body
@@ -348,8 +381,22 @@ class Scene:
         return image
     
     def simulate(self, timesteps):
+        # create mapping from timestep to forces
+        for body in self.bodies.values():
+            forces = body.get_forces()
+            for timestep in forces.keys():
+                force_on_body = forces[timestep]
+                self.timestep_to_forces[timestep] = [(body.get_id(), force_on_body)] if timestep not in self.timestep_to_forces.keys() else self.timestep_to_forces[timestep] + [(body.get_id(), force_on_body)]
+
+        # do the same for velocity changes
+        for body in self.bodies.values():
+            velocity_changes = body.get_velocity_changes()
+            for timestep in velocity_changes.keys():
+                velocity_change_on_body = velocity_changes[timestep]
+                self.timestep_to_dv[timestep] = [(body.get_id(), velocity_change_on_body)] if timestep not in self.timestep_to_dv.keys() else self.timestep_to_dv[timestep] + [(body.get_id(), velocity_change_on_body)]
+
         # create physics simulator 
-        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera, downsampling = self.downsampling, floor = self.floor )
+        pyb = PybulletSimulator(timestep=self.timestep, gravity=self.gravity, camera = self.camera, downsampling = self.downsampling, floor = self.floor, forces = self.timestep_to_forces, dv = self.timestep_to_dv)
         self.pyb_sim = pyb
 
         # add bodies to physics simulator
@@ -365,7 +412,7 @@ class Scene:
         if self.pyb_sim == None: 
             raise ValueError("No pybullet simulation to close")
         else:
-            p.disconnect(self.pyb_sim.client)
+            self.pyb_sim.p.disconnect(self.pyb_sim.client)
 
     def __str__(self):
         body_str = "\n".join(["    " + str(body) for body in self.bodies.values()])
@@ -400,27 +447,53 @@ class Camera(object):
         return f"Camera: position_target = {self.position_target}, position={self.position}, target={self.target}, pose={self.pose}, near={self.near}, far={self.far}, fov={self.fov}, width={self.width}, height={self.height}, up_vector={self.up_vector}, distance={self.distance}, yaw={self.yaw}, pitch={self.pitch}, roll={self.roll}, intrinsics={self.intrinsics}"
     
 class PybulletSimulator(object):
-    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True):
+    def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True, forces = None, dv = None):
+        # only build pybullet when needed 
+        import pybullet as p
+        import pybullet_data
+        self.p = p
         self.timestep = timestep
         self.gravity = gravity
-        self.client = p.connect(p.DIRECT)
+        self.client = self.p.connect(self.p.DIRECT)
         self.step_count = 0
         self.frames = [] 
         self.depth = []
+        self.segm = []
         self.pyb_id_to_body_id = {}
+        self.body_id_to_pyb_id = {}
         self.body_poses = {}
+        self.body_velocities = {} 
         self.camera = camera
         self.downsampling = downsampling
         self.floor = floor 
+        self.initial_timestep_to_forces = forces 
+        self.timestep_to_dv = dv
 
         # Set up the simulation environment
-        p.resetSimulation(physicsClientId=self.client)
-        p.setGravity(self.gravity[0], self.gravity[1], self.gravity[2], physicsClientId=self.client)
-        p.setPhysicsEngineParameter(fixedTimeStep=self.timestep, physicsClientId=self.client)
+        self.p.resetSimulation(physicsClientId=self.client)
+        self.p.setGravity(self.gravity[0], self.gravity[1], self.gravity[2], physicsClientId=self.client)
+        self.p.setPhysicsEngineParameter(fixedTimeStep=self.timestep, physicsClientId=self.client)
         if self.floor:
-            p.setAdditionalSearchPath(pybullet_data.getDataPath())
-            self.plane_id = p.loadURDF("plane.urdf", physicsClientId=self.client)
-            p.changeDynamics(self.plane_id, -1, restitution=floor_restitution)
+            self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+            self.plane_id = self.p.loadURDF("plane.urdf", physicsClientId=self.client)
+            self.p.changeDynamics(self.plane_id, -1, restitution=floor_restitution)
+
+
+
+        # setup timestep to forces mapping
+        self.timestep_to_body_force = {}
+        if self.initial_timestep_to_forces is not None:
+            for init_timestep in self.initial_timestep_to_forces.keys():
+                for body_id, force_info in self.initial_timestep_to_forces[init_timestep]:
+                    # if force_info["end_timestep"] is None, assign it to init_timestep
+                    end_timestep = force_info["end_timestep"] or init_timestep
+                    # if force_info["step"] is None, assign it to 1
+                    step = force_info["step"] or 1
+                    for timestep in range(init_timestep, end_timestep + 1, step):
+                        # Use setdefault() to simplify appending to the dictionary
+                        self.timestep_to_body_force.setdefault(timestep, []).append((body_id, force_info["force"]))
+
+
     
     def add_body_to_simulation(self, body):
         """
@@ -435,18 +508,14 @@ class PybulletSimulator(object):
 
 
         # Create visual and collision shapes
-        visualShapeId = p.createVisualShape(shapeType=p.GEOM_MESH, 
-                                            # vertices=vertices, 
-                                            # indices=faces,
+        visualShapeId = self.p.createVisualShape(shapeType=self.p.GEOM_MESH, 
                                             fileName = obj_file_dir,
                                             meshScale = mesh_scale,
                                             physicsClientId=self.client,
                                             rgbaColor=np.append(body.color, body.transparency),
                                             )
         
-        collisionShapeId = p.createCollisionShape(shapeType=p.GEOM_MESH,
-                                                # vertices=vertices, 
-                                                # indices=faces,
+        collisionShapeId = self.p.createCollisionShape(shapeType=self.p.GEOM_MESH,
                                                 fileName = obj_file_dir,
                                                 meshScale = mesh_scale,
                                                 physicsClientId=self.client, 
@@ -460,7 +529,7 @@ class PybulletSimulator(object):
         quaternion = r.as_quat()
 
         # Create a multibody with the created shapes
-        pyb_id = p.createMultiBody(baseMass=body.mass,
+        pyb_id = self.p.createMultiBody(baseMass=body.mass,
                                     baseCollisionShapeIndex=collisionShapeId,
                                     baseVisualShapeIndex=visualShapeId, 
                                     basePosition=body.get_position(),
@@ -470,56 +539,73 @@ class PybulletSimulator(object):
 
 
         # Set physical properties
-        p.changeDynamics(pyb_id, -1, restitution=body.restitution, lateralFriction=body.friction, 
+        self.p.changeDynamics(pyb_id, -1, restitution=body.restitution, lateralFriction=body.friction, 
                         linearDamping=body.damping, physicsClientId=self.client)
 
         # Set initial velocity if specified
         if body.velocity != [0,0,0] or body.angular_velocity != [0,0,0]:
-            p.resetBaseVelocity(pyb_id, linearVelocity=body.velocity, angularVelocity = body.angular_velocity, physicsClientId=self.client)
-# 
+            self.p.resetBaseVelocity(pyb_id, linearVelocity=body.velocity, angularVelocity = body.angular_velocity, physicsClientId=self.client)
+
         # If texture is specified, load it
         if body.texture is not None:
-            textureId = p.loadTexture(body.texture, physicsClientId=self.client)
-            p.changeVisualShape(pyb_id, -1, textureUniqueId=textureId, physicsClientId=self.client)
+            textureId = self.p.loadTexture(body.texture, physicsClientId=self.client)
+            self.p.changeVisualShape(pyb_id, -1, textureUniqueId=textureId, physicsClientId=self.client)
 
         # Add to mapping from pybullet id to body id
         self.pyb_id_to_body_id[pyb_id] = body.id
+        self.body_id_to_pyb_id[body.id] = pyb_id
         self.body_poses[body.id] = []
+        self.body_velocities[body.id] = [] 
 
     def check_collision(self):
         for body in self.pyb_id_to_body_id.keys():
-            collisions = p.getContactPoints(bodyA=body, physicsClientId=self.client)
+            collisions = self.p.getContactPoints(bodyA=body, physicsClientId=self.client)
             if len(collisions) > 0:
                 print(f"Body {body} is colliding.")
 
     def step_simulation(self):
         self.step_count+=1
-        p.stepSimulation(physicsClientId=self.client)
+        # check if external forces are applied to any bodies
+        if self.step_count in self.timestep_to_body_force.keys():
+            for body_id,force in self.timestep_to_body_force[self.step_count]:
+                id_in_sim = self.body_id_to_pyb_id[body_id]
+                self.p.applyExternalForce(objectUniqueId=id_in_sim, linkIndex=-1, forceObj=force, posObj=[0,0,0], flags=self.p.WORLD_FRAME, physicsClientId=self.client)
+        if self.step_count in self.timestep_to_dv.keys():
+            for body_id, dv in self.timestep_to_dv[self.step_count]:
+                id_in_sim = self.body_id_to_pyb_id[body_id]
+                self.p.resetBaseVelocity(id_in_sim, linearVelocity=dv, physicsClientId=self.client)
+        self.p.stepSimulation(physicsClientId=self.client)
     
-    def update_body_poses(self):
+    def update_body_info(self):
         for pyb_id in self.pyb_id_to_body_id.keys():
-            position, orientation = p.getBasePositionAndOrientation(pyb_id, physicsClientId=self.client)
-            orientation = p.getRotationMatrixFromQuaternion(orientation)
+            position, orientation = self.p.getBasePositionAndOrientation(pyb_id, physicsClientId=self.client)
+            orientation = self.p.getMatrixFromQuaternion(orientation)
             pose = np.eye(4)
+            orientation = np.array(orientation).reshape(3, 3)
             pose[:3, :3] = orientation
             pose[:3, 3] = position
             self.body_poses[self.pyb_id_to_body_id[pyb_id]].append(pose)
+
+            velocity, ang_velocity = self.p.getBaseVelocity(pyb_id, physicsClientId=self.client)
+            mapping = {"velocity": velocity, "angular_velocity": ang_velocity}
+            self.body_velocities[self.pyb_id_to_body_id[pyb_id]].append(mapping)
     
     def simulate(self, steps): 
         # returns frames, poses of objects over time
         for i in range(steps):
-            # if i % self.downsampling == 0:
-                # rgb, depth, segm = self.capture_image(self.camera)
-                # self.frames.append(rgb)
-                # self.update_body_poses()
+            if i % self.downsampling == 0:
+                rgb, depth, segm = self.capture_image(self.camera)
+                self.frames.append(rgb)
+                self.depth.append(depth)
+                self.segm.append(segm)
+                self.update_body_info()
             self.step_simulation()
-
         self.close()
     
     def capture_image(self, camera):
         if camera.position_target:
-            projMatrix = p.computeProjectionMatrixFOV(fov=camera.fov, aspect=float(camera.width) / camera.height, nearVal=camera.near, farVal=camera.far)
-            viewMatrix = p.computeViewMatrix(cameraEyePosition=camera.position, cameraTargetPosition=camera.target, cameraUpVector=camera.up_vector)
+            projMatrix = self.p.computeProjectionMatrixFOV(fov=camera.fov, aspect=float(camera.width) / camera.height, nearVal=camera.near, farVal=camera.far)
+            viewMatrix = self.p.computeViewMatrix(cameraEyePosition=camera.position, cameraTargetPosition=camera.target, cameraUpVector=camera.up_vector)
         else:
             projMatrix = (
             2*camera.fx/camera.width,0,0,0,
@@ -530,10 +616,10 @@ class PybulletSimulator(object):
             mat = np.array(t3d.transform_from_rot(t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]),jnp.pi)))
             viewMatrix = tuple(np.linalg.inv(np.array(camera.pose).dot(mat)).T.reshape(-1))
 
-        _,_, rgb, depth, segmentation = p.getCameraImage(camera.width, camera.height,
+        _,_, rgb, depth, segmentation = self.p.getCameraImage(camera.width, camera.height,
             viewMatrix,
             projMatrix,
-            renderer=p.ER_BULLET_HARDWARE_OPENGL
+            renderer=self.p.ER_BULLET_HARDWARE_OPENGL
         )
 
         rgb = np.array(rgb, dtype=np.uint8).reshape((camera.height, camera.width, 4))
@@ -545,29 +631,46 @@ class PybulletSimulator(object):
         segmentation = np.array(segmentation).reshape((camera.height, camera.width))
         return rgb, depth_buffer, segmentation
     
-    def create_gif(self, path, fps=15):
-        imageio.mimsave(path, self.frames, duration = (1000 * (1/fps)))
-        
-    def set_velocity(self, obj_id):
-        return
+    def create_gif(self, path, fps=30):
+        imageio.mimwrite(path, self.frames, duration = (1000 * (1/fps)))
+
+    def create_depth_gif(self, path, fps=30):
+        depth_frames = []
+        for depth in self.depth:
+            depth = depth - (min(depth.flatten()))
+            depth = depth / (max(depth.flatten()))
+            depth = depth * 255
+            depth = depth.astype(np.uint8)
+            depth_frames.append(depth)
+        imageio.mimwrite(path, depth_frames, duration = (1000 * (1/fps)))
+
+    def create_seg_gif(self, path, fps=30): 
+        seg_frames = []
+        num_classes = len(self.pyb_id_to_body_id) + 2 # 2 for background and floor
+        cmap = plt.cm.get_cmap('tab10', num_classes)
+        for seg in self.segm:
+            class_image = cmap(seg)
+            class_image = (class_image[:, :, :3] * 255).astype(np.uint8)
+            seg_frames.append(class_image)
+        imageio.mimwrite(path, seg_frames, duration = (1000 * (1/fps)))
     
     # adjusts the timestep of the simulation
     def set_timestep(self, dt):
         self.timestep = dt
-        p.setPhysicsEngineParameter(fixedTimeStep=self.timestep, physicsClientId=self.client)
+        self.p.setPhysicsEngineParameter(fixedTimeStep=self.timestep, physicsClientId=self.client)
 
     # adjusts the gravity of the simulation
     def set_gravity(self, g):
         self.gravity = g
-        p.setGravity(self.gravity[0],self.gravity[1], self.gravity[2], physicsClientId=self.client)
+        self.p.setGravity(self.gravity[0],self.gravity[1], self.gravity[2], physicsClientId=self.client)
 
     def close(self):
-        p.resetSimulation(physicsClientId=self.client)
-        p.disconnect(self.client)
+        self.p.resetSimulation(physicsClientId=self.client)
+        self.p.disconnect(self.client)
     
     # returns a mapping of body_id to poses over time
-    def get_object_poses(self):
+    def get_body_poses(self):
         return self.body_poses
-
-    def add_plane(self):
-        return
+    
+    def get_body_velocities(self): 
+        return self.body_velocities
