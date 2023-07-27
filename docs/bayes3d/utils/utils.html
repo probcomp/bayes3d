@@ -40,6 +40,19 @@ from jax.scipy.special import logsumexp
 import time
 import subprocess as sp
 import os
+import inspect
+
+def make_onehot(n, i, hot=1, cold=0):
+    return tuple(cold if j != i else hot for j in range(n))
+
+def multivmap(f, args=None):
+    if args is None:
+        args = (True,) * len(inspect.signature(f).parameters)
+    multivmapped = f
+    for (i, ismapped) in reversed(list(enumerate(args))):
+        if ismapped:
+            multivmapped = jax.vmap(multivmapped, in_axes=make_onehot(len(args), i, hot=0, cold=None))
+    return multivmapped
 
 
 def time_code_block(func, args):
@@ -725,6 +738,19 @@ j - filter_shape[1] // 2:j + filter_shape[1] - filter_shape[1] // 2,
     return jnp.array(object_model_cloud)</code></pre>
 </details>
 </dd>
+<dt id="bayes3d.utils.utils.make_onehot"><code class="name flex">
+<span>def <span class="ident">make_onehot</span></span>(<span>n, i, hot=1, cold=0)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def make_onehot(n, i, hot=1, cold=0):
+    return tuple(cold if j != i else hot for j in range(n))</code></pre>
+</details>
+</dd>
 <dt id="bayes3d.utils.utils.make_schedules_contact_params"><code class="name flex">
 <span>def <span class="ident">make_schedules_contact_params</span></span>(<span>grid_widths, rotation_angle_widths, grid_params)</span>
 </code></dt>
@@ -746,6 +772,25 @@ j - filter_shape[1] // 2:j + filter_shape[1] - filter_shape[1] // 2,
         )
         sched.append(cf)
     return sched</code></pre>
+</details>
+</dd>
+<dt id="bayes3d.utils.utils.multivmap"><code class="name flex">
+<span>def <span class="ident">multivmap</span></span>(<span>f, args=None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def multivmap(f, args=None):
+    if args is None:
+        args = (True,) * len(inspect.signature(f).parameters)
+    multivmapped = f
+    for (i, ismapped) in reversed(list(enumerate(args))):
+        if ismapped:
+            multivmapped = jax.vmap(multivmapped, in_axes=make_onehot(len(args), i, hot=0, cold=None))
+    return multivmapped</code></pre>
 </details>
 </dd>
 <dt id="bayes3d.utils.utils.normalize_log_scores"><code class="name flex">
@@ -1006,7 +1051,9 @@ j - filter_shape[1] // 2:j + filter_shape[1] - filter_shape[1] // 2,
 <li><code><a title="bayes3d.utils.utils.get_largest_cluster_id_from_segmentation" href="#bayes3d.utils.utils.get_largest_cluster_id_from_segmentation">get_largest_cluster_id_from_segmentation</a></code></li>
 <li><code><a title="bayes3d.utils.utils.infer_table_plane" href="#bayes3d.utils.utils.infer_table_plane">infer_table_plane</a></code></li>
 <li><code><a title="bayes3d.utils.utils.make_cube_point_cloud" href="#bayes3d.utils.utils.make_cube_point_cloud">make_cube_point_cloud</a></code></li>
+<li><code><a title="bayes3d.utils.utils.make_onehot" href="#bayes3d.utils.utils.make_onehot">make_onehot</a></code></li>
 <li><code><a title="bayes3d.utils.utils.make_schedules_contact_params" href="#bayes3d.utils.utils.make_schedules_contact_params">make_schedules_contact_params</a></code></li>
+<li><code><a title="bayes3d.utils.utils.multivmap" href="#bayes3d.utils.utils.multivmap">multivmap</a></code></li>
 <li><code><a title="bayes3d.utils.utils.normalize_log_scores" href="#bayes3d.utils.utils.normalize_log_scores">normalize_log_scores</a></code></li>
 <li><code><a title="bayes3d.utils.utils.plane_eq_to_plane_pose" href="#bayes3d.utils.utils.plane_eq_to_plane_pose">plane_eq_to_plane_pose</a></code></li>
 <li><code><a title="bayes3d.utils.utils.resize" href="#bayes3d.utils.utils.resize">resize</a></code></li>
