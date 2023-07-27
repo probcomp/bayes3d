@@ -430,10 +430,11 @@ class Camera(object):
         self.near = near
         self.far = far
         self.fov = fov
+        # default values for intrinsics
         self.fx,self.fy, self.cx,self.cy = (
-        500.0,500.0,
-        320.0,240.0
-        )
+            500.0,500.0,
+            320.0,240.0
+            )
         self.width = width
         self.height = height
         self.up_vector = [0, 0, 1] if up_vector is None else up_vector
@@ -469,6 +470,9 @@ class PybulletSimulator(object):
         self.initial_timestep_to_forces = forces 
         self.timestep_to_dv = dv
 
+        self.floor_pos_ori = None
+        self.viewMatrix = None
+
         # Set up the simulation environment
         self.p.resetSimulation(physicsClientId=self.client)
         self.p.setGravity(self.gravity[0], self.gravity[1], self.gravity[2], physicsClientId=self.client)
@@ -477,6 +481,8 @@ class PybulletSimulator(object):
             self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
             self.plane_id = self.p.loadURDF("plane.urdf", physicsClientId=self.client)
             self.p.changeDynamics(self.plane_id, -1, restitution=floor_restitution)
+            self.floor_pos_ori = (self.p.getBasePositionAndOrientation(self.plane_id, physicsClientId=self.client))
+
 
 
 
@@ -515,6 +521,8 @@ class PybulletSimulator(object):
                                             rgbaColor=np.append(body.color, body.transparency),
                                             )
         
+        is_occluder = body.occluder
+
         collisionShapeId = self.p.createCollisionShape(shapeType=self.p.GEOM_MESH,
                                                 fileName = obj_file_dir,
                                                 meshScale = mesh_scale,
@@ -528,14 +536,25 @@ class PybulletSimulator(object):
         r = R.from_matrix(rot_matrix)
         quaternion = r.as_quat()
 
-        # Create a multibody with the created shapes
-        pyb_id = self.p.createMultiBody(baseMass=body.mass,
-                                    baseCollisionShapeIndex=collisionShapeId,
-                                    baseVisualShapeIndex=visualShapeId, 
-                                    basePosition=body.get_position(),
-                                    baseOrientation=quaternion,
-                                    physicsClientId=self.client,
-                                    )
+        if not is_occluder:
+            # Create a multibody with the created shapes
+            pyb_id = self.p.createMultiBody(baseMass=body.mass,
+                                        baseCollisionShapeIndex=collisionShapeId,
+                                        baseVisualShapeIndex=visualShapeId, 
+                                        basePosition=body.get_position(),
+                                        baseOrientation=quaternion,
+                                        physicsClientId=self.client,
+                                        )
+        else: 
+            # no visual shape 
+            print("added occluder")
+            pyb_id = self.p.createMultiBody(baseMass=body.mass,
+                                        baseCollisionShapeIndex=collisionShapeId,
+                                        # baseVisualShapeIndex=visualShapeId, 
+                                        basePosition=body.get_position(),
+                                        baseOrientation=quaternion,
+                                        physicsClientId=self.client,
+                                        )
 
 
         # Set physical properties
@@ -562,6 +581,8 @@ class PybulletSimulator(object):
             collisions = self.p.getContactPoints(bodyA=body, physicsClientId=self.client)
             if len(collisions) > 0:
                 print(f"Body {body} is colliding.")
+                print(f"Timestep: {self.step_count}")
+
 
     def step_simulation(self):
         self.step_count+=1
@@ -574,6 +595,7 @@ class PybulletSimulator(object):
             for body_id, dv in self.timestep_to_dv[self.step_count]:
                 id_in_sim = self.body_id_to_pyb_id[body_id]
                 self.p.resetBaseVelocity(id_in_sim, linearVelocity=dv, physicsClientId=self.client)
+        # self.check_collision()
         self.p.stepSimulation(physicsClientId=self.client)
     
     def update_body_info(self):
@@ -598,7 +620,7 @@ class PybulletSimulator(object):
                 self.frames.append(rgb)
                 self.depth.append(depth)
                 self.segm.append(segm)
-                self.update_body_info()
+            self.update_body_info()
             self.step_simulation()
         self.close()
     
@@ -621,6 +643,7 @@ class PybulletSimulator(object):
             projMatrix,
             renderer=self.p.ER_BULLET_HARDWARE_OPENGL
         )
+        self.viewMatrix = viewMatrix
 
         rgb = np.array(rgb, dtype=np.uint8).reshape((camera.height, camera.width, 4))
         depth_buffer = np.reshape(depth, (camera.height, camera.width))
