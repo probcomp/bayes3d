@@ -2,11 +2,20 @@ import bayes3d.camera
 import bayes3d as j
 import bayes3d as b
 import bayes3d.transforms_3d as t3d
-import numpy as np
+import numpy as npe
 import jax.numpy as jnp
 
 class RGBD(object):
     def __init__(self, rgb, depth, camera_pose, intrinsics, segmentation=None):
+        """RGBD Image
+        
+        Args:
+            rgb (np.array): RGB image
+            depth (np.array): Depth image
+            camera_pose (np.array): Camera pose. 4x4 matrix
+            intrinsics (b.camera.Intrinsics): Camera intrinsics
+            segmentation (np.array): Segmentation image
+        """
         self.rgb = rgb
         self.depth = depth
         self.camera_pose = camera_pose
@@ -14,6 +23,13 @@ class RGBD(object):
         self.segmentation  = segmentation
 
     def construct_from_camera_image(camera_image, near=0.001, far=5.0):
+        """Construct RGBD image from CameraImage
+        
+        Args:
+            camera_image (CameraImage): CameraImage object
+        Returns:
+            RGBD: RGBD image
+        """
         depth = np.array(camera_image.depthPixels)
         rgb = np.array(camera_image.rgbPixels)
         camera_pose = t3d.pybullet_pose_to_transform(camera_image.camera_pose)
@@ -24,6 +40,13 @@ class RGBD(object):
         return RGBD(rgb, depth, camera_pose, j.Intrinsics(h,w,fx,fy,cx,cy,near,far))
 
     def construct_from_aidan_dict(d, near=0.001, far=5.0):
+        """Construct RGBD image from Aidan's dictionary
+        
+        Args:
+            d (dict): Dictionary containing rgb, depth, extrinsics, intrinsics
+        Returns:
+            RGBD: RGBD image
+        """
         depth = np.array(d["depth"] / 1000.0) 
         camera_pose = t3d.pybullet_pose_to_transform(d["extrinsics"])
         rgb = np.array(d["rgb"])
@@ -34,6 +57,13 @@ class RGBD(object):
         return observation
 
     def construct_from_step_metadata(step_metadata, intrinsics=None):
+        """Construct RGBD image from StepMetadata.
+
+        Args:
+            step_metadata (StepMetadata): StepMetadata object
+        Returns:
+            RGBD: RGBD image
+        """
         if intrinsics is None:
             width, height = step_metadata.camera_aspect_ratio
             aspect_ratio = width / height
@@ -55,8 +85,8 @@ class RGBD(object):
         observation = RGBD(rgb, depth, jnp.eye(4), intrinsics, seg_final)
         return observation
 
-def scale_rgbd(rgbd, scaling_factor):
-    rgb = b.utils.scale(rgbd.rgb, scaling_factor)
-    depth= b.utils.scale(rgbd.depth, scaling_factor)
-    intrinsics = b.camera.scale_camera_parameters(rgbd.intrinsics, scaling_factor)
-    return RGBD(rgb, depth, rgbd.camera_pose, intrinsics, rgbd.segmentation)
+    def scale_rgbd(self, scaling_factor):
+        rgb = b.utils.scale(self.rgb, scaling_factor)
+        depth= b.utils.scale(self.depth, scaling_factor)
+        intrinsics = b.camera.scale_camera_parameters(self.intrinsics, scaling_factor)
+        return RGBD(rgb, depth, self.camera_pose, intrinsics, self.segmentation)

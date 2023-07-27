@@ -1,13 +1,15 @@
-from bayes3d.transforms_3d import transform_from_axis_angle
+import bayes3d as b
+import jax
 import jax.numpy as jnp
-from scipy.spatial.transform import Rotation as R
-import numpy as np
 
-vec = np.array([0.1, 0.4, -1.0])
-vec = vec / np.linalg.norm(vec)
-ang = 10.0
 
-print(R.from_rotvec(np.array(vec) * ang).as_matrix())
-print(transform_from_axis_angle(jnp.array(vec), ang))
 
-print(transform_from_axis_angle(jnp.array(vec), 0.0))
+
+def test_estimate_transform_between_clouds():
+    key = jax.random.PRNGKey(500)
+    c1 = jax.random.uniform(jax.random.PRNGKey(0), (10,3)) * 5.0
+    random_pose = b.distributions.gaussian_vmf_zero_mean(key, 0.1, 1.0)
+    c2 = b.t3d.apply_transform(c1, random_pose)
+
+    estimated = b.estimate_transform_between_clouds(c1, c2)
+    assert jnp.isclose(b.apply_transform(c1, estimated), c2, atol=1e-5).all()
