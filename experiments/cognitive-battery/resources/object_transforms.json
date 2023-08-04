@@ -88,8 +88,23 @@
     ],
     "apple": [
         {
-            "pos_delta": [0, 0, -0],
             "scale": 0.5
+        }
+    ],
+    "plate": [
+        {
+            "rot": [180, 0, 0],
+            "scale": 0.2
+        }
+    ],
+    "occluder": [
+        {
+            "scale": [0.385, 0.34, 0.375]
+        }
+    ],
+    "large_bowl": [
+        {
+            "scale": 1
         }
     ]
 }

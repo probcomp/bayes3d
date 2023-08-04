@@ -9,6 +9,7 @@ import numpy as np
 from bayes3d.renderer import _Renderer
 from bayes3d.transforms_3d import transform_from_pos, unproject_depth
 from bayes3d.viz import get_depth_image, make_gif_from_pil_images, multi_panel
+from bayes3d.distributions import gaussian_vmf
 from PIL import Image
 from tqdm import tqdm
 
@@ -20,7 +21,7 @@ def model(
     config: Config,
     video_path: str,
     meshes_path: str,
-    num_objects=10,
+    num_start_objects=10,
     out_path: str = "",
 ):
     data_path = os.path.join(video_path, "human_readable")
@@ -66,7 +67,7 @@ def model(
         )
         mask = np.invert(mask)
 
-        coord_image[mask, :] = 0.0
+        coord_image[mask, :] = intrinsics.far
         segmentation_image[mask, :] = 0.0
         coord_images.append(coord_image)
         seg_images.append(segmentation_image)
@@ -83,6 +84,7 @@ def model(
         mesh_path = os.path.join(meshes_path, mesh_name)
         renderer.add_mesh_from_file(mesh_path, force="mesh")
         meshes.append(mesh_name.replace(".obj", ""))
+    print("Found meshes:", meshes)
 
     start_t = config.start_t
     seg_img = seg_images[start_t]
@@ -93,14 +95,14 @@ def model(
     obj_ids = sorted(
         obj_ids, key=lambda x: np.all(seg_img == x, axis=-1).sum(), reverse=True
     )
-    for obj_id in obj_ids[: num_objects + 1]:
+    for obj_id in obj_ids[: num_start_objects + 1]:
         if np.all(obj_id == 0):
             # Background
             continue
 
         obj_mask = np.all(seg_img == obj_id, axis=-1)
         masked_depth = coord_images[start_t].copy()
-        masked_depth[~obj_mask] = 0
+        masked_depth[~obj_mask] = intrinsics.far
 
         object_points = coord_images[start_t][obj_mask]
         maxs = np.max(object_points, axis=0)
@@ -108,13 +110,16 @@ def model(
         obj_center = (maxs + mins) / 2
         obj_transform = transform_from_pos(obj_center)
 
-        best = utils.find_best_mesh(renderer, meshes, obj_transform, masked_depth)
+        best = utils.find_best_mesh(
+            renderer, intrinsics, meshes, obj_transform, masked_depth
+        )
         if best:
             indices.append(best[0])
             init_poses.append(best[1])
             known_obj_ids.add(tuple(obj_id))
 
     init_poses = jnp.array(init_poses)
+    num_objects = init_poses.shape[0]
 
     ## Defining inference helper functions
 
@@ -168,7 +173,6 @@ def model(
     num_steps = (
         (num_frames - start_t) if config.num_steps == "auto" else config.num_steps
     )
-    n_objects = init_poses.shape[0]
     reward_indices = utils.get_reward_indices(meshes, indices)
 
     containment_relations = {}
@@ -193,15 +197,20 @@ def model(
                 pose_estimates = jnp.concatenate((pose_estimates, new_poses))
                 past_poses.update(
                     {
-                        (i + len(past_poses)): deque([new_poses[i]] * config.num_past_poses)
+                        (i + len(past_poses)): deque(
+                            [new_poses[i]] * config.num_past_poses
+                        )
                         for i in range(len(new_poses))
                     }
                 )
-                n_objects += len(new_indices)
+                num_objects += len(new_indices)
                 reward_indices = utils.get_reward_indices(meshes, indices)
 
+        rotation_deltas = jax.vmap(lambda key: gaussian_vmf(key, 0.00001, 800.0))(
+            jax.random.split(jax.random.PRNGKey(3), 100)
+        )
         for _ in range(config.iterations_per_step):
-            for i in range(n_objects):
+            for i in range(num_objects):
                 # Check for occlusion
                 if i in reward_indices:
                     occluded = utils.check_occlusion(
@@ -216,28 +225,29 @@ def model(
 
                 for d in config.grid_deltas:
                     translation_deltas = make_unfiform_grid(n=config.grid_n, d=d)
-                    translation_deltas_full = jnp.tile(
-                        jnp.eye(4)[None, :, :],
-                        (translation_deltas.shape[0], pose_estimates.shape[0], 1, 1),
-                    )
-                    translation_deltas_full = translation_deltas_full.at[
-                        :, i, :, :
-                    ].set(translation_deltas)
-                    translation_proposals = jnp.einsum(
-                        "bij,abjk->abik", pose_estimates, translation_deltas_full
-                    )
-                    prior_score = prior_parallel(
-                        translation_proposals[:, i], jnp.array(past_poses[i])
-                    )
-                    images = renderer.render_multiobject_parallel(
-                        translation_proposals.transpose((1, 0, 2, 3)), indices
-                    )
+                    for pose_deltas in [translation_deltas, rotation_deltas]:
+                        pose_deltas_full = jnp.tile(
+                            jnp.eye(4)[None, :, :],
+                            (pose_deltas.shape[0], pose_estimates.shape[0], 1, 1),
+                        )
+                        pose_deltas_full = pose_deltas_full.at[:, i, :, :].set(
+                            pose_deltas
+                        )
+                        pose_proposals = jnp.einsum(
+                            "bij,abjk->abik", pose_estimates, pose_deltas_full
+                        )
+                        prior_score = prior_parallel(
+                            pose_proposals[:, i], jnp.array(past_poses[i])
+                        )
+                        images = renderer.render_multiobject_parallel(
+                            pose_proposals.transpose((1, 0, 2, 3)), indices
+                        )
 
-                    likelihood_score = scorer_parallel(images, gt_image)
-                    weights = likelihood_score + prior_score
-                    best_weight_idx = jnp.argmax(weights)
-                    best_proposal = translation_proposals[best_weight_idx]
-                    pose_estimates = best_proposal
+                        likelihood_score = scorer_parallel(images, gt_image)
+                        weights = likelihood_score + prior_score
+                        best_weight_idx = jnp.argmax(weights)
+                        best_proposal = pose_proposals[best_weight_idx]
+                        pose_estimates = best_proposal
 
                 past_poses[i].append(pose_estimates[i])
                 if len(past_poses[i]) > config.num_past_poses:

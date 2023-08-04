@@ -64,6 +64,7 @@ def get_camera_intrinsics(
 
 def find_best_mesh(
     renderer: _Renderer,
+    intrinsics: bayes3d.Intrinsics,
     meshes: List[str],
     obj_transform: jnp.ndarray,
     depth: jnp.ndarray,
@@ -78,8 +79,8 @@ def find_best_mesh(
         obj_transforms = get_object_transforms(meshes[m], obj_transform)
         for i, transform in enumerate(obj_transforms):
             rendered_image = renderer.render_single_object(transform, m)
-            scaling_factor = (rendered_image[:, :, 2] != rendered_image.max()).sum() / (
-                depth[:, :, 2] != 0.0
+            scaling_factor = (rendered_image[:, :, 2] != intrinsics.far).sum() / (
+                depth[:, :, 2] != intrinsics.far
             ).sum()
             scaling_factor = (
                 1 / scaling_factor if scaling_factor < 1 else scaling_factor
@@ -89,11 +90,11 @@ def find_best_mesh(
                     jnp.logical_or(
                         (
                             (depth[:, :, 2] != 0.0)
-                            * (rendered_image[:, :, 2] == rendered_image.max())
+                            * (rendered_image[:, :, 2] == intrinsics.far)
                         ),
                         (
                             (depth[:, :, 2] == 0.0)
-                            * (rendered_image[:, :, 2] != rendered_image.max())
+                            * (rendered_image[:, :, 2] != intrinsics.far)
                         ),
                     )
                 )

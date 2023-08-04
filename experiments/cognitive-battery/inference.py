@@ -30,7 +30,7 @@ def run_inference(experiment: str, video_path: str) -> Tuple[int, int]:
         meshes_path=MESHES_PATH.format(experiment=experiment),
         out_path=out_path,
     )
-    label = utils.read_label(video_path)
+    label = utils.read_label(video_path, config.CONFIG_MAP[experiment].label_key)
 
     return pred, label
 
