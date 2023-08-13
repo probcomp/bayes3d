@@ -84,7 +84,9 @@ def add_object(trace, key, obj_id, parent, face_parent, face_child):
     choices[f"contact_params_{N-1}"] = jnp.zeros(3)
     return model.importance(key, choices,
         (jnp.arange(N), *trace.get_args()[1:])
-    )[1][1]
+    )[1]
+
+add_object_jit = jax.jit(add_object)
 
 def print_trace(trace):
     print("""
@@ -127,7 +129,7 @@ def make_enumerator(addresses):
                 addr: c for (addr, c) in zip(addresses, args)
             }),
             tuple(map(lambda v: Diff(v, UnknownChange), trace.args)),
-        )[1][2]
+        )[2]
     
     def enumerator_score(trace, key, *args):
         return enumerator(trace, key, *args).get_score()

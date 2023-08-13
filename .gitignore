@@ -2,6 +2,7 @@ venv/*
 *.joblib
 *.gif
 *.png
+*.lock
 */__pycache__/*
 *.code-workspace
 *.pyc
