@@ -1,6 +1,7 @@
 import open3d as o3d
 import numpy as np
 import bayes3d as j
+import bayes3d as b
 import jax.numpy as jnp
 
 def trimesh_to_o3d_triangle_mesh(trimesh_mesh):
@@ -108,11 +109,12 @@ class Open3DVisualizer(object):
         self.counter+=1
 
     def capture_image(self, intrinsics, camera_pose):
-        intr = o3d.camera.PinholeCameraIntrinsic(
-            intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy
+        self.render.scene.camera.set_projection(
+            b.camera.K_from_intrinsics(intrinsics),
+            intrinsics.near, intrinsics.far,
+            intrinsics.width,
+            intrinsics.height
         )
-        self.render.setup_camera(intr, np.linalg.inv(np.eye(4)))
-
         # Look at the origin from the front (along the -Z direction, into the screen), with Y as Up.
         center = np.array(camera_pose[:3,3]) + np.array(camera_pose[:3,2])  # look_at target
         eye = np.array(camera_pose[:3,3])  # camera position
