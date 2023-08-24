@@ -46,6 +46,7 @@ class Renderer(object):
             num_layers (int, optional): The number of scenes to render in parallel. Defaults to 1024.
         """
         self.intrinsics = intrinsics
+        self.num_layers = num_layers
         self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
         self.proj_list = list(bayes3d.camera._open_gl_projection_matrix(
             intrinsics.height, intrinsics.width, 
@@ -60,6 +61,25 @@ class Renderer(object):
         self.meshes =[]
         self.mesh_names =[]
         self.model_box_dims = jnp.zeros((0,3))
+
+    def cleanup(self):
+        """Clean up the resources and memory used by the renderer."""
+        # Release the C++ renderer environment
+        # cpp files are modified so that the destructors deallocate GPU memory
+        self.renderer_env = None
+
+        # Release the meshes
+        self.meshes.clear()
+        self.mesh_names.clear()
+        self.model_box_dims = jnp.zeros((0, 3))
+
+        # Release any other resources or memory associated with the renderer
+        # (You can add other clean-up steps here if necessary)
+
+        # Optionally, force the garbage collector to run to reclaim memory
+        import gc
+        gc.collect()
+        print("Renderer resources and memory cleared.")
 
     def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None, center_mesh=True):
         """Add a mesh to the renderer from a file.
