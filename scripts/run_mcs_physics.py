@@ -35,6 +35,23 @@ def get_object_mask(point_cloud_image, segmentation, segmentation_ids):
     object_mask = jnp.array(object_mask) > 0
     return object_ids, object_mask
 
+class RGBD(object):
+    def __init__(self, rgb, depth, camera_pose, intrinsics, segmentation=None):
+        """RGBD Image
+        
+        Args:
+            rgb (np.array): RGB image
+            depth (np.array): Depth image
+            camera_pose (np.array): Camera pose. 4x4 matrix
+            intrinsics (b.camera.Intrinsics): Camera intrinsics
+            segmentation (np.array): Segmentation image
+        """
+        self.rgb = rgb
+        self.depth = depth
+        self.camera_pose = camera_pose
+        self.intrinsics = intrinsics
+        self.segmentation  = segmentation
+
 def physics_prior(proposed_pose, physics_estimated_pose):
     proposed_pos = proposed_pose[:3,3]
     physics_estimated_pos = physics_estimated_pose[:3,3]
@@ -166,7 +183,7 @@ class PhysicsServer():
         self.activate_physics_prior = []
         self.data = []
 
-    def update(self, image, data):
+    def update(self, image):
 
         # print("Z1: ", get_gpu_mem())
 
@@ -413,7 +430,7 @@ class PhysicsServer():
         post_num_active_objects = POSES.shape[0]
  
         # print("P: ", get_gpu_mem())
-        data.append({
+        self.data.append({
             't' : t,
             'gt_rgbd' : image,
             'gt_depth' : depth,
@@ -438,7 +455,6 @@ class PhysicsServer():
             'post_num_active_objects' : post_num_active_objects,
         })
 
-        return data
 
     def process_message(self, message):
         (request_type, args) = message
@@ -454,8 +470,8 @@ class PhysicsServer():
             rgb, depth, seg = args
             colors, seg_final_flat = np.unique(seg.reshape(-1,3), axis=0, return_inverse=True)
             seg_final = seg_final_flat.reshape(seg.shape[:2])
-            observation = j.RGBD(rgb, depth, jnp.eye(4), None, seg_final)
-            self.data = self.update(image, self.data)
+            observation = RGBD(rgb, depth, jnp.eye(4), None, seg_final)
+            self.update(observation)
             return None
         elif request_type == "get_info":
             plausibility = get_rating_from_data(self.data)
