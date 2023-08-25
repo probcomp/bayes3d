@@ -319,7 +319,7 @@ class PhysicsServer():
         (request_type, args) = message
         print(f"received reqeust {request_type}")
         if request_type == "reset":
-            (h,w,fx,fy,cx,cy,near,far) = (400,600, 514.2991467983065,514.2991467983065,300.0,200.0,0.009999999776482582,150.0)
+            (h,w,fx,fy,cx,cy,near,far) = args
             intrinsics = j.Intrinsics(
                 h,w,fx,fy,cx,cy,near,far
             )

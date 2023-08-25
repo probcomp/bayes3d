@@ -507,30 +507,57 @@ def get_rating_from_data(data):
             if known_id <= num_known_objs and known_id in known_id_to_seg_id:
                 ob_mask = seg == known_id_to_seg_id[known_id]
                 obj_density = np.mean(data[idx]['3dp3_weights'][ob_mask])
-                if idx == 140:
-                    print(data[idx]['3dp3_weights'][ob_mask])
                 LR_values[known_id].append(obj_density)
             else:
                 LR_values[known_id].append(np.nan)
-    phy_mins = [np.nanmin(x) for x in phy_data]
-    LR_mins = [np.nanmin(x) for x in LR_values]
-    phy_fail = any([np.sum([x < 0 for x in dta]) >= 2 for dta in phy_data])
-    LR_fail = any([len(x) > 7 for x in LR_values]) and any([x < -2.2 for x in LR_mins])
-    output = {
-        'phy_data' : phy_data,
-        'LR_values' : LR_values,
-        'phy_mins' : phy_mins,
-        'LR_mins' : LR_mins,
-        'LR_fail' : LR_fail,
-        'phy_fail' : phy_fail,
-        'pass' : not phy_fail and not LR_fail
-    }
 
-    if output['pass']:
-        plausibility = 1.0
+    p_segs = []
+    lr_segs = []
+    for p_data in phy_data:
+        clean_p_data = [p_data[s] for s in np.ma.clump_unmasked(np.ma.masked_invalid(p_data))]
+        clean_p_data[0] = clean_p_data[0][1:]
+        p_segs.append(clean_p_data)
+    # remove first physics value as it is always equal to a low value (proposed movement is false)
+    
+    for lrv in LR_values:
+        lr_segs.append([lrv[s] for s in np.ma.clump_unmasked(np.ma.masked_invalid(lrv))])
+
+    # focus on just LR first
+    LR_PASS = True
+    for i in range(num_objects):
+        lr_seg = lr_segs[i]
+        # 2 pronged (use LR_RATIO)
+        if len(lr_seg) == 2:
+            L_RATIO = np.exp(np.median(lr_seg[0])) / np.exp(np.median(lr_seg[1]))
+            if L_RATIO > 1.5:
+                LR_PASS = False
+                print("L_RATIO of 2 pronged")
+        elif len(lr_seg) == 3:
+            if np.median(lr_seg[2]) <= -2.6:
+                LR_PASS = False
+                print("Log L Absolute of 3 pronged")
+        else:
+            LR_PASS = False
+            print("more than 3 prongs of Log L")
+    # now Physics
+    P_PASS = True
+    for i in range(num_objects):
+        count_1 = 0
+        p_seg = p_segs[i]
+        # 2 pronged (use LR_RATIO)
+        for seg in p_seg:
+            if np.min(seg) < 0.5:
+                P_PASS = False
+                print("Phy drop below 0.5")
+            count_1 += np.sum(np.array(seg) < 1)
+    if count_1 >= 2:
+        P_PASS = False
+        print("Phy drop below 1 {} times".format(count_1))
+
+    if P_PASS and LR_PASS:
+        return 1
     else:
-        plausibility = 0.0
-    return plausibility
+        return 0
 
 def splice_image_parallel(rendered_object_image, obs_image_complement):
     keep_masks = jnp.logical_or(
