@@ -189,6 +189,7 @@ class PhysicsServer():
 
         
         self.t += 1
+        print(self.t)
         self.images.append(image)
 
         t = self.t
@@ -464,6 +465,7 @@ class PhysicsServer():
             intrinsics = b.Intrinsics(
                 h,w,fx,fy,cx,cy,near,far
             )
+            print(args)
             self.reset(intrinsics)
             return True
         elif request_type == "update":
