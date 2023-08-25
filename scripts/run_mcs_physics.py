@@ -444,7 +444,7 @@ class PhysicsServer():
         (request_type, args) = message
         # print(f"received reqeust {request_type}")
         if request_type == "reset":
-            (h,w,fx,fy,cx,cy,near,far) = (400,600, 514.2991467983065,514.2991467983065,300.0,200.0,0.009999999776482582,150.0)
+            (h,w,fx,fy,cx,cy,near,far) = args # (400,600, 514.2991467983065,514.2991467983065,300.0,200.0,0.009999999776482582,150.0)
             intrinsics = b.Intrinsics(
                 h,w,fx,fy,cx,cy,near,far
             )
@@ -545,10 +545,10 @@ def splice_image_parallel(rendered_object_image, obs_image_complement):
 
     # 3dp3 
 
-    @functools.partial(
-    jnp.vectorize,
-    signature='(m)->()',
-    excluded=(1,2,3,4,),
+@functools.partial(
+jnp.vectorize,
+signature='(m)->()',
+excluded=(1,2,3,4,),
 )
 def gausssian_mixture_per_pixel(
     ij,
