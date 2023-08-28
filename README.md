@@ -2,9 +2,9 @@
 ![logo](https://github.com/probcomp/bayes3d/assets/66085644/bf4e3d42-2d70-40fa-b980-04bd4e18bf2b)
 
 - **[Documentation](https://probcomp.github.io/bayes3d/bayes3d/)**
-- **[Installation](#-installation)**
-- **[Get Assets](#-get-assets)**
-- **[Google Cloud Instance Setup](#-gcp-setup)**
+- **[Installation](#installation-guide)**
+- **[Get Assets](#get-assets)**
+- **[Google Cloud Instance Setup](#gcp-setup)**
 
 # Installation Guide
 ## Setup python environment
