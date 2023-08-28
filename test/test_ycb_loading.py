@@ -89,6 +89,5 @@ for i,p in enumerate(scene_graph.get_poses()):
     b.show_trimesh(f"pose_{i}", b.RENDERER.meshes[ids[i]])
     b.set_pose(f"pose_{i}", p)
 
-from IPython import embed; embed()
 
 

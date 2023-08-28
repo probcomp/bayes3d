@@ -37,4 +37,3 @@ assert jnp.isclose(slack[:3,:3], jnp.eye(3), atol=1e-7).all()
 
 assert jnp.isclose(contact_params, scene_graph.contact_params[child_object_index]).all()
 
-from IPython import embed; embed()
