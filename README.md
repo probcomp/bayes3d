@@ -72,3 +72,5 @@ Start new VM instance (see [link](https://cloud.google.com/compute/docs/instance
 From the VM instances page, searched for public image `c2-deeplearning-pytorch-2-0-gpu-v20230807-debian-11-py310`
 
 SSH into instance and when prompted, install the NVIDIA drivers.
+
+Follow [installation guide](#installation-guide).
