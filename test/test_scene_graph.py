@@ -15,7 +15,7 @@ scene_graph = b.scene_graph.SceneGraph(
 )
 scene_graph.visualize("graph.png", node_names=["table", "apple", "can", "banana"])
 
-floating_scene_graph = scene_graph.create_floating_scene_graph()
+floating_scene_graph = b.scene_graph.create_floating_scene_graph(scene_graph)
 assert jnp.isclose(floating_scene_graph.get_poses(), scene_graph.get_poses()).all()
 
 
@@ -37,4 +37,3 @@ assert jnp.isclose(slack[:3,:3], jnp.eye(3), atol=1e-7).all()
 
 assert jnp.isclose(contact_params, scene_graph.contact_params[child_object_index]).all()
 
-from IPython import embed; embed()
