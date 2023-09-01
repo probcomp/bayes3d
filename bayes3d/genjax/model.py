@@ -137,3 +137,11 @@ def make_enumerator(addresses):
 
 def make_unknown_change_argdiffs(trace):
     return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))
+
+def viz_trace_rendered_observed(trace):
+    return b.viz.hstack_images(
+        [
+            b.viz.scale_image(b.get_depth_image(get_rendered_image(trace)[...,2]), 2),
+            b.viz.scale_image(b.get_depth_image(trace["image"][...,2]), 2)
+        ]
+    )
