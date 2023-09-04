@@ -7,6 +7,7 @@ from .rgbd import *
 from .likelihood import *
 from .camera import *
 from .viz import *
+from .genjax import *
 from . import utils
 from . import distributions
 from . import scene_graph
