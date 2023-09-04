@@ -29,6 +29,7 @@ K = data["K"]
 height = data["height"]
 width = data["width"]
 scaling_factor = data["scaling_factor"]
+tabletop_scaling_factor = data["tabletop_scaling_factor"]
 fx = data["fx"]
 fy = data["fy"]
 cx = data["cx"]
@@ -57,11 +58,15 @@ for scene_number in range(len(poses)):
     )
 
     for obj_number in range(len(poses[scene_number])):
+        sf = scaling_factor
+        if obj_number == len(poses[scene_number]) - 1:
+            sf = np.array(tabletop_scaling_factor) * sf
+
         obj = kb.FileBasedObject(
             asset_id=f"1", 
             render_filename=mesh_paths[obj_number],
             simulation_filename=None,
-            scale=scaling_factor,
+            scale=sf,
             position=poses[scene_number][obj_number][0],
             quaternion=poses[scene_number][obj_number][1],
         )

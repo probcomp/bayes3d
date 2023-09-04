@@ -15,7 +15,7 @@ GREEN = np.array([0.0, 1.0, 0.0])
 BLUE = np.array([0.0, 0.0, 1.0])
 BLACK = np.array([0.0, 0.0, 0.0])
 
-def make_gif_from_pil_images(images, filename):
+def make_gif_from_pil_images(images, filename, fps):
     """Save a list of PIL images as a GIF.
     
     Args:
@@ -27,7 +27,7 @@ def make_gif_from_pil_images(images, filename):
         format="GIF",
         append_images=images[1:],
         save_all=True,
-        duration=100,
+        duration=int(1000.0/fps),
         loop=0,
     )
 
