@@ -96,12 +96,12 @@ def convolutional_filter(
         (ij[0], ij[1], 0),
         (2*filter_size + 1, 2*filter_size + 1, 3)
     )
-    half_widths = (filter_latent[:,:,2] / focal_length) / 2.0
 
-    probabilities = compute_score_vectorize(filter_latent, p, focal_length, variance)
-    probabilities_normalized = probabilities + jnp.log(((2*half_widths)**2)) 
-    # - jnp.log(((2*half_widths)**2).sum())
-    return probabilities_normalized.max()
+    log_probs_from_each_tile = compute_score_vectorize(filter_latent, p, focal_length, variance)
+
+    widths = (filter_latent[:,:,2] / focal_length)
+    log_probs_total = logsumexp(log_probs_from_each_tile) - jnp.log((widths**2).sum()) 
+    return log_probs_total
     # return jnp.logaddexp(logsumexp(probabilities_normalized) + jnp.log(1.0 - outlier_prob), jnp.log(outlier_prob) - jnp.log(outlier_volume))
 
 @functools.partial(
@@ -150,7 +150,8 @@ def threedp3_likelihood_per_pixel(
         variance, outlier_prob, outlier_volume, 
         focal_length,
         filter_size
-    ) + jnp.log(width_observed**2) - jnp.log(((width_observed)**2).sum())
+    ) 
+    # + jnp.log(width_observed**2) - jnp.log(((width_observed)**2).sum())
     return log_probabilities
 
 threedp3_likelihood_per_pixel_jit = jax.jit(threedp3_likelihood_per_pixel, static_argnames=('filter_size',))
