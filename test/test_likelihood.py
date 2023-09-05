@@ -16,4 +16,3 @@ b.threedp3_likelihood(observed_xyz, rendered_xyz, 0.007, 0.1, 0.1, 1.0, 3)
 
 b.get_latent_filter(jnp.array([0,0]), observed_xyz, rendered_xyz,3)
 
-b.get_filter_scores(jnp.array([0,0]),observed_xyz, rendered_xyz, 0.1, 0.1, 0.1, 1.0, 3)

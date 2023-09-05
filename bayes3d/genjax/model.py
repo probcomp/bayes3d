@@ -60,8 +60,8 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
         jnp.linalg.inv(camera_pose) @ poses , indices
     )[...,:3]
 
-    variance = genjax.distributions.tfp_uniform(0.0000001, 10000.0) @ "variance"
-    outlier_prob  = genjax.distributions.tfp_uniform(0.00000001, 10000.0) @ "outlier_prob"
+    variance = genjax.distributions.tfp_uniform(0.00000000001, 10000.0) @ "variance"
+    outlier_prob  = genjax.distributions.tfp_uniform(-0.01, 10000.0) @ "outlier_prob"
     image = image_likelihood(rendered, variance, outlier_prob, outlier_volume, focal_length) @ "image"
     return rendered, indices, poses, parents, contact_params, faces_parents, faces_child, root_poses
 
@@ -79,7 +79,7 @@ get_focal_length = lambda trace: trace.get_args()[6]
 get_far_plane = lambda trace: trace.get_args()[7]
 
 def add_object(trace, key, obj_id, parent, face_parent, face_child):
-    N = b.genjax.get_indices(trace).shape[0] + 1
+    N = b.get_indices(trace).shape[0] + 1
     choices = trace.get_choices()
     choices[f"parent_{N-1}"] = parent
     choices[f"id_{N-1}"] = obj_id
@@ -153,7 +153,7 @@ def viz_trace_rendered_observed(trace):
 def get_pixelwise_scores(trace, filter_size):
     log_scores_per_pixel = b.threedp3_likelihood_per_pixel_jit(
         trace["image"],
-        b.genjax.get_rendered_image(trace),
+        b.get_rendered_image(trace),
         trace["variance"],
         trace["outlier_prob"],
         get_outlier_volume(trace),
