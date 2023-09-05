@@ -47,12 +47,12 @@ rotation_deltas = jax.vmap(lambda key: b.distributions.gaussian_vmf_zero_mean(ke
 def update_pose_estimate(pose_estimate, gt_image):
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, translation_deltas)
     rendered_images = jax.vmap(b.RENDERER.render, in_axes=(0, None))(proposals[:,None, ...], jnp.array([0]))
-    weights_new = b.threedp3_likelihood_parallel(gt_image, rendered_images, 0.05, 0.1, 10**3, 3)
+    weights_new = b.threedp3_likelihood_parallel(gt_image, rendered_images, 0.05, 0.1, 10**3, 0.1, 3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
 
     proposals = jnp.einsum("ij,ajk->aik", pose_estimate, rotation_deltas)
     rendered_images = jax.vmap(b.RENDERER.render, in_axes=(0, None))(proposals[:, None, ...], jnp.array([0]))
-    weights_new = b.threedp3_likelihood_parallel(gt_image, rendered_images, 0.05, 0.1, 10**3, 3)
+    weights_new = b.threedp3_likelihood_parallel(gt_image, rendered_images, 0.05, 0.1, 10**3, 0.1, 3)
     pose_estimate = proposals[jnp.argmax(weights_new)]
     return pose_estimate, pose_estimate
 

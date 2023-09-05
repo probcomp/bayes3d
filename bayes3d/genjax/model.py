@@ -11,7 +11,6 @@ from tqdm import tqdm
 from genjax._src.core.transforms.incremental import NoChange
 from genjax._src.core.transforms.incremental import UnknownChange
 from genjax._src.core.transforms.incremental import Diff
-from .distributions import *
 import inspect
 
 
