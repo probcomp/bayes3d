@@ -32,7 +32,7 @@ class ImageLikelihood(ExactDensity):
         return img
 
     def logpdf(self, image, s, variance, outlier_prob, outlier_volume, focal_length):
-        return b.threedp3_likelihood(
+        return b.threedp3_likelihood_old(
             image, s, variance, outlier_prob,
             outlier_volume, focal_length, 3
         )

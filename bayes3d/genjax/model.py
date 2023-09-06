@@ -12,7 +12,7 @@ from genjax._src.core.transforms.incremental import NoChange
 from genjax._src.core.transforms.incremental import UnknownChange
 from genjax._src.core.transforms.incremental import Diff
 import inspect
-
+from .genjax_distributions import *
 
 @genjax.gen
 def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_dims, outlier_volume, focal_length):
