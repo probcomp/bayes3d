@@ -27,4 +27,4 @@ args = parser.parse_args()
 colmap_command = '"{}"'.format(args.colmap_executable) if len(args.colmap_executable) > 0 else "colmap"
 use_gpu = 1 if not args.no_gpu else 0
 
-convert_images_to_mesh(colmap_command, args.source_path, args.camera, str(args.single_camera), str(use_gpu))
+convert_images_to_mesh(args.source_path, colmap_command, args.camera, str(args.single_camera), str(use_gpu))

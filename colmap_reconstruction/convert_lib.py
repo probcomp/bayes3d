@@ -3,10 +3,9 @@ import logging
 import shutil
 
 
-def convert_images_to_mesh(source_path, colmap_executable = '', camera = 'SIMPLE_PINHOLE', single_camera = '0', use_gpu = '1'):
+def convert_images_to_mesh(source_path, colmap_command = '', camera = 'SIMPLE_PINHOLE', single_camera = '0', use_gpu = '1'):
     
-    colmap_command = '"{}"'.format(colmap_executable) if len(colmap_executable) > 0 else "colmap"
-    os.makedirs(source_path + "/distorted/sparse", exist_ok=True)
+    #os.makedirs(source_path + "/colmap/distorted/sparse", exist_ok=True)
 
     ## Feature extraction
     feat_extracton_cmd = colmap_command + " feature_extractor "\
@@ -95,10 +94,10 @@ def convert_images_to_mesh(source_path, colmap_executable = '', camera = 'SIMPLE
         exit(exit_code)
 
     ### Generate Poisson mesh
-    img_delaunaymesher_cmd = (colmap_command + " poisson_mesher \
+    img_poissonmesher_cmd = (colmap_command + " poisson_mesher \
         --input_path " + source_path + "/dense/fused.ply \
         --output_path " + source_path + "/dense/meshed-poisson.ply")
-    exit_code = os.system(img_delaunaymesher_cmd)
+    exit_code = os.system(img_poissonmesher_cmd)
     if exit_code != 0:
         logging.error(f"Mapper failed with code {exit_code}. Exiting.")
         exit(exit_code)
