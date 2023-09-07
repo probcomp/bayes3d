@@ -33,7 +33,7 @@ def make_gif_from_pil_images(images, filename):
 
 def load_image_from_file(filename):
     """Load an image from a file."""
-    return Image(filename)
+    return Image.open(filename)
 
 def get_depth_image(image, min=None, max=None, cmap=None):
     """Convert a depth image to a PIL image.
