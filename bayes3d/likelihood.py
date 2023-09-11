@@ -30,7 +30,7 @@ def gausssian_mixture_vectorize_old(
         loc=0.0,
         scale=jnp.sqrt(variance)
     ).sum(-1) - jnp.log(observed_xyz.shape[0] * observed_xyz.shape[1])
-    return jnp.logaddexp(jax.scipy.special.logsumexp(probabilities) + jnp.log(1.0 - outlier_prob), jnp.log(outlier_prob) - jnp.log(outlier_volume))
+    return jnp.logaddexp(probabilities.max() + jnp.log(1.0 - outlier_prob), jnp.log(outlier_prob) - jnp.log(outlier_volume))
 
 def threedp3_likelihood_per_pixel_old(
     observed_xyz: jnp.ndarray,
