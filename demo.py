@@ -14,10 +14,10 @@ import os
 # jax.config.update('jax_enable_checks', True) 
 
 intrinsics = b.Intrinsics(
-    height=300,
-    width=300,
-    fx=200.0, fy=200.0,
-    cx=150.0, cy=150.0,
+    height=100,
+    width=100,
+    fx=100.0, fy=100.0,
+    cx=50.0, cy=50.0,
     near=0.001, far=6.0
 )
 

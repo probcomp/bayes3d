@@ -1,8 +1,5 @@
 #!/bin/bash
 
-mkdir -p assets/tum
-wget http://www.doc.ic.ac.uk/~ahanda/living_room_traj1_frei_png.tar.gz -P assets/tum
-tar -xf assets/tum/living_room_traj1_frei_png.tar.gz -C assets/tum
 
 function download_additional_ycb {
     filename="$1_google_16k.tgz"
@@ -44,3 +41,6 @@ gdown --id "${file_id}" -O "${file_name}"
 unzip "${file_name}" -d assets/ycb_video_models
 rm "${file_name}"
 
+mkdir -p assets/tum
+wget http://www.doc.ic.ac.uk/~ahanda/living_room_traj1_frei_png.tar.gz -P assets/tum
+tar -xf assets/tum/living_room_traj1_frei_png.tar.gz -C assets/tum
