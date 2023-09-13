@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 function download_additional_ycb {
     filename="$1_google_16k.tgz"
     "Downloading additional ycb models: $1"
@@ -12,8 +11,9 @@ function download_additional_ycb {
 }
 
 
-download_additional_ycb 030_fork
-download_additional_ycb 032_knife
+mkdir -p assets/tum
+wget http://www.doc.ic.ac.uk/~ahanda/living_room_traj1_frei_png.tar.gz -P assets/tum
+tar -xf assets/tum/living_room_traj1_frei_png.tar.gz -C assets/tum
 
 export BOP_SITE=https://bop.felk.cvut.cz/media/data/bop_datasets
 mkdir -p assets/bop
@@ -41,6 +41,6 @@ gdown --id "${file_id}" -O "${file_name}"
 unzip "${file_name}" -d assets/ycb_video_models
 rm "${file_name}"
 
-mkdir -p assets/tum
-wget http://www.doc.ic.ac.uk/~ahanda/living_room_traj1_frei_png.tar.gz -P assets/tum
-tar -xf assets/tum/living_room_traj1_frei_png.tar.gz -C assets/tum
+download_additional_ycb 030_fork
+
+download_additional_ycb 032_knife
