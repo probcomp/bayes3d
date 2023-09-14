@@ -6,7 +6,7 @@ authors = ["Nishad Gothoskar <nishad@mit.edu>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = "~3.9"
 scikit-learn = "^1.3.0"
 wheel = "^0.40.0"
 ipython = "^8.14.0"

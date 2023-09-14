@@ -76,3 +76,14 @@ def test_something_is_being_rendered():
     assert not jnp.all(multiobject_scene_parallel_img[0,:,:,2] == intrinsics.far)
     assert not jnp.all(multiobject_scene_parallel_img[-1,:,:,2] == intrinsics.far)
     assert not jnp.all(multiobject_scene_img[:,:,2] == intrinsics.far)
+
+def render(key):
+    pose = b.distributions.vmf(key, 1.0)
+    img = b.RENDERER.render(jnp.array([pose]), jnp.array([0]))
+    return img
+
+render_parallel = jax.jit(jax.vmap(render))
+
+x = render_parallel(jax.random.split(jax.random.PRNGKey(10), 10))
+
+from IPython import embed; embed()

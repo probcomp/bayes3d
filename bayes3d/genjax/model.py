@@ -11,12 +11,11 @@ from tqdm import tqdm
 from genjax._src.core.transforms.incremental import NoChange
 from genjax._src.core.transforms.incremental import UnknownChange
 from genjax._src.core.transforms.incremental import Diff
-from .distributions import *
 import inspect
-
+from .genjax_distributions import *
 
 @genjax.gen
-def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_dims, outlier_volume):
+def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_dims, outlier_volume, focal_length):
     indices = jnp.array([], dtype=jnp.int32)
     root_poses = jnp.zeros((0,4,4))
     contact_params = jnp.zeros((0,3))
@@ -60,9 +59,9 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
         jnp.linalg.inv(camera_pose) @ poses , indices
     )[...,:3]
 
-    variance = genjax.distributions.tfp_uniform(0.0000001, 10000.0) @ "variance"
-    outlier_prob  = genjax.distributions.tfp_uniform(0.00000001, 10000.0) @ "outlier_prob"
-    image = image_likelihood(rendered, variance, outlier_prob, outlier_volume) @ "image"
+    variance = genjax.distributions.tfp_uniform(0.00000000001, 10000.0) @ "variance"
+    outlier_prob  = genjax.distributions.tfp_uniform(-0.01, 10000.0) @ "outlier_prob"
+    image = image_likelihood(rendered, variance, outlier_prob, outlier_volume, focal_length) @ "image"
     return rendered, indices, poses, parents, contact_params, faces_parents, faces_child, root_poses
 
 get_rendered_image = lambda trace: trace.get_retval()[0]
@@ -74,8 +73,12 @@ get_faces_parents = lambda trace: trace.get_retval()[5]
 get_faces_child = lambda trace: trace.get_retval()[6]
 get_root_poses = lambda trace: trace.get_retval()[7]
 
+get_outlier_volume = lambda trace: trace.get_args()[5]
+get_focal_length = lambda trace: trace.get_args()[6]
+get_far_plane = lambda trace: trace.get_args()[7]
+
 def add_object(trace, key, obj_id, parent, face_parent, face_child):
-    N = b.genjax.get_indices(trace).shape[0] + 1
+    N = b.get_indices(trace).shape[0] + 1
     choices = trace.get_choices()
     choices[f"parent_{N-1}"] = parent
     choices[f"id_{N-1}"] = obj_id
@@ -137,3 +140,32 @@ def make_enumerator(addresses):
 
 def make_unknown_change_argdiffs(trace):
     return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))
+
+def viz_trace_rendered_observed(trace):
+    return b.viz.hstack_images(
+        [
+            b.viz.scale_image(b.get_depth_image(get_rendered_image(trace)[...,2]), 2),
+            b.viz.scale_image(b.get_depth_image(trace["image"][...,2]), 2)
+        ]
+    )
+
+def get_pixelwise_scores(trace, filter_size):
+    log_scores_per_pixel = b.threedp3_likelihood_per_pixel_jit(
+        trace["image"],
+        b.get_rendered_image(trace),
+        trace["variance"],
+        trace["outlier_prob"],
+        get_outlier_volume(trace),
+        get_focal_length(trace),
+        filter_size
+    )
+    return log_scores_per_pixel
+
+def update_address(trace, key, address, value):
+    return trace.update(
+        key,
+        genjax.choice_map({
+            address: value
+        }),
+        tuple(map(lambda v: Diff(v, UnknownChange), trace.args)),
+    )[2]

@@ -16,47 +16,16 @@ pip install poetry
 poetry install
 ```
 ## Install JAX
-Check your CUDA version:
-```
-nvcc --version
-```
-
-For CUDA 11.x run:
 ```
 pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
-For CUDA 12.x run:
+## Install Torch
 ```
-pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
+
 ## Test
 Run `python demo.py` to test installation.
-
-## Common issues
-
-If you encounter any of the following:
-```
-fatal error: EGL/egl.h: No such file or directory
-    #include <EGL/egl.h>
-
-fatal error: GL/glu.h: No such file or directory
-    #include <GL/glu.h>
-```
-run:
-```
-sudo apt-get install mesa-common-dev libegl1-mesa-dev libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev
-```
-
-If you encounter:
-```
-[F glutil.cpp:338] eglInitialize() failed
-Aborted (core dumped)
-```
-Reinstall NVIDIA drivers.
-```
-sudo apt-get install nvidia-driver-XXX
-```
-You can check the right version of the NVIDIA drivers by running `nvidia-smi`.
 
 
 # Get Assets
@@ -66,11 +35,48 @@ Download model and data assets:
 bash scripts/download.sh
 ```
 
+## Common issues
+
+Error:
+```
+fatal error: EGL/egl.h: No such file or directory
+    #include <EGL/egl.h>
+
+fatal error: GL/glu.h: No such file or directory
+    #include <GL/glu.h>
+```
+Run:
+```
+sudo apt-get install mesa-common-dev libegl1-mesa-dev libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev
+```
+
+Error:
+```
+[F glutil.cpp:338] eglInitialize() failed
+Aborted (core dumped)
+```
+Reinstall NVIDIA drivers with `sudo apt-get install nvidia-driver-XXX`. Check version of driver using `nvidia-smi`.  
+
+Error:
+```
+ImportError: libcupti.so.11.7: cannot open shared object file: No such file or directory
+```
+Run:
+```
+pip install torch==2.0.0+cu118 torchvision==0.15.1+cu118 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu118
+```
+
+To check your CUDA version:
+```
+nvcc --version
+```
+
+
 # GCP Setup
-Start new VM instance (see [link](https://cloud.google.com/compute/docs/instances/create-start-instance))
+- Start new VM instance (see [link](https://cloud.google.com/compute/docs/instances/create-start-instance)). Select GPU - NVIDIA V100 and Machine Type 8vCPU 4 Core 30GB.
 
-From the VM instances page, searched for public image `c2-deeplearning-pytorch-2-0-gpu-v20230807-debian-11-py310`
+-From the VM instances page, searched for public image `c2-deeplearning-pytorch-2-0-gpu-v20230807-debian-11-py310`. Increase storage to 1000GB.
 
-SSH into instance and when prompted, install the NVIDIA drivers.
+- SSH into instance and when prompted, install the NVIDIA drivers.
 
-Follow [installation guide](#installation-guide).
+- Follow [installation guide](#installation-guide).
