@@ -23,8 +23,9 @@ parser.add_argument("--source_path", "-s", required=True, type=str)
 parser.add_argument("--camera", default="SIMPLE_PINHOLE", type=str)
 parser.add_argument("--colmap_executable", default="", type=str)
 parser.add_argument("--single_camera", default=0, type=int)
+parser.add_argument("--sequential_frames", default=0, type=int)
 args = parser.parse_args()
 colmap_command = '"{}"'.format(args.colmap_executable) if len(args.colmap_executable) > 0 else "colmap"
 use_gpu = 1 if not args.no_gpu else 0
 
-convert_images_to_mesh(args.source_path, colmap_command, args.camera, str(args.single_camera), str(use_gpu))
+convert_images_to_mesh(args.source_path, colmap_command, args.camera, str(args.single_camera), str(args.sequential_frames), str(use_gpu))

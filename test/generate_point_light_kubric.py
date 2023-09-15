@@ -4,7 +4,6 @@ import bayes3d as b
 import trimesh
 import os
 import numpy as np
-import trimesh
 from tqdm import tqdm
 from bayes3d._rendering.photorealistic_renderers.kubric_interface import render_many
 import png2avi as p2a

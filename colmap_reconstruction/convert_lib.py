@@ -3,7 +3,7 @@ import logging
 import shutil
 
 
-def convert_images_to_mesh(source_path, colmap_command = '', camera = 'SIMPLE_PINHOLE', single_camera = '0', use_gpu = '1'):
+def convert_images_to_mesh(source_path, colmap_command = '', camera = 'SIMPLE_PINHOLE', single_camera = '0', sequential_frames = '0', use_gpu = '1'):
     
     #os.makedirs(source_path + "/colmap/distorted/sparse", exist_ok=True)
 
@@ -20,13 +20,25 @@ def convert_images_to_mesh(source_path, colmap_command = '', camera = 'SIMPLE_PI
         exit(exit_code)
 
     ## Feature matching
-    feat_matching_cmd = colmap_command + " exhaustive_matcher \
-        --database_path " + source_path + "/database.db \
-        --SiftMatching.use_gpu " + use_gpu
-    exit_code = os.system(feat_matching_cmd)
+
+    # nonsequential matching
+    if not sequential_frames:
+        feat_matching_cmd = colmap_command + " exhaustive_matcher \
+            --database_path " + source_path + "/database.db \
+            --SiftMatching.use_gpu " + use_gpu
+        exit_code = os.system(feat_matching_cmd)
+    
+    # sequential matching (data output from video)
+    else:
+        feat_matching_cmd = colmap_command + " sequential_matcher \
+            --database_path " + source_path + "/database.db \
+            --SiftMatching.use_gpu " + use_gpu
+        exit_code = os.system(feat_matching_cmd)
+
     if exit_code != 0:
         logging.error(f"Feature matching failed with code {exit_code}. Exiting.")
         exit(exit_code)
+
 
     if not os.path.exists(source_path + "/sparse"):
         os.mkdir(source_path + "/sparse")
