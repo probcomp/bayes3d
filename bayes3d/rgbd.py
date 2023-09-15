@@ -4,6 +4,7 @@ import bayes3d as b
 import bayes3d.transforms_3d as t3d
 import numpy as npe
 import jax.numpy as jnp
+import numpy as np
 
 class RGBD(object):
     def __init__(self, rgb, depth, camera_pose, intrinsics, segmentation=None):
