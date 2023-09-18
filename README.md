@@ -10,7 +10,7 @@
 ## Setup python environment
 ```
 git clone https://github.com/probcomp/bayes3d.git
-cd bayes3e
+cd bayes3d
 conda create -n bayes3d python=3.9
 conda activate bayes3d
 pip install -r requirements.txt
