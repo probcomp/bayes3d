@@ -10,11 +10,13 @@
 ## Setup python environment
 ```
 git clone https://github.com/probcomp/bayes3d.git
+cd bayes3e
 conda create -n bayes3d python=3.9
 conda activate bayes3d
-pip install poetry
-poetry install
+pip install -r requirements.txt
+pip install -e .
 ```
+
 ## Install JAX
 ```
 pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
