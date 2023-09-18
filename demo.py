@@ -16,7 +16,7 @@ import os
 intrinsics = b.Intrinsics(
     height=100,
     width=100,
-    fx=100.0, fy=100.0,
+    fx=50.0, fy=50.0,
     cx=50.0, cy=50.0,
     near=0.001, far=6.0
 )
@@ -73,7 +73,6 @@ rerendered_images = b.RENDERER.render_many(pose_estimates_over_time[:, None, ...
 viz_images = [
     b.viz.multi_panel(
         [b.viz.get_depth_image(d[:,:,2]), b.viz.get_depth_image(r[:,:,2])],
-        ["Ground Truth", "Inferred Reconstruction"],
     )
     for (r, d) in zip(rerendered_images, observed_images)
 ]

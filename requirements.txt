@@ -9,7 +9,6 @@ opencv-python
 open3d
 graphviz
 distinctipy
-moderngl
 trimesh
 ninja
 pyransac3d
@@ -26,3 +25,4 @@ joblib
 pdoc3
 addict
 flax
+git+https://github.com/probcomp/genjax
