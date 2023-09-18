@@ -6,11 +6,7 @@ authors = ["Nishad Gothoskar <nishad@mit.edu>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-<<<<<<< HEAD
 python = "~3.9"
-=======
-python = ">=3.9,<3.13"
->>>>>>> 00b5799 (add nn code for fork-knife experiment)
 scikit-learn = "^1.3.0"
 wheel = "^0.40.0"
 ipython = "^8.14.0"
@@ -29,12 +25,6 @@ pyransac3d = "^0.6.0"
 meshcat = "^0.3.2"
 h5py = "^3.9.0"
 gdown = "^4.7.1"
-<<<<<<< HEAD
-=======
-torch = "^2.0.0"
-torchvision = "^0.15.0"
-torchaudio = "^2.0.0"
->>>>>>> 00b5799 (add nn code for fork-knife experiment)
 pytest = "^7.4.0"
 zmq = "^0.0.0"
 tqdm = "^4.65.0"
