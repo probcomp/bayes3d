@@ -10,7 +10,7 @@ import trimesh
 import jax.numpy as jnp
 import jax
 from jax import core, dtypes
-from jax.abstract_arrays import ShapedArray
+from jax.core import ShapedArray
 from jax.interpreters import batching, mlir, xla
 from jax.lib import xla_client
 import numpy as np
@@ -202,7 +202,7 @@ def _build_render_primitive(r: "Renderer"):
         return custom_call(
             op_name,
             # Output types
-            out_types=[out_shp_dtype, scalar_dummy],
+            result_types=[out_shp_dtype, scalar_dummy],
             # The inputs:
             operands=[poses, indices],
             # Layout specification:
@@ -210,7 +210,7 @@ def _build_render_primitive(r: "Renderer"):
             result_layouts=[(3, 2, 1, 0), ()],
             # GPU specific additional data
             backend_config=opaque
-        )
+        ).results
 
 
     # ************************************
@@ -280,7 +280,7 @@ def build_setup_primitive(r: "Renderer", h, w, num_layers):
         return custom_call(
             op_name,
             # Output types
-            out_types=[scalar_dummy, scalar_dummy],
+            result_types=[scalar_dummy, scalar_dummy],
             # The inputs:
             operands=[],
             # Layout specification:
@@ -288,7 +288,7 @@ def build_setup_primitive(r: "Renderer", h, w, num_layers):
             result_layouts=[(), ()],
             # GPU specific additional data
             backend_config=opaque
-        )
+        ).results
 
     # *********************************************
     # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
@@ -335,7 +335,7 @@ def build_load_vertices_primitive(r: "Renderer"):
         return custom_call(
             op_name,
             # Output types
-            out_types=[scalar_dummy, scalar_dummy],
+            result_types=[scalar_dummy, scalar_dummy],
             # The inputs:
             operands=[vertices, triangles],
             # Layout specification:
@@ -343,7 +343,7 @@ def build_load_vertices_primitive(r: "Renderer"):
             result_layouts=[(), ()],
             # GPU specific additional data
             backend_config=opaque
-        )
+        ).results
 
     # *********************************************
     # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
