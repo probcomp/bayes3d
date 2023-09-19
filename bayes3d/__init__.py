@@ -7,10 +7,15 @@ from .rgbd import *
 from .likelihood import *
 from .camera import *
 from .viz import *
-from .genjax import *
 from . import utils
 from . import distributions
 from . import scene_graph
+
+try:
+    import genjax
+    from .genjax import *
+except ImportError:
+    print("GenJAX not installed. Importing bayes3d without genjax dependencies.")
 
 
 RENDERER = None
