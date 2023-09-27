@@ -70,6 +70,7 @@ def get_rgb_image(image, max=255.0):
     Returns:
         PIL.Image: RGB image visualized as a PIL image.
     """
+    image = np.clip(image, 0.0, max)
     if image.shape[-1] == 3:
         image_type = "RGB"
     else:
