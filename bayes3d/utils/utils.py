@@ -13,6 +13,19 @@ import time
 import subprocess as sp
 import os
 import inspect
+from pathlib import Path
+
+def video_to_images(video_path, image_directory):
+    import cv2
+    vidcap = cv2.VideoCapture(str(video_path))
+    success,image = vidcap.read()
+    count = 0
+    while success:
+        cv2.imwrite(str(Path(image_directory) / Path(f"frame_{count:05}.jpg")), image)     # save frame as JPEG file      
+        success,image = vidcap.read()
+        print('Read a new frame: ', success)
+        count += 1
+
 
 def make_onehot(n, i, hot=1, cold=0):
     return tuple(cold if j != i else hot for j in range(n))

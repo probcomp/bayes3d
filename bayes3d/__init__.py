@@ -10,6 +10,7 @@ from .viz import *
 from . import utils
 from . import distributions
 from . import scene_graph
+from . import colmap
 
 try:
     import genjax

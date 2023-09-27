@@ -17,6 +17,7 @@ h5py
 gdown
 pytest
 zmq
+plyfile
 tqdm
 jupyterlab
 imageio
