@@ -17,10 +17,17 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+## Install GenJAX (optional)
+```
+pip install git+https://github.com/probcomp/genjax.git
+```
+
 ## Install JAX
 ```
 pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
+
+
 ## Install Torch
 ```
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118

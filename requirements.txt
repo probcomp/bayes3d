@@ -25,5 +25,5 @@ timm
 joblib
 pdoc3
 addict
+tensorflow-probability
 flax
-git+https://github.com/probcomp/genjax
