@@ -33,8 +33,16 @@ pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-re
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
 
+## (Alternative setup option) Bayes3D Docker
+```
+sh docker/build.sh; sh docker/run.sh
+```
+The above commands respectively build and run a Docker environment with the installations fully configured.
+
+
 ## Test
 Run `python demo.py` to test installation.
+
 
 
 # Get Assets
