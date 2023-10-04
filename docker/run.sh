@@ -5,5 +5,5 @@
 SCRIPT=$(realpath "$0")
 DOCKERPATH=$(dirname "$SCRIPT")
 BAYES3DPATH=$(dirname "$DOCKERPATH")
-
-docker run --runtime=nvidia -it --gpus all --rm --ipc=host -v $(dirname "$BAYES3DPATH"):/workspace bayes3d:latest  # mount the directory that contains Bayes3D into container
+echo "Mounting $BAYES3DPATH into /workspace/bayes3d"
+docker run --runtime=nvidia -it -p 8888:8888 --gpus all --rm --ipc=host -v $(dirname "$BAYES3DPATH"):/workspace/ bayes3d:latest  # mount the directory that contains Bayes3D into container
