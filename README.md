@@ -1,5 +1,11 @@
+![logo][logo]
 
-![logo](https://github.com/probcomp/bayes3d/assets/66085644/bf4e3d42-2d70-40fa-b980-04bd4e18bf2b)
+<div align="center">
+
+[![License][license]][license-url]
+![Stability: Experimental][experimental-badge]
+
+</div>
 
 - **[Documentation](https://probcomp.github.io/bayes3d/bayes3d/)**
 - **[Installation](#installation-guide)**
@@ -64,7 +70,7 @@ Error:
 [F glutil.cpp:338] eglInitialize() failed
 Aborted (core dumped)
 ```
-Reinstall NVIDIA drivers with `sudo apt-get install nvidia-driver-XXX`. Check version of driver using `nvidia-smi`.  
+Reinstall NVIDIA drivers with `sudo apt-get install nvidia-driver-XXX`. Check version of driver using `nvidia-smi`.
 
 Error:
 ```
@@ -89,3 +95,12 @@ nvcc --version
 - SSH into instance and when prompted, install the NVIDIA drivers.
 
 - Follow [installation guide](#installation-guide).
+
+## License
+
+Distributed under the [Apache 2.0](LICENSE) license. See [LICENSE](LICENSE).
+
+[experimental-badge]: https://img.shields.io/badge/stability-experimental-orange.svg
+[license-url]: LICENSE
+[license]: https://img.shields.io/badge/License-Apache_2.0-brightgreen.svg
+[logo]: https://github.com/probcomp/bayes3d/assets/66085644/bf4e3d42-2d70-40fa-b980-04bd4e18bf2b
