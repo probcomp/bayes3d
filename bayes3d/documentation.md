@@ -1,0 +1,1 @@
+`bayes3d` is a package for Bayesian 3D Inverse Graphics
