@@ -11,6 +11,30 @@ from pathlib import Path
 from typing import Union, List, Tuple
 from PIL import Image
 import numpy as np
+import jax.numpy as jnp
+
+def get_embeddings(dinov2_vitg14, rgb):
+    img = b.get_rgb_image(rgb).convert('RGB')
+    patch_w, patch_h = np.array(img.size) // 14
+    transform = T.Compose([
+        T.GaussianBlur(9, sigma=(0.1, 2.0)),
+        T.Resize((patch_h * 14, patch_w * 14)),
+        T.CenterCrop((patch_h * 14, patch_w * 14)),
+        T.ToTensor(),
+        T.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    ])
+    tensor = transform(img)[:3].unsqueeze(0).to(device)
+    with torch.no_grad():
+        features_dict = dinov2_vitg14.forward_features(tensor)
+        features = features_dict['x_norm_patchtokens'][0].reshape((patch_h, patch_w, 384)).permute(2, 0, 1).unsqueeze(0)
+    img_feat_norm = torch.nn.functional.normalize(features, dim=1)
+    output = jnp.array(img_feat_norm.cpu().detach().numpy())[0]
+    del img_feat_norm
+    del features
+    del tensor
+    del features_dict
+    torch.cuda.empty_cache()
+    return jnp.transpose(output, (1,2,0))
 
 
 class ViTExtractor:
