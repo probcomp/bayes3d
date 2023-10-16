@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import subprocess
 import os
 
-def render_many(mesh_paths, poses, intrinsics, scaling_factor=1.0, lighting=50.0, camera_pose=None):
+def render_many(mesh_paths, poses, intrinsics, mesh_scales = None, mesh_colors = None, scaling_factor=1.0, lighting=20.0, camera_pose=None, background_color= [0.5,0.5,0.5]):
     """Render a scene with multiple objects in it through kubric.
 
     Args:
@@ -36,12 +36,18 @@ def render_many(mesh_paths, poses, intrinsics, scaling_factor=1.0, lighting=50.0
 
     if camera_pose is None:
         camera_pose = jnp.eye(4)
-        camera_pose = camera_pose @ j.t3d.transform_from_axis_angle(jnp.array([1.0, 0.0,0.0]), jnp.pi)
+    # camera_pose = camera_pose @ j.t3d.transform_from_axis_angle(jnp.array([1.0, 0.0,0.0]), jnp.pi)
     cam_pose_pos_quat = (np.array(camera_pose[:3,3]), np.array(j.t3d.rotation_matrix_to_quaternion(camera_pose[:3,:3])))
 
+    if mesh_scales == None: 
+        mesh_scales = [[1.0,1.0,1.0] for i in range(len(mesh_paths))] 
+    else:
+        assert len(mesh_scales) == len(mesh_paths)
 
     np.savez("/tmp/blenderproc_kubric.npz", 
         mesh_paths=mesh_paths,
+        mesh_scales = mesh_scales,
+        mesh_colors = mesh_colors,
         scaling_factor=scaling_factor,
         poses=np.array(poses_pos_quat_all, dtype=object) ,
         camera_pose=np.array(cam_pose_pos_quat, dtype=object),
@@ -54,7 +60,8 @@ def render_many(mesh_paths, poses, intrinsics, scaling_factor=1.0, lighting=50.0
         cy = intrinsics.cy,
         near = intrinsics.near,
         far = intrinsics.far,
-        intensity=lighting
+        intensity=lighting,
+        background = background_color
     )
 
     path = os.path.dirname(os.path.dirname(__file__))

@@ -8,6 +8,7 @@ import imageio
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from PIL import Image
+import math 
 
 def o3d_to_pybullet_position(o3d_position):
     return np.array(o3d_position)
@@ -35,50 +36,16 @@ def o3d_to_trimesh(mesh):
     mesh = tm.Trimesh(vertices=vertices, faces=faces, vertex_normals=vert_normals, face_normals=tri_normals)
     return mesh
 
-def o3d_render(scene): 
-    intrinsics = o3d.camera.PinholeCameraIntrinsic()
-    renderer = b.o3d_viz.O3DVis(intrinsics=intrinsics) 
-    for body in scene.bodies.values():
-        mesh = body.mesh
-        pose = body.pose
-        renderer.render_mesh(mesh, pose)
-    camera_pose = scene.camera.pose
-    image = renderer.render(camera_pose)
-    return image
-
-def pybullet_render(scene):
-    """
-    Renders a scene using PyBullet.
-
-    Args:
-        scene (Scene): The scene object.
-
-    Returns:
-        PIL.Image.Image: The rendered image.
-    """
-    pyb_sim = PybulletSimulator(camera=scene.camera, floor = scene.floor)
-    for body in scene.bodies.values():
-        pyb_sim.add_body_to_simulation(body)
-    image_rgb, depth, segm = pyb_sim.capture_image(scene.camera)
-    pyb_sim.close()
-    image = Image.fromarray(image_rgb)
-    depth = depth - (min(depth.flatten()))
-    depth = depth / (max(depth.flatten()))
-    depth = depth * 255
-    depth = depth.astype(np.uint8)
-    depth = Image.fromarray(depth)
-    return image, depth, segm
-
-def create_box(pose, scale = [1,1,1], restitution=1, friction=0, velocity=0, angular_velocity = [0,0,0], id=None):
+def make_box(pose, scale = [1,1,1], restitution=1, friction=0, velocity=0, angular_velocity = [0,0,0], id=None):
     """
     Creates a box-shaped Body object.
     """
     position = pose[:3, 3]
     orientation = pose[:3, :3]
-    return create_box(position, scale, restitution, friction, velocity, angular_velocity, orientation, id)
+    return make_box(position, scale, restitution, friction, velocity, angular_velocity, orientation, id)
 
 
-def create_box(position, scale=[1,1,1], restitution=1, friction=0, velocity=0, angular_velocity = [0,0,0], orientation=None, id=None):
+def make_box(position, scale=[1,1,1], restitution=1, friction=0, velocity=0, angular_velocity = [0,0,0], orientation=None, id=None):
     """
     Creates a box-shaped Body object.
     """
@@ -92,7 +59,7 @@ def create_box(position, scale=[1,1,1], restitution=1, friction=0, velocity=0, a
     return body
 
 
-def create_sphere(position, scale = [1,1,1], velocity=0, angular_velocity = [0,0,0], restitution=1, friction=0, id=None):
+def make_sphere(position, scale = [1,1,1], velocity=0, angular_velocity = [0,0,0], restitution=1, friction=0, id=None):
     """
     Creates a sphere-shaped Body object.
 
@@ -158,8 +125,47 @@ def make_body_from_obj(obj_path, position, friction=0, restitution=1, velocity=0
     pose[:3, 3] = position
     return make_body_from_obj_pose(obj_path, pose, id=id, friction=friction, restitution=restitution, velocity=velocity, scale=scale, angular_velocity=angular_velocity)
 
+def o3d_render(scene): 
+    intrinsics = o3d.camera.PinholeCameraIntrinsic()
+    renderer = b.o3d_viz.O3DVis(intrinsics=intrinsics) 
+    for body in scene.bodies.values():
+        mesh = body.mesh
+        pose = body.pose
+        renderer.render_mesh(mesh, pose)
+    camera_pose = scene.camera.pose
+    image = renderer.render(camera_pose)
+    return image
+
+def get_camera_pose(view_matrix):
+    world2cam = np.array(view_matrix)
+    cam2world  = np.linalg.inv(world2cam)
+    return cam2world
+
+def pybullet_render(scene):
+    """
+    Renders a scene using PyBullet.
+
+    Args:
+        scene (Scene): The scene object.
+
+    Returns:
+        PIL.Image.Image: The rendered image.
+    """
+    pyb_sim = PybulletSimulator(camera=scene.camera, floor = scene.floor)
+    for body in scene.bodies.values():
+        pyb_sim.add_body_to_simulation(body)
+    image_rgb, depth, segm = pyb_sim.capture_image(scene.camera)
+    pyb_sim.close()
+    image = Image.fromarray(image_rgb)
+    depth = depth - (min(depth.flatten()))
+    depth = depth / (max(depth.flatten()))
+    depth = depth * 255
+    depth = depth.astype(np.uint8)
+    depth = Image.fromarray(depth)
+    return image, depth, segm
+
 class Body:
-    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=0.8, friction=0, damping=0, transparency=1, velocity=[0,0,0], angular_velocity = [0,0,0],mass=1, texture=None, color=[1, 0, 0], scale=None, occluder=False):
+    def __init__(self, object_id, pose, mesh, file_dir = None, restitution=0.8, friction=0, damping=0, transparency=1, velocity=[0,0,0], angular_velocity = [0,0,0],mass=1, texture=None, color=[1, 0, 0], scale=[1.0,1.0,1.0], occluder=False):
         self.id = object_id
         self.pose = pose
         self.restitution = restitution
@@ -305,10 +311,8 @@ class Body:
     def __str__(self):
         return f"Body ID: {self.id}, Position: {self.get_position()}"
 
-
-
 class Scene:
-    def __init__(self, id = None, bodies=None, camera=None, timestep = 1/60, light=None, gravity = [0,0,0], downsampling = 1, floor = True):
+    def __init__(self, id = None, bodies=None, timestep = 1/60, light=None, gravity = [0,0,0], downsampling = 1, floor = True):
         self.scene_id = id if id is not None else "scene"
         self.bodies = bodies if bodies is not None else {}
         self.gravity = gravity
@@ -380,7 +384,7 @@ class Scene:
         image = render_func(self)
         return image
     
-    def simulate(self, timesteps):
+    def simulate(self, timesteps, defaultView = False):
         # create mapping from timestep to forces
         for body in self.bodies.values():
             forces = body.get_forces()
@@ -404,7 +408,7 @@ class Scene:
             pyb.add_body_to_simulation(body)
 
         # simulate for timesteps
-        pyb.simulate(timesteps)
+        pyb.simulate(timesteps, defaultView)
         # returns pybullet simulation, which you can obtain a gif, poses from. 
         return pyb
 
@@ -443,10 +447,29 @@ class Camera(object):
         self.pitch = pitch
         self.roll = roll
         self.intrinsics = intrinsics
+        # if intrinsics == None: 
+        #     self.intrinsics = b.Intrinsics(
+        #     height=360,
+        #     width=480,
+        #     fx=180*math.sqrt(3), fy=180*math.sqrt(3),
+        #     cx=240.0, cy=180.0,
+        #     near=0.1, far=10.0
+        #     )
+        #     self.set_intrinsics(self.intrinsics)
+
+    def set_intrinsics(self, intrinsics):
+        self.width = intrinsics.width
+        self.height = intrinsics.height
+        self.fx = intrinsics.fx
+        self.fy = intrinsics.fy 
+        self.cx = intrinsics.cx
+        self.cy = intrinsics.cy 
+        self.near = intrinsics.near
+        self.far  = intrinsics.far 
 
     def __str__(self) -> str:
         return f"Camera: position_target = {self.position_target}, position={self.position}, target={self.target}, pose={self.pose}, near={self.near}, far={self.far}, fov={self.fov}, width={self.width}, height={self.height}, up_vector={self.up_vector}, distance={self.distance}, yaw={self.yaw}, pitch={self.pitch}, roll={self.roll}, intrinsics={self.intrinsics}"
-    
+
 class PybulletSimulator(object):
     def __init__(self, timestep=1/60, gravity=[0,0,0], floor_restitution=0.5, camera = None, downsampling=1, floor = True, forces = None, dv = None):
         # only build pybullet when needed 
@@ -562,7 +585,7 @@ class PybulletSimulator(object):
                         linearDamping=body.damping, physicsClientId=self.client)
 
         # Set initial velocity if specified
-        if body.velocity != [0,0,0] or body.angular_velocity != [0,0,0]:
+        if np.linalg.norm(body.velocity) != 0 or np.linalg.norm(body.angular_velocity) != 0:
             self.p.resetBaseVelocity(pyb_id, linearVelocity=body.velocity, angularVelocity = body.angular_velocity, physicsClientId=self.client)
 
         # If texture is specified, load it
@@ -612,11 +635,11 @@ class PybulletSimulator(object):
             mapping = {"velocity": velocity, "angular_velocity": ang_velocity}
             self.body_velocities[self.pyb_id_to_body_id[pyb_id]].append(mapping)
     
-    def simulate(self, steps): 
+    def simulate(self, steps, defaultView = False): 
         # returns frames, poses of objects over time
         for i in range(steps):
             if i % self.downsampling == 0:
-                rgb, depth, segm = self.capture_image(self.camera)
+                rgb, depth, segm = self.capture_image(self.camera, defaultView)
                 self.frames.append(rgb)
                 self.depth.append(depth)
                 self.segm.append(segm)
@@ -624,19 +647,24 @@ class PybulletSimulator(object):
             self.step_simulation()
         self.close()
     
-    def capture_image(self, camera):
-        if camera.position_target:
-            projMatrix = self.p.computeProjectionMatrixFOV(fov=camera.fov, aspect=float(camera.width) / camera.height, nearVal=camera.near, farVal=camera.far)
-            viewMatrix = self.p.computeViewMatrix(cameraEyePosition=camera.position, cameraTargetPosition=camera.target, cameraUpVector=camera.up_vector)
-        else:
-            projMatrix = (
-            2*camera.fx/camera.width,0,0,0,
-            0,2*camera.fy/camera.height,0,0,
-            2*(camera.cx/camera.width)-1,2*(camera.cy/camera.height)-1,-(camera.far+camera.near)/(camera.far-camera.near),
-            -1,0,0,-2*camera.far*camera.near/(camera.far-camera.near),0
-            )
-            mat = np.array(t3d.transform_from_rot(t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]),jnp.pi)))
-            viewMatrix = tuple(np.linalg.inv(np.array(camera.pose).dot(mat)).T.reshape(-1))
+    def capture_image(self, camera, default=False):
+        if not default:
+            if camera.position_target:
+                projMatrix = self.p.computeProjectionMatrixFOV(fov=camera.fov, aspect=float(camera.width) / camera.height, nearVal=camera.near, farVal=camera.far)
+                viewMatrix = self.p.computeViewMatrix(cameraEyePosition=camera.position, cameraTargetPosition=camera.target, cameraUpVector=camera.up_vector)
+            else:
+                projMatrix = (
+                2*camera.fx/camera.width,0,0,0,
+                0,2*camera.fy/camera.height,0,0,
+                2*(camera.cx/camera.width)-1,2*(camera.cy/camera.height)-1,-(camera.far+camera.near)/(camera.far-camera.near),
+                -1,0,0,-2*camera.far*camera.near/(camera.far-camera.near),0
+                )
+                mat = np.array(t3d.transform_from_rot(t3d.rotation_from_axis_angle(jnp.array([1.0, 0.0, 0.0]),jnp.pi)))
+                viewMatrix = tuple(np.linalg.inv(np.array(camera.pose).dot(mat)).T.reshape(-1))
+        else: #TODO, fix from Arijit 
+            viewMatrix = self.p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=[0, 0, 0], distance=6, yaw=0, pitch=-5, roll=0,
+                                                        upAxisIndex=2)
+            projMatrix = self.p.computeProjectionMatrixFOV(fov=60, aspect=float(480) / 360, nearVal=0.1, farVal=100.0)
 
         _,_, rgb, depth, segmentation = self.p.getCameraImage(camera.width, camera.height,
             viewMatrix,

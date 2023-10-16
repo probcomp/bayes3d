@@ -82,7 +82,7 @@ for i,j in edges:
     scene_graph = add_edge_scene_graph(scene_graph,parent_object_index, child_object_index, face_parent, face_child, contact_params[indices[0]])
 
 node_names = np.array([*b.utils.ycb_loader.MODEL_NAMES, "table"])
-scene_graph.visualize("graph.png", node_names=list(map(str,enumerate(node_names[ids]))))
+scene_graph.visualize("graph.svg", node_names=list(map(str,enumerate(node_names[ids]))))
 
 b.clear()
 for i,p in enumerate(scene_graph.get_poses()):

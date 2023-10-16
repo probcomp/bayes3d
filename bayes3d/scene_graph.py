@@ -24,7 +24,51 @@ class SceneGraph(namedtuple('SceneGraph', ['root_poses', 'box_dimensions', 'pare
             self.face_parent,
             self.face_child,
         )
-    
+
+    def table_visualize(self, filename, node_names=None, colors=None):
+        import graphviz
+        import matplotlib
+        import distinctipy
+
+        scene_graph = self
+        num_nodes = len(scene_graph.root_poses)
+
+        if node_names is None:
+            node_names = [f"node_{i}" for i in range(len(scene_graph.root_poses))]
+        if colors is None:
+            colors = distinctipy.get_colors(num_nodes, pastel_factor=0.7)
+
+        g_out = graphviz.Digraph()
+        g_out.attr("node", style="filled")
+
+        edges = []
+        edge_label = []
+        for i,parent in enumerate(scene_graph.parents):
+            if parent == -1:
+                continue
+            edges.append((parent, i))
+            contact_string = " ".join([f"{x:.2f}" for x in scene_graph.contact_params[i]])
+            faces_string = f"{scene_graph.face_parent[i].item()} --- {scene_graph.face_child[i].item()}"
+            edge_label.append((contact_string, faces_string))
+
+        for i in range(num_nodes):
+            label = f"<<table border='0' cellborder='1' cellspacing='0' cellpadding='4'><tr><td><b>{node_names[i]}</b></td></tr>"
+            for j, ((parent, child), (contact_string, faces_string)) in enumerate(zip(edges, edge_label)):
+                if child == i:  # adding edge information to child node
+                    label += f"<tr><td align='left'>contact:\n{contact_string}</td></tr>"
+                    label += f"<tr><td align='left'>faces:\n{faces_string}</td></tr>"
+            label += "</table>>"
+            g_out.node(f"{i}", label, fillcolor=matplotlib.colors.to_hex(colors[i]), shape='plaintext')
+
+        for ((i,j),_) in zip(edges, edge_label):
+            if i==-1:
+                continue
+            g_out.edge(f"{i}",f"{j}")  # make the edge visible
+
+        filename_prefix, filetype = filename.split(".")
+        g_out.render(filename_prefix, format=filetype)
+
+
     def visualize(self, filename, node_names=None, colors=None):
         import graphviz
         import matplotlib
@@ -71,20 +115,20 @@ class SceneGraph(namedtuple('SceneGraph', ['root_poses', 'box_dimensions', 'pare
         filename_prefix, filetype = filename.split(".")
         g_out.render(filename_prefix, format=filetype)
 
-def create_floating_scene_graph(scene_graph):
-    """Create a new scene graph with the same structure, but with all objects floating.
+    def create_floating_scene_graph(scene_graph):
+        """Create a new scene graph with the same structure, but with all objects floating.
 
-    Returns:
-        A new scene graph with the same structure, but with all objects floating.
-    """
-    return SceneGraph(
-        root_poses=scene_graph.get_poses(),
-        box_dimensions=scene_graph.box_dimensions,
-        parents=jnp.full(scene_graph.parents.shape, -1),
-        contact_params=jnp.zeros(scene_graph.contact_params.shape),
-        face_parent=jnp.zeros(scene_graph.face_parent.shape, dtype=jnp.int32),
-        face_child=jnp.zeros(scene_graph.face_child.shape, dtype=jnp.int32),
-    )
+        Returns:
+            A new scene graph with the same structure, but with all objects floating.
+        """
+        return SceneGraph(
+            root_poses=scene_graph.get_poses(),
+            box_dimensions=scene_graph.box_dimensions,
+            parents=jnp.full(scene_graph.parents.shape, -1),
+            contact_params=jnp.zeros(scene_graph.contact_params.shape),
+            face_parent=jnp.zeros(scene_graph.face_parent.shape, dtype=jnp.int32),
+            face_child=jnp.zeros(scene_graph.face_child.shape, dtype=jnp.int32),
+        )
 
 
 def add_edge_scene_graph(scene_graph, parent, child, face_parent, face_child, contact_params):
