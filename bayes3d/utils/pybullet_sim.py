@@ -643,7 +643,7 @@ class PybulletSimulator(object):
                 self.frames.append(rgb)
                 self.depth.append(depth)
                 self.segm.append(segm)
-                self.update_body_info()
+            self.update_body_info()
             self.step_simulation()
         self.close()
     

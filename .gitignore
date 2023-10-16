@@ -8,6 +8,7 @@ venv/*
 *.npz
 *.egg-info/*
 *.json
+test/physics_priors.py
 assets/bop/*
 assets/panda_dataset/*
 assets/ycb_video_models/*
