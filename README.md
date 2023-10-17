@@ -99,7 +99,9 @@ nvcc --version
 # GCP Setup
 - Start new VM instance (see [link](https://cloud.google.com/compute/docs/instances/create-start-instance)). Select GPU - NVIDIA V100 and Machine Type 8vCPU 4 Core 30GB.
 
--From the VM instances page, searched for public image `c2-deeplearning-pytorch-2-0-gpu-v20230807-debian-11-py310`. Increase storage to 1000GB.
+-From the VM instances page, searched for public image `c2-deeplearning-pytorch-2-0-gpu-v20230925-debian-11-py310`. Increase storage to 1000GB.
+
+- Note that public image names get updated frequently, so it is possible you may not find the one mentioned above. To find the latest public image, go to the [public list](https://cloud.google.com/compute/docs/images#console), and look for an image as close to the one above (Debian 11, CUDA 11.8, Python 3.10, Pytorch 2.0 etc.).
 
 - SSH into instance and when prompted, install the NVIDIA drivers.
 
