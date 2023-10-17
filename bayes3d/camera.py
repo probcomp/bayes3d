@@ -114,26 +114,32 @@ def render_point_cloud_batched(point_cloud, intrinsics, NUM_PER, pixel_smudge=1)
 
 def _open_gl_projection_matrix(h, w, fx, fy, cx, cy, near, far):
     # transform from cv2 camera coordinates to opengl (flipping sign of y and z)
-    view = np.eye(4)
-    view[1:3] *= -1
+    view = jnp.eye(4)
+    view = view.at[1:3].set(view[1:3] * -1)
 
     # see http://ksimek.github.io/2013/06/03/calibrated_cameras_in_opengl/
     persp = np.zeros((4, 4))
-    persp[0, 0] = fx
-    persp[1, 1] = fy
-    persp[0, 2] = cx
-    persp[1, 2] = cy
-    persp[2, 2] = near + far
-    persp[2, 3] = near * far
-    persp[3, 2] = -1
-    # transform the camera matrix from cv2 to opengl as well (flipping sign of y and z)
-    persp[:2, 1:3] *= -1
+    persp = jnp.array([
+        [fx, 0.0, -cx, 0.0],
+        [0.0, -fy, -cy, 0.0],
+        [0.0, 0.0, -near+far, near*far],
+        [0.0, 0.0, -1, 0.0],
+    ])
+    # persp[0, 0] = fx
+    # persp[1, 1] = fy
+    # persp[0, 2] = cx
+    # persp[1, 2] = cy
+    # persp[2, 2] = near + far
+    # persp[2, 3] = near * far
+    # persp[3, 2] = -1
+    # # transform the camera matrix from cv2 to opengl as well (flipping sign of y and z)
+    # persp[:2, 1:3] *= -1
 
     # The origin of the image is in the *center* of the top left pixel.
     # The orthographic matrix should map the whole image *area* into the opengl NDC, therefore the -.5 below:
 
     left, right, bottom, top = -0.5, w - 0.5, -0.5, h - 0.5
-    orth = np.array(
+    orth = jnp.array(
         [
             (2 / (right - left), 0, 0, -(right + left) / (right - left)),
             (0, 2 / (top - bottom), 0, -(top + bottom) / (top - bottom)),

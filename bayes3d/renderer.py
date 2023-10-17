@@ -45,17 +45,19 @@ class Renderer(object):
             intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
             num_layers (int, optional): The number of scenes to render in parallel. Defaults to 1024.
         """
+        self.height = intrinsics.height
+        self.width = intrinsics.width
         self.intrinsics = intrinsics
-        self.renderer_env = dr.RasterizeGLContext(intrinsics.height, intrinsics.width, output_db=False)
-        self.proj_list = list(bayes3d.camera._open_gl_projection_matrix(
+
+        self.proj_matrix = b.camera._open_gl_projection_matrix(
             intrinsics.height, intrinsics.width, 
             intrinsics.fx, intrinsics.fy, 
             intrinsics.cx, intrinsics.cy, 
             intrinsics.near, intrinsics.far
-        ).reshape(-1))
-
-        build_setup_primitive(self,intrinsics.height, intrinsics.width, num_layers).bind()
-
+        )
+                
+        self.renderer_env = dr.RasterizeGLContext(self.height, self.width, output_db=False)
+        build_setup_primitive(self, self.height, self.width, num_layers).bind()
 
         self.meshes =[]
         self.mesh_names =[]
@@ -110,8 +112,18 @@ class Renderer(object):
         prim = build_load_vertices_primitive(self)
         prim.bind(jnp.float32(vertices), jnp.int32(triangles))
 
-    def _render_many(self, poses, indices):
-        return _render_custom_call(self, poses, indices)[0]
+
+    
+
+    def render_many_custom_intrinsics(self, poses, indices, intrinsics):
+        proj_matrix = b.camera._open_gl_projection_matrix(
+            intrinsics.height, intrinsics.width, 
+            intrinsics.fx, intrinsics.fy, 
+            intrinsics.cx, intrinsics.cy, 
+            intrinsics.near, intrinsics.far
+        )
+        images_jnp = _render_custom_call(self, poses, indices, proj_matrix)[0]
+        return _transform_image_zeros_parallel(images_jnp, intrinsics)
 
     def render_many(self, poses, indices):
         """Render many scenes in parallel.
@@ -126,20 +138,9 @@ class Renderer(object):
             jnp.ndarray: The rendered images. Shape (N, H, W, 4) where N is the number of scenes
                          the final dimension is the segmentation image.
         """
-        images_jnp = _render_custom_call(self, poses, indices)[0]
-        return _transform_image_zeros_parallel(images_jnp, self.intrinsics)
+        return self.render_many_custom_intrinsics(poses, indices, self.intrinsics)
 
     def render(self, poses, indices):
-        """Render a single scene.
-
-        Args:
-            poses (jnp.ndarray): The poses of the objects in the scene. Shape (M, 4, 4)
-            indices (jnp.ndarray): The indices of the objects to render. Shape (M,)
-        Outputs:
-            jnp.ndarray: The rendered image. Shape (H, W, 4)
-                         the final dimension is the segmentation image.
-
-        """
         return self.render_many(poses[None,...], indices)[0]
 
 
@@ -152,8 +153,8 @@ def _register_custom_calls():
         xla_client.register_custom_call_target(_name, _value, platform="gpu")
 
 @functools.partial(jax.jit, static_argnums=(0,))
-def _render_custom_call(r: "Renderer", poses, idx):
-    return _build_render_primitive(r).bind(poses, idx)
+def _render_custom_call(r: "Renderer", poses, indices, intrinsics_matrix):
+    return _build_render_primitive(r).bind(poses, indices, intrinsics_matrix)
 
 
 @functools.lru_cache(maxsize=None)
@@ -161,19 +162,19 @@ def _build_render_primitive(r: "Renderer"):
     _register_custom_calls()
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
-    def _render_abstract(poses, indices):
+    def _render_abstract(poses, indices, intrinsics_matrix):
         num_images = poses.shape[0]
         if poses.shape[1] != indices.shape[0]:
             raise ValueError(f"Mismatched #objects: {poses.shape}, {indices.shape}")
         dtype = dtypes.canonicalize_dtype(poses.dtype)
-        return [ShapedArray((num_images, r.intrinsics.height, r.intrinsics.width, 4), dtype),
+        return [ShapedArray((num_images, r.height, r.width, 4), dtype),
                 ShapedArray((), dtype)]
 
     # Provide an MLIR "lowering" of the render primitive.
-    def _render_lowering(ctx, poses, indices):
+    def _render_lowering(ctx, poses, indices, intrinsics_matrix):
 
         # Extract the numpy type of the inputs
-        poses_aval, indices_aval = ctx.avals_in
+        poses_aval, indices_aval, intrinsics_matrix_aval = ctx.avals_in
         if poses_aval.ndim != 4:
             raise NotImplementedError(f"Only 4D inputs supported: got {poses_aval.shape}")
         if indices_aval.ndim != 1:
@@ -187,14 +188,13 @@ def _build_render_primitive(r: "Renderer"):
 
         num_images, num_objects = poses_aval.shape[:2]
         out_shp_dtype = mlir.ir.RankedTensorType.get(
-            [num_images, r.intrinsics.height, r.intrinsics.width, 4],
+            [num_images, r.height, r.width, 4],
             mlir.dtype_to_ir_type(poses_aval.dtype))
 
         if num_objects != indices_aval.shape[0]:
             raise ValueError("Mismatched #objects in poses vs indices: "
                              f"{num_objects} vs {indices_aval.shape[0]}")
         opaque = dr._get_plugin(gl=True).build_rasterize_descriptor(r.renderer_env.cpp_wrapper,
-                                                                    r.proj_list,
                                                                     [num_objects, num_images])
 
         scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(poses_aval.dtype))
@@ -204,9 +204,9 @@ def _build_render_primitive(r: "Renderer"):
             # Output types
             result_types=[out_shp_dtype, scalar_dummy],
             # The inputs:
-            operands=[poses, indices],
+            operands=[poses, indices, intrinsics_matrix],
             # Layout specification:
-            operand_layouts=[(3, 2, 0, 1), (0,)],
+            operand_layouts=[(3, 2, 0, 1), (0,), (1,0,)],
             result_layouts=[(3, 2, 1, 0), ()],
             # GPU specific additional data
             backend_config=opaque
@@ -217,7 +217,7 @@ def _build_render_primitive(r: "Renderer"):
     # *  SUPPORT FOR BATCHING WITH VMAP  *
     # ************************************
     def _render_batch(args, axes):
-        poses, indices = args 
+        poses, indices, intrinsics_matrix = args 
 
         if poses.ndim != 5:
             raise NotImplementedError("Underlying primitive must operate on 4D poses.")  
@@ -232,7 +232,7 @@ def _build_render_primitive(r: "Renderer"):
             raise ValueError(f"Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}")
         if poses.shape[-2:] != (4, 4):
             raise ValueError(f"Unexpected poses shape: {poses.shape}")
-        renders, dummy = _render_custom_call(r, poses, indices)
+        renders, dummy = _render_custom_call(r, poses, indices, intrinsics_matrix)
 
         renders = renders.reshape(size_1, size_2, *renders.shape[1:])
         out_axes = 0, None

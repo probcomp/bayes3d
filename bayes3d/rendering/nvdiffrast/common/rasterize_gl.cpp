@@ -574,21 +574,28 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
 
     void *pose = buffers[0];
     void *obj_idx = buffers[1];
-    void *out = buffers[2];
+    void *proj_list = buffers[2];
+    void *out = buffers[3];
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
 
     std::vector<int> indices;
     indices.resize(d.num_objects);
+
+    std::vector<float> proj_list_cpu;
+    proj_list_cpu.resize(16);
+
+
     cudaStreamSynchronize(stream);
 
     NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&indices[0], obj_idx, d.num_objects * sizeof(int), cudaMemcpyDeviceToHost));
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&proj_list_cpu[0], proj_list, 16 * sizeof(float), cudaMemcpyDeviceToHost));
 
     _rasterize_fwd_gl(stream,
                       stateWrapper,
                       reinterpret_cast<const float *>(pose),
                       d.num_objects,
                       d.num_images,
-                      /*proj=*/std::vector<float>(d.proj, d.proj + 16),
+                      /*proj=*/proj_list_cpu,
                       /*indices=*/indices,
                       /*out=*/out);
     cudaStreamSynchronize(stream);
@@ -636,12 +643,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
           });
     m.def("build_rasterize_descriptor",
           [](RasterizeGLStateWrapper& stateWrapper,
-             std::vector<float>& proj,
              std::vector<int> objs_images) {
               RasterizeCustomCallDescriptor d;
               d.gl_state_wrapper = &stateWrapper;
               // NVDR_CHECK(proj.size() == 4 * 4);
-              std::copy(proj.begin(), proj.end(), d.proj);
               d.num_objects = objs_images[0];
               d.num_images = objs_images[1];
               return PackDescriptor(d);

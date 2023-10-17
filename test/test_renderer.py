@@ -86,4 +86,9 @@ render_parallel = jax.jit(jax.vmap(render))
 
 x = render_parallel(jax.random.split(jax.random.PRNGKey(10), 10))
 
+y = renderer.render_many_custom_intrinsics(gt_poses_all, jnp.array([0, 1]),intrinsics)
+render_many_custom_intrinsics_jit = jax.jit(renderer.render_many_custom_intrinsics)
+z = render_many_custom_intrinsics_jit(gt_poses_all, jnp.array([0, 1]),intrinsics)
+
+
 from IPython import embed; embed()
