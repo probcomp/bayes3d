@@ -236,7 +236,71 @@ void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s)
     }
 }
 
+void rasterizeReleaseGLResources(RasterizeGLState& s) {
+    // Release OpenGL resources here.
+    // For example, you can use glDeleteVertexArrays, glDeleteBuffers, glDeleteTextures, etc.
+    // For every resource created with glGen* functions, you need to call the corresponding glDelete* function.
+    // Make sure to properly delete all resources to avoid memory leaks.
 
+    // Example:
+    if (s.glProgram) {
+        glDeleteProgram(s.glProgram);
+        s.glProgram = 0;
+    }
+    if (s.glProgramDP) {
+        glDeleteProgram(s.glProgramDP);
+        s.glProgramDP = 0;
+    }
+    if (s.glVertexShader) {
+        glDeleteShader(s.glVertexShader);
+        s.glVertexShader = 0;
+    }
+    if (s.glFragmentShader) {
+        glDeleteShader(s.glFragmentShader);
+        s.glFragmentShader = 0;
+    }
+
+    for (int i = 0; i < s.model_counter; i++) {
+        if (s.glVAOs[i]) {
+            glDeleteVertexArrays(1, &s.glVAOs[i]);
+            s.glVAOs[i] = 0;
+        }
+    }
+    if (s.glPosBuffer) {
+        glDeleteBuffers(1, &s.glPosBuffer);
+        s.glPosBuffer = 0;
+    }
+    if (s.glTriBuffer) {
+        glDeleteBuffers(1, &s.glTriBuffer);
+        s.glTriBuffer = 0;
+    }
+    if (s.glFBO) {
+        glDeleteFramebuffers(1, &s.glFBO);
+        s.glFBO = 0;
+    }
+    if (s.glDepthStencilBuffer) {
+        glDeleteTextures(1, &s.glDepthStencilBuffer);
+        s.glDepthStencilBuffer = 0;
+    }
+    if (s.glPoseTexture) {
+        glDeleteTextures(1, &s.glPoseTexture);
+        s.glPoseTexture = 0;
+    }
+    if (s.glPrevOutBuffer) {
+        glDeleteTextures(1, &s.glPrevOutBuffer);
+        s.glPrevOutBuffer = 0;
+    }
+    for (int i = 0; i < 2; i++) {
+        if (s.glColorBuffer[i]) {
+            glDeleteTextures(1, &s.glColorBuffer[i]);
+            s.glColorBuffer[i] = 0;
+        }
+    }
+
+    s.model_counter = 0; // Reset the model counter to allow restarting the renderer.
+
+    // No need to delete the OpenGL context here, as it will be reused for the next initialization.
+}
 
 RasterizeGLStateWrapper::RasterizeGLStateWrapper(bool enableDB, bool automatic_, int cudaDeviceIdx_)
 {
@@ -253,6 +317,7 @@ RasterizeGLStateWrapper::~RasterizeGLStateWrapper(void)
 {
     setGLContext(pState->glctx);
     rasterizeReleaseBuffers(NVDR_CTX_PARAMS, *pState);
+    rasterizeReleaseGLResources(*pState);  // Call the function to release OpenGL resources.
     releaseGLContext();
     destroyGLContext(pState->glctx);
     delete pState;
