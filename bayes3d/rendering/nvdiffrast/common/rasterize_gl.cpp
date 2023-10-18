@@ -298,7 +298,6 @@ void rasterizeReleaseGLResources(RasterizeGLState& s) {
     }
 
     s.model_counter = 0; // Reset the model counter to allow restarting the renderer.
-    std::cout << "dellocated" << std::endl;
     // No need to delete the OpenGL context here, as it will be reused for the next initialization.
 }
 
