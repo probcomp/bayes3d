@@ -1,5 +1,5 @@
 from typing import Tuple
-
+import gc
 import functools
 import bayes3d.rendering.nvdiffrast.common as dr
 import bayes3d.camera
@@ -62,6 +62,45 @@ class Renderer(object):
         self.meshes =[]
         self.mesh_names =[]
         self.model_box_dims = jnp.zeros((0,3))
+
+    def clear_gpu_mem(self):
+        """
+        Forcefully deallocate/clear any GPU memory used by the renderer and remove all mesh data.
+        """
+        # cpp files are modified so that the destructors deallocate GPU memory
+        self.renderer_env = None
+        # Release the meshes
+        self.meshes.clear()
+        self.mesh_names.clear()
+        self.model_box_dims = jnp.zeros((0, 3))
+        # Force the garbage collector to run to reclaim memory
+        gc.collect()
+
+    def reset(self, intrinsics = None, num_layers=1024):
+        """Reset renderer for rendering meshes. GPU memory is deallocated (if any), 
+        and a new C++ renderer environment is instantiated.
+        
+        Args:
+            intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics. Optional parameter if intrinsics remain unchanged
+            num_layers (int, optional): The number of scenes to render in parallel. Defaults to 1024.
+        """
+        self.clear_gpu_mem()
+
+        if intrinsics is not None:
+
+            self.height = intrinsics.height
+            self.width = intrinsics.width
+            self.intrinsics = intrinsics
+
+            self.proj_matrix = b.camera._open_gl_projection_matrix(
+                intrinsics.height, intrinsics.width, 
+                intrinsics.fx, intrinsics.fy, 
+                intrinsics.cx, intrinsics.cy, 
+                intrinsics.near, intrinsics.far
+            )
+                
+        self.renderer_env = dr.RasterizeGLContext(self.height, self.width, output_db=False)
+        build_setup_primitive(self, self.height, self.width, num_layers).bind()
 
     def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None, center_mesh=True):
         """Add a mesh to the renderer from a file.
