@@ -5,7 +5,6 @@ import os
 import numpy as np
 import trimesh
 from tqdm import tqdm
-from bayes3d._rendering.photorealistic_renderers.kubric_interface import render_many
 from bayes3d.viz.open3dviz import Open3DVisualizer
 
 
@@ -47,3 +46,5 @@ for (pose, path) in zip(poses, mesh_paths):
 
 rgbd = visualizer.capture_image(intrinsics, jnp.eye(4))
 b.get_rgb_image(rgbd.rgb).save("test.png")
+
+from IPython import embed; embed()

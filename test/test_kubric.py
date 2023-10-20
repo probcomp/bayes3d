@@ -5,7 +5,7 @@ import os
 import numpy as np
 import trimesh
 from tqdm import tqdm
-from bayes3d._rendering.photorealistic_renderers.kubric_interface import render_many
+from bayes3d.rendering.photorealistic_renderers.kubric_interface import render_many
 
 # --- creating the ycb dir from the working directory
 bop_ycb_dir = os.path.join(b.utils.get_assets_dir(), "bop/ycbv")
@@ -39,4 +39,15 @@ for i in range(len(gt_ids)):
 poses = jnp.array(poses)
 
 rgbds = render_many(mesh_paths, poses[None,...], intrinsics, scaling_factor=1.0, lighting=5.0)
-b.get_rgb_image(rgbds[0].rgb).save("test.png")
+
+
+b.setup_renderer(intrinsics)
+for path in mesh_paths:
+    b.RENDERER.add_mesh_from_file(path)
+
+img = b.RENDERER.render(gt_poses, jnp.arange(gt_poses.shape[0]))
+
+kubri_rgb = b.get_rgb_image(rgbds[0].rgb)
+kubric_depth = b.get_depth_image(rgbds[0].depth)
+rerendered_depth = b.get_depth_image(img[:,:,2])
+b.multi_panel([kubri_rgb, kubric_depth, rerendered_depth],labels=["kubric_rgb", "kubric_depth", "rerendered_depth"]).save("test_kubric.png")
