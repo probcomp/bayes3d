@@ -40,8 +40,8 @@ intensity = float(data["intensity"])
 logging.basicConfig(level="INFO")
 
 #convert intrinsics to focal_length, sensor_width
-focal_length = fx / width
-sensor_width = 1 
+focal_length = float(fx)
+sensor_width = float(width)
 
 for scene_number in range(len(poses)):
     # --- create scene and attach a renderer to it

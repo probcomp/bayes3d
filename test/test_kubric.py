@@ -26,10 +26,11 @@ for i in tqdm(gt_ids):
 
 intrinsics = b.Intrinsics(
     rgbd.intrinsics.height, rgbd.intrinsics.width,
-    rgbd.intrinsics.fx, rgbd.intrinsics.fx,
+    200.0, 200.0,
     rgbd.intrinsics.width/2, rgbd.intrinsics.height/2,
     rgbd.intrinsics.near, rgbd.intrinsics.far
 )
+print(intrinsics)
 
 poses = []
 for i in range(len(gt_ids)):
@@ -50,4 +51,7 @@ img = b.RENDERER.render(gt_poses, jnp.arange(gt_poses.shape[0]))
 kubri_rgb = b.get_rgb_image(rgbds[0].rgb)
 kubric_depth = b.get_depth_image(rgbds[0].depth)
 rerendered_depth = b.get_depth_image(img[:,:,2])
-b.multi_panel([kubri_rgb, kubric_depth, rerendered_depth],labels=["kubric_rgb", "kubric_depth", "rerendered_depth"]).save("test_kubric.png")
+overlay = b.overlay_image(kubric_depth, rerendered_depth, alpha=0.5)
+b.multi_panel([kubri_rgb, kubric_depth, rerendered_depth, overlay],labels=["kubric_rgb", "kubric_depth", "rerendered_depth", "overlay"]).save("test_kubric.png")
+
+from IPython import embed; embed()
