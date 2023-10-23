@@ -64,7 +64,7 @@ def get_depth_image(image):
 
     img = Image.fromarray(
         np.rint(cmap(depth) * 255.0).astype(np.int8), mode="RGBA"
-    )
+    ).convert("RGB")
     return img
 
 def get_rgb_image(image, max=255.0):
@@ -94,8 +94,9 @@ saveargs = dict(bbox_inches='tight', pad_inches=0)
 
 
 def add_depth_image(ax, depth):
-    ax.imshow(preprocess_for_viz(depth),cmap=cmap)
+    d = ax.imshow(preprocess_for_viz(depth),cmap=cmap)
     ax.axis('off')
+    return d
 
 def add_rgb_image(ax, rgb):
     ax.imshow(rgb)
