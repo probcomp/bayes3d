@@ -23,31 +23,27 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+## Install JAX and Torch
+```
+pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+pip install torch torchvision torchaudio --upgrade --index-url https://download.pytorch.org/whl/cu118
+```
+
+# Download Assets
+
+Download model and data assets:
+```
+bash download.sh
+```
+
 ## Install GenJAX (optional)
 ```
 pip install git+https://github.com/probcomp/genjax.git
 ```
 
-## Install JAX
-```
-pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-```
-
-## Install Torch
-```
-pip3 install torch torchvision torchaudio --upgrade --index-url https://download.pytorch.org/whl/cu118
-```
-
 ## Test
-Run `python demo.py` to test installation.
+Run `python demo.py` to test installation setup.
 
-
-# Get Assets
-
-Download model and data assets:
-```
-bash scripts/download.sh
-```
 
 ## Common issues
 
