@@ -13,7 +13,8 @@
 - **[Google Cloud Instance Setup](#gcp-setup)**
 
 # Installation Guide
-## Setup python environment
+
+Setup Python environment:
 ```
 git clone https://github.com/probcomp/bayes3d.git
 cd bayes3d
@@ -23,20 +24,18 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-## Install JAX and Torch
+Install JAX and Torch:
 ```
 pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 pip install torch torchvision torchaudio --upgrade --index-url https://download.pytorch.org/whl/cu118
 ```
-
-# Download Assets
 
 Download model and data assets:
 ```
 bash download.sh
 ```
 
-## Install GenJAX (optional)
+Install GenJAX (optional):
 ```
 pip install git+https://github.com/probcomp/genjax.git
 ```
