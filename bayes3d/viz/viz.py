@@ -133,8 +133,8 @@ def viz_rgb_image(image):
     return fig
 
 def pil_image_from_matplotlib(fig):
-    return Image.frombytes('RGBA', fig.canvas.get_width_height(),fig.canvas.buffer_rgba())
-
+    img = Image.frombytes('RGBA', fig.canvas.get_width_height(),bytes(fig.canvas.buffer_rgba()))
+    return img
 
 def add_rgba_dimension(image):
     """Add an alpha channel to a particle image if it doesn't already have one.
