@@ -27,10 +27,8 @@ pdoc3
 addict
 tensorflow-probability
 flax
-torchvision==0.15.0
 omegaconf
-torchmetrics==0.10.3
 fvcore
 iopath
-xformers==0.0.18
 submitit
+wget

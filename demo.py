@@ -67,15 +67,21 @@ end = time.time()
 print ("Time elapsed:", end - start)
 print ("FPS:", poses.shape[0] / (end - start))
 
-
-max_depth = 10.0
 rerendered_images = b.RENDERER.render_many(pose_estimates_over_time[:, None, ...], jnp.array([0]))
+
 viz_images = [
     b.viz.multi_panel(
-        [b.viz.get_depth_image(d[:,:,2]), b.viz.get_depth_image(r[:,:,2])],
+        [
+            b.viz.scale_image(b.viz.get_depth_image(d[:,:,2]), 3),
+            b.viz.scale_image(b.viz.get_depth_image(r[:,:,2]), 3)
+            ],
+        labels=["Observed", "Rerendered"],
+        label_fontsize=20
     )
     for (r, d) in zip(rerendered_images, observed_images)
 ]
 b.make_gif_from_pil_images(viz_images, "assets/demo.gif")
+
+
 
 from IPython import embed; embed()

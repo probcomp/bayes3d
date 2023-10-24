@@ -42,14 +42,61 @@ def preprocess_for_viz(img):
     return depth_np
 
 cmap  = copy.copy(plt.get_cmap('turbo'))
-cmap.set_bad(alpha=0)
+cmap.set_bad(color=(1.0, 1.0, 1.0, 1.0))
+
+def get_depth_image(image):
+    """Convert a depth image to a PIL image.
+    
+    Args:
+        image (np.ndarray): Depth image. Shape (H, W).
+        min (float): Minimum depth value for colormap.
+        max (float): Maximum depth value for colormap.
+        cmap (matplotlib.colors.Colormap): Colormap to use.
+    Returns:
+        PIL.Image: Depth image visualized as a PIL image.
+    """
+    depth = np.array(image)
+    mask = depth < depth.max()
+    depth[np.logical_not(mask)] = np.nan
+    vmin = depth[mask].min()
+    vmax = depth[mask].max()
+    depth = (depth - vmin) / (vmax - vmin)
+
+    img = Image.fromarray(
+        np.rint(cmap(depth) * 255.0).astype(np.int8), mode="RGBA"
+    ).convert("RGB")
+    return img
+
+def get_rgb_image(image, max=255.0):
+    """Convert an RGB image to a PIL image.
+    
+    Args:
+        image (np.ndarray): RGB image. Shape (H, W, 3).
+        max (float): Maximum value for colormap.
+    Returns:
+        PIL.Image: RGB image visualized as a PIL image.
+    """
+    image = np.clip(image, 0.0, max)
+    if image.shape[-1] == 3:
+        image_type = "RGB"
+    else:
+        image_type = "RGBA"
+
+    img = Image.fromarray(
+        np.rint(
+            image / max * 255.0
+        ).astype(np.int8),
+        mode=image_type,
+    ).convert("RGB")
+    return img
 
 saveargs = dict(bbox_inches='tight', pad_inches=0)
 
 
 def add_depth_image(ax, depth):
-    ax.imshow(preprocess_for_viz(depth),cmap=cmap)
+    d = ax.imshow(preprocess_for_viz(depth),cmap=cmap)
     ax.axis('off')
+    return d
 
 def add_rgb_image(ax, rgb):
     ax.imshow(rgb)
@@ -87,48 +134,7 @@ def viz_rgb_image(image):
     return fig
 
 def pil_image_from_matplotlib(fig):
-    return Image.frombytes('RGBA', fig.canvas.get_width_height(),fig.canvas.buffer_rgba())
-
-def get_depth_image(image, min=None, max=None):
-    """Convert a depth image to a PIL image.
-    
-    Args:
-        image (np.ndarray): Depth image. Shape (H, W).
-        min (float): Minimum depth value for colormap.
-        max (float): Maximum depth value for colormap.
-        cmap (matplotlib.colors.Colormap): Colormap to use.
-    Returns:
-        PIL.Image: Depth image visualized as a PIL image.
-    """        
-    depth = (image - min) / (max - min + 1e-10)
-    depth = np.clip(depth, 0, 1)
-
-    img = Image.fromarray(
-        np.rint(cmap(depth) * 255.0).astype(np.int8), mode="RGBA"
-    )
-    return img.convert("RGB")
-
-def get_rgb_image(image, max=255.0):
-    """Convert an RGB image to a PIL image.
-    
-    Args:
-        image (np.ndarray): RGB image. Shape (H, W, 3).
-        max (float): Maximum value for colormap.
-    Returns:
-        PIL.Image: RGB image visualized as a PIL image.
-    """
-    image = np.clip(image, 0.0, max)
-    if image.shape[-1] == 3:
-        image_type = "RGB"
-    else:
-        image_type = "RGBA"
-
-    img = Image.fromarray(
-        np.rint(
-            image / max * 255.0
-        ).astype(np.int8),
-        mode=image_type,
-    ).convert("RGB")
+    img = Image.frombytes('RGBA', fig.canvas.get_width_height(),bytes(fig.canvas.buffer_rgba()))
     return img
 
 def add_rgba_dimension(image):
