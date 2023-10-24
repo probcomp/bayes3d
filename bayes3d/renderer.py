@@ -143,6 +143,8 @@ class Renderer(object):
     def render(self, poses, indices):
         return self.render_many(poses[None,...], indices)[0]
 
+    def render_custom_intrinsics(self, poses, indices, intrinsics):
+        return self.render_many_custom_intrinsics(poses[None,...], indices, intrinsics)[0]
 
 # Useful reference for understanding the custom calls setup:
 #   https://github.com/dfm/extending-jax
