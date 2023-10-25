@@ -167,7 +167,7 @@ def _build_render_primitive(r: "Renderer"):
     def _render_abstract(poses, indices, intrinsics_matrix):
         num_images = poses.shape[0]
         if poses.shape[1] != indices.shape[0]:
-            raise ValueError(f"Mismatched #objects: {poses.shape}, {indices.shape}")
+            raise ValueError(f"Poses Shape:  {poses.shape} Indices Shape: {indices.shape}")
         dtype = dtypes.canonicalize_dtype(poses.dtype)
         return [ShapedArray((num_images, r.height, r.width, 4), dtype),
                 ShapedArray((), dtype)]
@@ -194,8 +194,7 @@ def _build_render_primitive(r: "Renderer"):
             mlir.dtype_to_ir_type(poses_aval.dtype))
 
         if num_objects != indices_aval.shape[0]:
-            raise ValueError("Mismatched #objects in poses vs indices: "
-                             f"{num_objects} vs {indices_aval.shape[0]}")
+            raise ValueError(f"Poses Shape:  {poses_aval.shape} Indices Shape: {indices_aval.shape}")
         opaque = dr._get_plugin(gl=True).build_rasterize_descriptor(r.renderer_env.cpp_wrapper,
                                                                     [num_objects, num_images])
 
@@ -220,10 +219,10 @@ def _build_render_primitive(r: "Renderer"):
     # ************************************
     def _render_batch(args, axes):
         poses, indices, intrinsics_matrix = args 
-
         if poses.ndim != 5:
             raise NotImplementedError("Underlying primitive must operate on 4D poses.")  
-     
+
+        original_shape = poses.shape
         poses = jnp.moveaxis(poses, axes[0], 0)
         size_1 = poses.shape[0]
         size_2 = poses.shape[1]
@@ -231,9 +230,9 @@ def _build_render_primitive(r: "Renderer"):
         poses = poses.reshape(size_1 * size_2, num_objects, 4, 4)
 
         if poses.shape[1] != indices.shape[0]:
-            raise ValueError(f"Mismatched object counts: {poses.shape[0]} vs {indices.shape[0]}")
+            raise ValueError(f"Poses Original Shape: {original_shape} Poses Shape:  {poses.shape} Indices Shape: {indices.shape}")
         if poses.shape[-2:] != (4, 4):
-            raise ValueError(f"Unexpected poses shape: {poses.shape}")
+            raise ValueError(f"Poses Original Shape: {original_shape} Poses Shape:  {poses.shape} Indices Shape: {indices.shape}")
         renders, dummy = _render_custom_call(r, poses, indices, intrinsics_matrix)
 
         renders = renders.reshape(size_1, size_2, *renders.shape[1:])

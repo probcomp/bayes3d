@@ -53,14 +53,14 @@ indices = jnp.array( [0, 1])
 
 
 multiobject_scene_img = renderer.render(gt_poses_all[-1, ...], jnp.array([0, 1]))
-multiobject_viz = b.get_depth_image(multiobject_scene_img[:,:,2], max=max_depth)
+multiobject_viz = b.get_depth_image(multiobject_scene_img[:,:,2])
 
 multiobject_scene_parallel_img = renderer.render_many(gt_poses_all, jnp.array([0, 1]))
-multiobject_parallel_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,:,:,2], max=max_depth)
+multiobject_parallel_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,:,:,2])
 
-segmentation_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,:,:,3], max=4.0)
+segmentation_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,:,:,3])
 
-images = [b.get_depth_image(multiobject_scene_parallel_img[i,:,:,2], max=max_depth) for i in range(num_parallel_frames)]
+images = [b.get_depth_image(multiobject_scene_parallel_img[i,:,:,2]) for i in range(num_parallel_frames)]
 b.multi_panel(
     [multiobject_viz, multiobject_parallel_viz, segmentation_viz] + images
 ).save("test_renderer.png")
@@ -84,11 +84,23 @@ def render(key):
 
 render_parallel = jax.jit(jax.vmap(render))
 
+
 x = render_parallel(jax.random.split(jax.random.PRNGKey(10), 10))
 
 y = renderer.render_many_custom_intrinsics(gt_poses_all, jnp.array([0, 1]),intrinsics)
 render_many_custom_intrinsics_jit = jax.jit(renderer.render_many_custom_intrinsics)
 z = render_many_custom_intrinsics_jit(gt_poses_all, jnp.array([0, 1]),intrinsics)
 
+render_parallel = jax.jit(jax.vmap(b.RENDERER.render, in_axes=(0,None)))
+render_parallel(gt_poses_all, jnp.array([0, 1])).shape
+
+
+render_many_custom_intrinsics_parallel = jax.vmap(renderer.render, in_axes=(0,None))
+render_many_custom_intrinsics_parallel(gt_poses_all, jnp.array([0, 1])).shape
+
+render_many_custom_intrinsics_parallel = jax.vmap(renderer.render_custom_intrinsics, in_axes=(0,None, None))
+del render_many_custom_intrinsics_parallel
+render_many_custom_intrinsics_parallel(gt_
+poses_all, jnp.array([0, 1]), intrinsics).shape
 
 from IPython import embed; embed()
