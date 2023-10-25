@@ -24,6 +24,11 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+Install GenJAX (optional):
+```
+pip install git+https://github.com/probcomp/genjax.git
+```
+
 Install JAX and Torch:
 ```
 pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
@@ -35,10 +40,6 @@ Download model and data assets:
 bash download.sh
 ```
 
-Install GenJAX (optional):
-```
-pip install git+https://github.com/probcomp/genjax.git
-```
 
 ## Test
 Run `python demo.py` to test installation setup.
