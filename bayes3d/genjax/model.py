@@ -23,6 +23,9 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
     faces_child = jnp.array([], dtype=jnp.int32)
     parents = jnp.array([], dtype=jnp.int32)
     for i in range(array.shape[0]):
+        parent_obj = uniform_discrete(jnp.arange(-1,array.shape[0] - 1)) @ f"parent_{i}"
+        parent_face = uniform_discrete(jnp.arange(0,6)) @ f"face_parent_{i}"
+        child_face = uniform_discrete(jnp.arange(0,6)) @ f"face_child_{i}"
         index = uniform_discrete(possible_object_indices) @ f"id_{i}"
 
         pose = uniform_pose(
@@ -35,9 +38,6 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
             contact_bounds[1]
         ) @ f"contact_params_{i}"
 
-        parent_obj = uniform_discrete(jnp.arange(-1,array.shape[0] - 1)) @ f"parent_{i}"
-        parent_face = uniform_discrete(jnp.arange(0,6)) @ f"face_parent_{i}"
-        child_face = uniform_discrete(jnp.arange(0,6)) @ f"face_child_{i}"
 
         indices = jnp.concatenate([indices, jnp.array([index])])
         root_poses = jnp.concatenate([root_poses, pose.reshape(1,4,4)])
