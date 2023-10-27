@@ -104,7 +104,7 @@ def make_table_scene_model():
         faces_child    = jnp.array([], dtype=jnp.int32)
         parents        = jnp.array([], dtype=jnp.int32)
 
-        for i in range(3):
+        for i in range(num_objects):
 
             index  = uniform_discrete(possible_object_indices)    @ f"id_{i}"
             pose   = uniform_pose(pose_bounds[0], pose_bounds[1]) @ f"root_pose_{i}"
