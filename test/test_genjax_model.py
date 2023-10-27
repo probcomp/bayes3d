@@ -54,7 +54,7 @@ def test_genjax_trace_contains_right_info():
         b.RENDERER.model_box_dims, 1.0, intrinsics.fx)
     )
 
-    scores = enumerators[3](trace, key, jnp.zeros((100,3)))
+    scores = enumerators.score_vmap(trace, key, jnp.zeros((100,3)))
 
     assert trace["parent_0"] == -1
     assert (trace["camera_pose"] == jnp.eye(4)).all()

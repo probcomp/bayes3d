@@ -11,6 +11,7 @@ from tqdm import tqdm
 from genjax._src.core.transforms.incremental import NoChange
 from genjax._src.core.transforms.incremental import UnknownChange
 from genjax._src.core.transforms.incremental import Diff
+from collections import namedtuple
 import inspect
 from .genjax_distributions import *
 
@@ -124,6 +125,8 @@ def multivmap(f, args=None):
             multivmapped = jax.vmap(multivmapped, in_axes=make_onehot(len(args), i, hot=0, cold=None))
     return multivmapped
 
+Enumerator = namedtuple("Enumerator",["enum_f", "score", "enum_f_vmap", "score_vmap"])
+
 def make_enumerator(addresses):
     def enumerator(trace, key, *args):
         return trace.update(
@@ -136,16 +139,16 @@ def make_enumerator(addresses):
     
     def enumerator_score(trace, key, *args):
         return enumerator(trace, key, *args).get_score()
-    return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))
+    return Enumerator(jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses))))
 
 def make_unknown_change_argdiffs(trace):
     return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))
 
-def viz_trace_rendered_observed(trace):
+def viz_trace_rendered_observed(trace, scale = 2):
     return b.viz.hstack_images(
         [
-            b.viz.scale_image(b.get_depth_image(get_rendered_image(trace)[...,2]), 2),
-            b.viz.scale_image(b.get_depth_image(trace["image"][...,2]), 2)
+            b.viz.scale_image(b.get_depth_image(get_rendered_image(trace)[...,2]), scale),
+            b.viz.scale_image(b.get_depth_image(trace["image"][...,2]), scale)
         ]
     )
 

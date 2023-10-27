@@ -57,7 +57,7 @@ class Renderer(object):
         )
                 
         self.renderer_env = dr.RasterizeGLContext(self.height, self.width, output_db=False)
-        self.rp = build_setup_primitive(self, self.height, self.width, num_layers).bind()
+        build_setup_primitive(self, self.height, self.width, num_layers).bind()
 
         self.meshes =[]
         self.mesh_names =[]
@@ -66,6 +66,7 @@ class Renderer(object):
     def clear_gpu_meshmem(self):
         """
         Forcefully deallocate/clear any GPU memory used for mesh data.
+        NOTE: INITIALZE NEW renderer instance if using this function.
         """
         # cpp files are modified so that the destructors deallocate GPU memory
         self.renderer_env = None
