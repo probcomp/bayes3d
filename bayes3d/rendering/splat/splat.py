@@ -585,11 +585,11 @@ def _render_img_bwd(pallas_kwargs: Mapping[str, Any],
       final_transmittance,
       jnp.pad(dfinal_color, ((0, 0), (0, 0), (0, 1))))
 
-  locs = jnp.nonzero(dwork_splats.alpha, size=dwork_splats.alpha.shape[0])
-  jax.debug.print(
-      'dalpha={dalpha} at {locs}',
-      locs=locs[:20],
-      dalpha=dwork_splats.alpha[locs][:20])
+  # locs = jnp.nonzero(dwork_splats.alpha, size=dwork_splats.alpha.shape[0])
+  # jax.debug.print(
+  #     'dalpha={dalpha} at {locs}',
+  #     locs=locs[:20],
+  #     dalpha=dwork_splats.alpha[locs][:20])
 
   # Since dsplats is work-item-indexed, we will segment-sum.
   num_splats = splats.xyd.shape[0]
