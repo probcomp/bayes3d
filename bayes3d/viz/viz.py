@@ -44,7 +44,7 @@ def preprocess_for_viz(img):
 cmap  = copy.copy(plt.get_cmap('turbo'))
 cmap.set_bad(color=(1.0, 1.0, 1.0, 1.0))
 
-def get_depth_image(image):
+def get_depth_image(image, max=None):
     """Convert a depth image to a PIL image.
     
     Args:
@@ -56,7 +56,11 @@ def get_depth_image(image):
         PIL.Image: Depth image visualized as a PIL image.
     """
     depth = np.array(image)
-    mask = depth < depth.max()
+    if max is None:
+        maxim = depth.max()
+    else:
+        maxim = max
+    mask = depth < maxim
     depth[np.logical_not(mask)] = np.nan
     vmin = depth[mask].min()
     vmax = depth[mask].max()
