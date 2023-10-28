@@ -31,11 +31,14 @@ def display_video(frames, framerate=30):
                                    interval=interval, blit=True, repeat=True)
     return HTML(anim.to_html5_video())
 
-def video_from_trace(trace, scale = 8, use_retval = False, framerate = 30, rendered_addr = ("depth", "depth")):
+def video_from_trace(trace, scale = 8, use_retval = False, framerate = 30, rendered_addr = ("depths", "depths")):
     if use_retval:
-        depths = trace.get_retval()[0]
+        rendered = trace.get_retval()[0]
     else:
         # check if this is the address structure we plan to use
-        depths = trace[rendered_addr]
-    images = [b.scale_image(b.get_depth_image(depths[i,...,2]),scale) for i in range(depths.shape[0])]
+        rendered = trace[rendered_addr]
+    return video_from_rendered(rendered, scale, framerate)
+
+def video_from_rendered(rendered, scale = 8, framerate = 30):
+    images = [b.scale_image(b.get_depth_image(rendered[i,...,2]),scale) for i in range(rendered.shape[0])]
     return display_video(images, framerate=framerate)
