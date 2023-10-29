@@ -127,21 +127,23 @@ def multivmap(f, args=None):
 
 Enumerator = namedtuple("Enumerator",["enum_f", "score", "enum_f_vmap", "score_vmap"])
 
+def default_chm_builder(addresses, args):
+    return genjax.choice_map({
+                addr: c for (addr, c) in zip(addresses, args)
+            })
 
-def make_enumerator(addresses):
+def make_enumerator(addresses, chm_builder = default_chm_builder):
     def enumerator(trace, key, *args):
         return trace.update(
             key,
-            genjax.choice_map({
-                addr: c for (addr, c) in zip(addresses, args)
-            }),
-            tuple(map(lambda v: Diff(v, UnknownChange), trace.args)),
+            chm_builder(addresses, args),
+            tuple(map(lambda v: Diff(v, NoChange), trace.args)),
         )[2]
     
     def enumerator_score(trace, key, *args):
         return enumerator(trace, key, *args).get_score()
-    # return Enumerator(jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses))))
-    return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))
+    return Enumerator(jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses))))
+    # return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))
 
 def make_unknown_change_argdiffs(trace):
     return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))
