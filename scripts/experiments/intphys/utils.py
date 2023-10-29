@@ -9,7 +9,8 @@ def save_metadata(metadata, name):
     if os.path.exists(f'{name}.pkl'):
         check = input(f"{name}.pkl already exists, do you want to overwrite? (y/n)")
         if 'n' in check.lower():
-            raise FileExistsError(f"{name}.pkl already exists")
+            print(f"{name}.pkl already exists")
+            return
     with open(f'{name}.pkl', 'wb') as file:
         pickle.dump(metadata, file)
 

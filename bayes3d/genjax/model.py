@@ -127,6 +127,7 @@ def multivmap(f, args=None):
 
 Enumerator = namedtuple("Enumerator",["enum_f", "score", "enum_f_vmap", "score_vmap"])
 
+
 def make_enumerator(addresses):
     def enumerator(trace, key, *args):
         return trace.update(
@@ -139,7 +140,8 @@ def make_enumerator(addresses):
     
     def enumerator_score(trace, key, *args):
         return enumerator(trace, key, *args).get_score()
-    return Enumerator(jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses))))
+    # return Enumerator(jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses))))
+    return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))
 
 def make_unknown_change_argdiffs(trace):
     return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))

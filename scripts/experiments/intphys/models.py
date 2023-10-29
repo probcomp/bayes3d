@@ -14,8 +14,9 @@ def dynamics_v1(prev):
     simple dynamics model where the params are the same every timestep
     """
     (t, pose, velocity, dynamics_params) = prev
-    velocity = b.gaussian_vmf_pose(velocity, *dynamics_params[0])  @ f"velocity"
-    pose = b.gaussian_vmf_pose(pose @ velocity, *dynamics_params[1])  @ f"pose"
+    velocity = b.gaussian_vmf_pose(velocity, *dynamics_params[0])  @ "velocity"
+    # pose = b.gaussian_vmf_pose(pose @ velocity, *dynamics_params[1])  @ f"pose"
+    pose = pose @ velocity
     return (t + 1, pose, velocity, dynamics_params)
 
 dynamics_v1_unfold = genjax.UnfoldCombinator.new(dynamics_v1, MAX_UNFOLD_LENGTH)
