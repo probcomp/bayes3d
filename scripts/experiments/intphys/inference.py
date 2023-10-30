@@ -76,7 +76,7 @@ def inference_approach_C(model, gt, metadata):
     # do inference by updating the T=1 slice of the velocity address
     # first make the chm builder:
 
-    enumerator = b.make_enumerator([("dynamics_1", "velocity")], chm_builder = velocity_chm_builder)
+    enumerator = b.make_enumerator([("dynamics_1", "velocity")], chm_builder = velocity_chm_builder, argdiff_f=b.make_no_change_argdiffs)
     # then update trace over all the proposals
     velocity_vector = trace["dynamics_1", "velocity"]
     for grid in gridding_schedule:
@@ -102,7 +102,7 @@ def inference_approach_D(model, gt, metadata):
 
     base_chm = genjax.choice_map(metadata["CHOICE_MAP_ARGS"])
     # first make the chm builder:
-    enumerator = b.make_enumerator([("dynamics_1", "velocity")], chm_builder = velocity_chm_builder)
+    enumerator = b.make_enumerator([("dynamics_1", "velocity")], chm_builder = velocity_chm_builder, argdiff_f=b.make_no_change_argdiffs)
     key = jax.random.PRNGKey(metadata["key_number"])
     # make initial sample:
     _, trace = model.importance(key, base_chm, tuple(metadata["MODEL_ARGS"].values()))

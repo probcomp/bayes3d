@@ -71,8 +71,8 @@ def c2f_pose_update(trace_, key, t_arr, unfold_array, pose_grid, enumerator):
     T = jnp.argmax(t_arr)
     # N_prop x 100 x 4 x 4
     proposed_unfold_vectors = unfold_with_proposals_vmap(T, pose_grid, unfold_array)
-    scores = enumerator.score_vmap(trace_, key, proposed_unfold_vectors)
-    return enumerator.enum_f(
+    scores = enumerator.enumerate_choices_get_scores(trace_, key, proposed_unfold_vectors)
+    return enumerator.update_choices(
         trace_, key,
         proposed_unfold_vectors[scores.argmax()]
     )

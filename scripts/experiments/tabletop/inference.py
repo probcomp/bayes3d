@@ -60,9 +60,9 @@ add_object_jit = jax.jit(b.genjax.add_object)
 
 def c2f_contact_update(trace_, key,  number, contact_param_deltas, VARIANCE_GRID, OUTLIER_GRID):
     contact_param_grid = contact_param_deltas + trace_[f"contact_params_{number}"]
-    scores = contact_enumerators[number].score_vmap(trace_, key, contact_param_grid, VARIANCE_GRID, OUTLIER_GRID)
+    scores = contact_enumerators[number].enumerate_choices_get_scores(trace_, key, contact_param_grid, VARIANCE_GRID, OUTLIER_GRID)
     i,j,k = jnp.unravel_index(scores.argmax(), scores.shape)
-    return contact_enumerators[number].enum_f(
+    return contact_enumerators[number].update_choices(
         trace_, key,
         contact_param_grid[i], VARIANCE_GRID[j], OUTLIER_GRID[k]
     )
