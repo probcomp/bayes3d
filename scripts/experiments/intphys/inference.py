@@ -80,13 +80,12 @@ def inference_approach_C(model, gt, metadata):
     # then update trace over all the proposals
     velocity_vector = trace["dynamics_1", "velocity"]
     for grid in gridding_schedule:
-        trace = c2f_pose_update_jit(trace, key, jnp.zeros(2).at[1].set(1), velocity_vector, grid, enumerator)
+        trace = c2f_pose_update_v1_jit(trace, key, jnp.zeros(2).at[1].set(1), velocity_vector, grid, enumerator)
     return trace
 
 def inference_approach_D(model, gt, metadata):
     """
-    Greedy Grid Enumeration of T=0 to T=5
-    # I think this might just be the 2-step model with the unfold structure
+    2-step model with unfold
     """
     T = metadata['MODEL_ARGS']['T_vec'].shape[0]
     # make 3d translation grid: list of N x 4 x 4 poses
@@ -115,13 +114,16 @@ def inference_approach_D(model, gt, metadata):
             {"depths" : genjax.index_choice_map(jnp.arange(t+1),genjax.choice_map({
                     "depths": gt[:t+1]
             })),
-            "init_pose" : metadata["init_pose"], # assume init pose is known
-            "dynamics_1":genjax.index_choice_map(
-                jnp.arange(velocity_vector.shape[0]),genjax.choice_map({
-                    "velocity": velocity_vector
-            }))
+            "init_pose" : metadata["init_pose"] # assume init pose is known
             }) 
         )
+        if t > 1:
+            chm = chm.unsafe_merge(genjax.choice_map(
+            {"dynamics_1":genjax.index_choice_map(
+                    jnp.arange(t-1),genjax.choice_map({
+                        "velocity": velocity_vector[:t-1]
+                }))}
+            ))
 
         # RESORTING to model.importance as I am having issues with update and choicemaps with unfolds & maps
         _, trace = model.importance(key, chm, tuple(metadata["MODEL_ARGS"].values()))
@@ -131,5 +133,49 @@ def inference_approach_D(model, gt, metadata):
 
         for i, grid in enumerate(gridding_schedule):
             print("Grid #",i+1)
-            trace = c2f_pose_update_jit(trace, key, t_arr, velocity_vector, grid, enumerator)
+            trace = c2f_pose_update_v1_jit(trace, key, t_arr, velocity_vector, grid, enumerator)
+    return trace
+
+def inference_approach_E(model, gt, metadata):
+    """
+    2-step model with NO unfold
+    This is NOT compatible with model_v1 but it is
+
+    """
+    T = metadata['MODEL_ARGS']['T_vec'].shape[0]
+
+    # OR use 3d translation and rotation grid
+    grid_widths = [0.2,0.1,0.05]
+    grid_nums = [(3,3,3),(3,3,3),(3,3,3)]
+    gridding_schedule = make_schedule_3d(grid_widths,grid_nums, [-jnp.pi/12, jnp.pi/12],10,10,jnp.pi/40)
+
+    base_chm = genjax.choice_map(metadata["CHOICE_MAP_ARGS"])
+    # first make the chm builder:
+    enumerators = [b.make_enumerator([(f"velocity_{i+1}")]) for i in range(T)]
+
+    key = jax.random.PRNGKey(metadata["key_number"])
+    # make initial sample:
+    _, trace = model.importance(key, base_chm, tuple(metadata["MODEL_ARGS"].values()))
+
+    for t in range(1,T+1):
+        print("t = ", t)
+        # force new constaints values to take over
+        chm = base_chm.unsafe_merge(genjax.choice_map(
+            {"depths" : genjax.index_choice_map(jnp.arange(t+1),genjax.choice_map({
+                    "depths": gt[:t+1]
+            })),
+            "init_pose" : metadata["init_pose"], # assume init pose is known
+            **{f"velocity_{i+1}" : trace[f"velocity_{i+1}"] for i in range(t-1)}
+            }) 
+        )
+
+        # RESORTING to model.importance as I am having issues with update and choicemaps with unfolds &/or maps
+        _, trace = model.importance(key, chm, tuple(metadata["MODEL_ARGS"].values()))
+
+        # trace = trace.update(key, chm, b.make_unknown_change_argdiffs(trace))
+
+        # then update trace over all the proposals
+        for i, grid in enumerate(gridding_schedule):
+            print("Grid #",i+1)
+            trace = c2f_pose_update_v2_jit(trace, key, grid, enumerators[t-1])
     return trace

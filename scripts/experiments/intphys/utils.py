@@ -66,7 +66,7 @@ def unfold_with_proposals(T, proposal, unfold_vector):
 unfold_with_proposals_vmap = jax.jit(jax.vmap(unfold_with_proposals, in_axes = (None, 0, None)))
     
 
-def c2f_pose_update(trace_, key, t_arr, unfold_array, pose_grid, enumerator):
+def c2f_pose_update_v1(trace_, key, t_arr, unfold_array, pose_grid, enumerator):
     
     T = jnp.argmax(t_arr)
     # N_prop x 100 x 4 x 4
@@ -76,4 +76,16 @@ def c2f_pose_update(trace_, key, t_arr, unfold_array, pose_grid, enumerator):
         trace_, key,
         proposed_unfold_vectors[scores.argmax()]
     )
-c2f_pose_update_jit = jax.jit(c2f_pose_update, static_argnames=("enumerator",))
+c2f_pose_update_v1_jit = jax.jit(c2f_pose_update_v1, static_argnames=("enumerator",))
+
+def c2f_pose_update_v2(trace_, key, t_arr, unfold_array, pose_grid, enumerator):
+    
+    T = jnp.argmax(t_arr)
+    # N_prop x 100 x 4 x 4
+    proposed_unfold_vectors = unfold_with_proposals_vmap(T, pose_grid, unfold_array)
+    scores = enumerator.enumerate_choices_get_scores(trace_, key, proposed_unfold_vectors)
+    return enumerator.update_choices(
+        trace_, key,
+        proposed_unfold_vectors[scores.argmax()]
+    )
+c2f_pose_update_v2_jit = jax.jit(c2f_pose_update_v2, static_argnames=("enumerator",))
