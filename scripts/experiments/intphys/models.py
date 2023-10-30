@@ -26,7 +26,8 @@ image_likelihood_vmap = genjax.MapCombinator.new(genjax.gen(lambda *x: b.image_l
 def model_v1(T_vec, N_total_vec, N_vec, all_box_dims, pose_bounds, outlier_volume,
              init_vel_params, dynamics_params, variance_params, outlier_prob_params):
     """
-    Single Object
+    Multi Object with Unfold
+    TODO: Each object needs a new starting position
     """
     T = T_vec.shape[0]
     # sample init pose and velocity
@@ -57,3 +58,44 @@ def model_v1(T_vec, N_total_vec, N_vec, all_box_dims, pose_bounds, outlier_volum
 
 model_v1_simulate_jit = jax.jit(model_v1.simulate)
 model_v1_importance_jit = jax.jit(model_v1.importance)
+
+
+@genjax.gen
+def model_v2(T_vec, N_total_vec, N_vec, all_box_dims, pose_bounds, outlier_volume,
+             init_vel_params, dynamics_params, variance_params, outlier_prob_params):
+    """
+    Multi Object without Unfold
+    TODO: EACH OBJECT needs a new starting position
+    """
+    T = T_vec.shape[0]
+    # sample init pose and velocity
+    pose = b.uniform_pose(pose_bounds[0], pose_bounds[1]) @ "init_pose"
+    velocity = b.gaussian_vmf_pose(jnp.eye(4), *init_vel_params) @ "init_velocity"
+
+    all_poses = []
+    for i in range(N_vec.shape[0]):
+        poses = [pose]
+        for j in range(T):
+            velocity = b.gaussian_vmf_pose(velocity, *dynamics_params[0])  @ f"velocity_{j+1}"
+            pose = pose @ velocity
+            poses.append(pose)
+        
+        # Slice off pose from the full unfold memory
+        all_poses.append(jnp.stack(poses))
+    
+    all_poses = jnp.stack(all_poses, axis = 1)
+
+    indices = b.uniform_discrete_array(N_total_vec, N_vec) @ "indices"
+
+    rendered_images = b.RENDERER.render_many(
+        all_poses, indices 
+    )[...,:3]
+
+    variance = genjax.distributions.tfp_uniform(*variance_params) @ "variance"
+    outlier_prob  = genjax.distributions.tfp_uniform(*outlier_prob_params) @ "outlier_prob"
+    
+    images = image_likelihood_vmap(rendered_images, variance, outlier_prob, outlier_volume, 1.0) @ "depths"
+    return rendered_images, poses
+
+model_v2_simulate_jit = jax.jit(model_v2.simulate)
+model_v2_importance_jit = jax.jit(model_v2.importance)

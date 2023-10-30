@@ -132,6 +132,12 @@ def default_chm_builder(addresses, args):
                 addr: c for (addr, c) in zip(addresses, args)
             })
 
+def make_unknown_change_argdiffs(trace):
+    return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))
+
+def make_no_change_argdiffs(trace):
+    return tuple(map(lambda v: Diff(v, NoChange), trace.args))
+
 def make_enumerator(addresses, chm_builder = default_chm_builder, argdiff_f = make_unknown_change_argdiffs):
     def enumerator(trace, key, *args):
         return trace.update(
@@ -143,12 +149,6 @@ def make_enumerator(addresses, chm_builder = default_chm_builder, argdiff_f = ma
     def enumerator_score(trace, key, *args):
         return enumerator(trace, key, *args).get_score()
     return Enumerator(jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses))))
-
-def make_unknown_change_argdiffs(trace):
-    return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))
-
-def make_no_change_argdiffs(trace):
-    return tuple(map(lambda v: Diff(v, NoChange), trace.args))
 
 def viz_trace_rendered_observed(trace, scale = 2):
     return b.viz.hstack_images(

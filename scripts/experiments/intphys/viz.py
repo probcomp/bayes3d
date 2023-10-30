@@ -55,8 +55,8 @@ def video_comparison_from_images(rendered, observed, scale = 8, framerate = 30):
     images = [
         b.viz.multi_panel(
             [
-                b.viz.scale_image(b.viz.get_depth_image(rendered[i,...,2]), scale)
-                b.viz.scale_image(b.viz.get_depth_image(observed[i,...,2]), scale),
+                b.viz.scale_image(b.viz.get_depth_image(rendered[i,...,2]), scale),
+                b.viz.scale_image(b.viz.get_depth_image(observed[i,...,2]), scale)
             ],
             labels=["Inferred", "Observed"],
             label_fontsize=20
