@@ -154,13 +154,12 @@ model_v3_importance_jit = jax.jit(model_v3.importance)
 
 
 @genjax.gen
-def model_v4(prev_state, N_total_vec, N_vec, outlier_volume,
-            dynamics_params, variance_params, outlier_prob_params):
+def model_v4(pose, velocity, N_total_vec, N_vec, outlier_volume,
+            vel_params, variance_params, outlier_prob_params):
     """
     Single Object Model HMM
     """
-    (pose, velocity) = prev_state
-    velocity = b.gaussian_vmf_pose(velocity, *dynamics_params[0])  @ "velocity"
+    velocity = b.gaussian_vmf_pose(velocity, *vel_params)  @ "velocity"
     pose = pose @ velocity
 
     indices = b.uniform_discrete_array(N_total_vec, N_vec) @ "indices"
