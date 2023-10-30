@@ -125,6 +125,36 @@ def get_contact_planes(dimensions):
         ]
     )
 
+def bounding_box_corners(dimensions):
+    """
+    Returns the corners of an axis aligned bounding box.
+    Args:
+        dimensions: (3,) dimensions of the bounding box
+    Returns:
+        corners: (8,3) corners of the bounding box    
+    """
+    corners = jnp.array([
+        [-dimensions[0]/2, -dimensions[1]/2, -dimensions[2]/2],
+        [dimensions[0]/2, -dimensions[1]/2, -dimensions[2]/2],
+        [-dimensions[0]/2, dimensions[1]/2, -dimensions[2]/2],
+        [dimensions[0]/2, dimensions[1]/2, -dimensions[2]/2],
+        [-dimensions[0]/2, -dimensions[1]/2, dimensions[2]/2],
+        [dimensions[0]/2, -dimensions[1]/2, dimensions[2]/2],
+        [-dimensions[0]/2, dimensions[1]/2, dimensions[2]/2],
+        [dimensions[0]/2, dimensions[1]/2, dimensions[2]/2]
+    ])
+    return corners
+
+def get_contact_plane_dimenions(dimensions):
+    return jnp.array([
+        [dimensions[0],dimensions[2]],
+        [dimensions[0],dimensions[2]],
+        [dimensions[0],dimensions[1]],
+        [dimensions[0],dimensions[1]],
+        [dimensions[2],dimensions[1]],
+        [dimensions[2],dimensions[1]],
+    ])
+
 def contact_params_to_pose(contact_params):
     x,y,angle = contact_params
     return t3d.transform_from_pos(jnp.array([x,y, 0.0])).dot(
