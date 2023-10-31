@@ -179,3 +179,45 @@ def inference_approach_E(model, gt, metadata):
             print("Grid #",i+1)
             trace = c2f_pose_update_v2_jit(trace, key, grid, enumerators[t-1])
     return trace
+
+def inference_approach_F(model, gt, metadata):
+    """
+    2-step model with NO unfold
+    HMM-style
+    """
+    # Use 3d translation and rotation grid
+    grid_widths = [0.2,0.1,0.05, 0.025, 0.0125]
+    grid_nums = [(3,3,3),(3,3,3),(3,3,3),(3,3,3),(3,3,3)]
+    gridding_schedule = make_schedule_3d(grid_widths,grid_nums, [-jnp.pi/12, jnp.pi/12],10,10,jnp.pi/40)
+
+    key = jax.random.PRNGKey(metadata["key_number"]+71)
+    base_chm = genjax.choice_map(metadata["CHOICE_MAP_ARGS"])
+    enumerator = b.make_enumerator(["velocity"])
+    pose = metadata["INIT_POSE"]
+    velocity = metadata["INIT_VELOCITY"]
+    T = metadata["T"]
+    traces = []
+    model_args = metadata["MODEL_ARGS"]
+
+    for t in range(1,T+1):
+        print("t = ", t)
+        # force new constaints values to take over
+        chm = base_chm.unsafe_merge(genjax.choice_map({
+            "depth" : gt[t]
+        }))
+
+        model_args["pose"] = pose
+        model_args["velocity"] = velocity
+        # RESORTING to model.importance as I am having issues with update and choicemaps with unfolds &/or maps
+        _, trace = model.importance(key, chm, tuple(model_args.values()))
+
+        # then update trace over all the proposals
+        for i, grid in enumerate(gridding_schedule):
+            # print("Grid #",i+1)
+            trace = c2f_pose_update_v2_jit(trace, key, grid, enumerator)
+        pose, velocity = trace.get_retval()[1]
+        traces.append(trace)
+
+    # first gt image can be assumed to be known as we have the init pose
+    rendered = jnp.stack([gt[0]]+[tr.get_retval()[0] for tr in traces])
+    return traces, rendered
