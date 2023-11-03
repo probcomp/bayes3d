@@ -2,10 +2,19 @@ import bayes3d as b
 import bayes3d.colmap
 import glob
 from pathlib import Path
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("movie_path", 
+                        help="Path to movie file", 
+                        default="/home/nishadgothoskar/bayes3d/assets/IMG_3075.MOV", 
+                        type=str)
+args = parser.parse_args()
 
 b.setup_visualizer()
 
-movie_file_path = Path("/home/nishadgothoskar/bayes3d/assets/IMG_3075.MOV")
+movie_file_path = Path(args.movie_path)
+
 dataset_path = Path(b.utils.get_assets_dir()) / Path(movie_file_path.name + "_colmap_dataset")
 input_path = dataset_path / Path("input")
 input_path.mkdir(parents=True, exist_ok=True)
