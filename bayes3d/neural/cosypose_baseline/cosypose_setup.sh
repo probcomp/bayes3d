@@ -12,7 +12,7 @@ else
 fi
 unset __conda_setup
 
-# # git clone --recurse-submodules https://github.com/Simple-Robotics/cosypose.git
+git clone --recurse-submodules https://github.com/Simple-Robotics/cosypose.git
 cd cosypose
 # make sure to change numpy to version 1.19.2
 sed -i 's/numpy=1.17.4/numpy=1.19.2/g' environment.yaml
