@@ -16,6 +16,10 @@ def setup_visualizer():
     VISUALIZER = meshcat.Visualizer()
     set_background_color([1, 1, 1])
 
+def get_visualizer():
+    global VISUALIZER
+    return VISUALIZER
+
 def set_background_color(color):
     VISUALIZER["/Background"].set_property("top_color", color)
     VISUALIZER["/Background"].set_property("bottom_color", color)
