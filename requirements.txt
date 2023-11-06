@@ -32,3 +32,5 @@ fvcore
 iopath
 submitit
 wget
+mkdocs
+mkdocs-material
