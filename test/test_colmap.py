@@ -23,7 +23,7 @@ b.utils.video_to_images(movie_file_path, input_path)
 import subprocess
 
 assets_dir = Path(b.utils.get_assets_dir())
-script_path = assets_dir.parent / Path("bayes3d/colmap/run_colmap.py")
+script_path = assets_dir.parent / Path("scripts/run_colmap.py")
 import subprocess
 subprocess.run([f"python {str(script_path)} -s {str(dataset_path)}"],shell=True) 
 
