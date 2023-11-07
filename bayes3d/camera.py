@@ -148,3 +148,19 @@ def _open_gl_projection_matrix(h, w, fx, fy, cx, cy, near, far):
         ]
     )
     return orth @ persp @ view
+
+def getProjectionMatrix(intrinsics):
+    top = intrinsics.near / intrinsics.fy * intrinsics.height / 2.0
+    bottom = -top
+    right = intrinsics.near / intrinsics.fy * intrinsics.height / 2.0
+    left = -right
+    P = jnp.zeros((4, 4))
+    z_sign = 1.0
+    P = P.at[0, 0].set(2.0 * intrinsics.near / (right - left))
+    P = P.at[1, 1].set(2.0 * intrinsics.near / (top - bottom))
+    P = P.at[0, 2].set((right + left) / (right - left))
+    P = P.at[1, 2].set((top + bottom) / (top - bottom))
+    P = P.at[2, 2].set(z_sign * (intrinsics.far + intrinsics.near) / (intrinsics.far - intrinsics.near))
+    P = P.at[2, 3].set(-2.0 * (intrinsics.far * intrinsics.near) / (intrinsics.far - intrinsics.near))
+    P = P.at[3, 2].set(z_sign)
+    return jnp.transpose(P)

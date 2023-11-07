@@ -87,7 +87,7 @@ class RGBD(object):
         return observation
 
     def scale_rgbd(self, scaling_factor):
-        rgb = b.utils.scale(self.rgb, scaling_factor)
-        depth= b.utils.scale(self.depth, scaling_factor)
         intrinsics = b.camera.scale_camera_parameters(self.intrinsics, scaling_factor)
+        rgb = b.utils.scale(self.rgb, intrinsics.height, intrinsics.width)
+        depth = b.utils.scale(self.depth, intrinsics.height, intrinsics.width)
         return RGBD(rgb, depth, self.camera_pose, intrinsics, self.segmentation)
