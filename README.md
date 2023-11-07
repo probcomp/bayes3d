@@ -7,7 +7,7 @@
 
 </div>
 
-- **[Documentation](https://probcomp.github.io/bayes3d/bayes3d/)**
+- **[Documentation](https://probcomp.github.io/bayes3d/)**
 - **[Installation](#installation-guide)**
 - **[Get Assets](#get-assets)**
 - **[Google Cloud Instance Setup](#gcp-setup)**
