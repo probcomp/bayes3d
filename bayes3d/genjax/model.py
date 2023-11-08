@@ -15,7 +15,7 @@ import inspect
 from .genjax_distributions import *
 
 @genjax.gen
-def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_dims, outlier_volume, focal_length):
+def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_dims):
     indices = jnp.array([], dtype=jnp.int32)
     root_poses = jnp.zeros((0,4,4))
     contact_params = jnp.zeros((0,3))
@@ -61,7 +61,7 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
 
     variance = genjax.distributions.tfp_uniform(0.00000000001, 10000.0) @ "variance"
     outlier_prob  = genjax.distributions.tfp_uniform(-0.01, 10000.0) @ "outlier_prob"
-    image = image_likelihood(rendered, variance, outlier_prob, outlier_volume, focal_length) @ "image"
+    image = image_likelihood(rendered, variance, outlier_prob) @ "image"
     return rendered, indices, poses, parents, contact_params, faces_parents, faces_child, root_poses
 
 get_rendered_image = lambda trace: trace.get_retval()[0]
@@ -169,3 +169,4 @@ def update_address(trace, key, address, value):
         }),
         tuple(map(lambda v: Diff(v, UnknownChange), trace.args)),
     )[2]
+
