@@ -64,3 +64,14 @@ def threedp3_likelihood_old(
         outlier_prob, outlier_volume, filter_size
     )
     return log_probabilities_per_pixel.sum()
+
+def threedp3_likelihood(
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    variance,
+    outlier_prob,
+):
+    distances = jnp.linalg.norm(observed_xyz - rendered_xyz, axis=-1)
+    probabilities_per_pixel = (distances < variance/2) / variance
+    average_probability = probabilities_per_pixel.mean()
+    return average_probability

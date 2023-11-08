@@ -22,13 +22,13 @@ intrinsics = b.Intrinsics(
 )
 
 b.setup_renderer(intrinsics)
-b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"))
+b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/bunny.obj"))
 
 num_frames = 60
 
-poses = [b.t3d.transform_from_pos(jnp.array([-3.0, -3.0, 4.0]))]
+poses = [b.t3d.transform_from_pos(jnp.array([-3.0, 0.0, 4.0]))]
 delta_pose = b.t3d.transform_from_rot_and_pos(
-    R.from_euler('zyx', [1.0, -0.1, -2.0], degrees=True).as_matrix(),
+    R.from_euler('zyx', [-1.0, 0.1, 2.0], degrees=True).as_matrix(),
     jnp.array([0.09, 0.05, 0.02])
 )
 for t in range(num_frames-1):
@@ -41,7 +41,7 @@ print("observed_images.shape", observed_images.shape)
 
 translation_deltas = b.utils.make_translation_grid_enumeration(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, 5, 5, 5)
 rotation_deltas = jax.vmap(lambda key: b.distributions.gaussian_vmf_zero_mean(key, 0.00001, 800.0))(
-    jax.random.split(jax.random.PRNGKey(3), 100)
+    jax.random.split(jax.random.PRNGKey(30), 100)
 )
 
 likelihood = jax.vmap(b.threedp3_likelihood_old, in_axes=(None, 0, None, None, None, None, None))

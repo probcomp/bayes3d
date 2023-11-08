@@ -28,13 +28,12 @@ class UniformPose(ExactDensity):
 
 @dataclass
 class ImageLikelihood(ExactDensity):
-    def sample(self, key, img, variance, outlier_prob, outlier_volume, focal_length):
+    def sample(self, key, img, variance, outlier_prob):
         return img
 
-    def logpdf(self, image, s, variance, outlier_prob, outlier_volume, focal_length):
-        return b.threedp3_likelihood_old(
-            image, s, variance, outlier_prob,
-            outlier_volume, focal_length, 3
+    def logpdf(self, observed_image, latent_image, variance, outlier_prob):
+        return b.threedp3_likelihood(
+            observed_image, latent_image, variance, outlier_prob,
         )
 
 @dataclass

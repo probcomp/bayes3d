@@ -1,0 +1,55 @@
+site_name: Bayes3D
+
+plugins:
+  - search
+  - markdown-exec
+  - mkdocstrings:
+      enabled: !ENV [ENABLE_MKDOCSTRINGS, true]
+      custom_templates: templates
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+
+
+theme:
+    name: material
+    logo: logo.png
+    icon:
+      logo: material/cloud
+    font:
+      text: Ubuntu
+      code: Ubuntu Mono
+    static_templates:
+      - 404.html
+    features:
+      - search.highlight
+      - search.share
+      - search.suggest
+    palette:
+      # Palette toggle for light mode
+      - scheme: default
+        primary: white
+        toggle:
+          icon: material/brightness-7
+          name: Switch to dark mode
+
+      # Palette toggle for dark mode
+      - scheme: slate
+        primary: black
+        toggle:
+          icon: material/brightness-4
+          name: Switch to light mode
+
+nav:
+  - 'index.md'
+  - Installation: 'installation.md'
+
+markdown_extensions:
+  - attr_list
+  - md_in_html

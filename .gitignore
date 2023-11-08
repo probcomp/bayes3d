@@ -24,3 +24,9 @@ assets/tum/*
 *.MOV
 assets/*
 *.jpg
+*.ply
+*.zip
+*.npz
+*.txt
+*.pdf
+*.pkl
