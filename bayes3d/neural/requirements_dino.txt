@@ -1,0 +1,5 @@
+omegaconf
+fvcore
+iopath
+xformers==0.0.18
+submitit
