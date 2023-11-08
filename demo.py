@@ -22,7 +22,7 @@ intrinsics = b.Intrinsics(
 )
 
 b.setup_renderer(intrinsics)
-b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"))
+b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/bunny.obj"))
 
 num_frames = 60
 
