@@ -6,8 +6,8 @@ import jax
 import pickle
 import os
 
-def save_metadata(metadata, name):
-    if os.path.exists(f'{name}.pkl'):
+def save_metadata(metadata, name, force_save = False):
+    if not force_save and os.path.exists(f'{name}.pkl'):
         check = input(f"{name}.pkl already exists, do you want to overwrite? (y/n)")
         if 'n' in check.lower():
             print(f"{name}.pkl already exists")
@@ -78,14 +78,11 @@ def c2f_pose_update_v1(trace_, key, t_arr, unfold_array, pose_grid, enumerator):
     )
 c2f_pose_update_v1_jit = jax.jit(c2f_pose_update_v1, static_argnames=("enumerator",))
 
-def c2f_pose_update_v2(trace_, key, t_arr, unfold_array, pose_grid, enumerator):
+def c2f_pose_update_v2(trace_, key, pose_grid, enumerator):
     
-    T = jnp.argmax(t_arr)
-    # N_prop x 100 x 4 x 4
-    proposed_unfold_vectors = unfold_with_proposals_vmap(T, pose_grid, unfold_array)
-    scores = enumerator.enumerate_choices_get_scores(trace_, key, proposed_unfold_vectors)
+    scores = enumerator.enumerate_choices_get_scores(trace_, key, pose_grid)
     return enumerator.update_choices(
         trace_, key,
-        proposed_unfold_vectors[scores.argmax()]
+        pose_grid[scores.argmax()]
     )
 c2f_pose_update_v2_jit = jax.jit(c2f_pose_update_v2, static_argnames=("enumerator",))
