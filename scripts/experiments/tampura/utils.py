@@ -98,11 +98,11 @@ def c2f(
     potential_cps, # (n, 3)
     potential_indices, # (n,)
     number, # = n - 1
-    contact_param_gridding_schedule,
+    inference_param_schedule,
     obs_img
 ):
-    for cp_grid in contact_param_gridding_schedule:
-        potential_cps, score = grid_and_max(table_pose, face_child, potential_cps, potential_indices, number, cp_grid, obs_img)
+    for (cp_grid, width) in inference_param_schedule:
+        potential_cps, score = grid_and_max(table_pose, face_child, potential_cps, potential_indices, number, cp_grid, obs_img, width)
     return potential_cps, score
 c2f_jit = jax.jit(c2f)
 
@@ -114,7 +114,8 @@ def grid_and_max(
     indices, # (n,)
     number,
     grid,
-    obs_img
+    obs_img,
+    width
 ):
     cps_expanded = jnp.repeat(cps[None,...], grid.shape[0], axis=0) # (g, n, 3)
     cps_expanded = cps_expanded.at[:,number,:].set(cps_expanded[:,number,:] + grid) # (g, n, 3)
@@ -122,7 +123,7 @@ def grid_and_max(
     rendered_images = b.RENDERER.render_many(cp_poses, indices)[...,:3] # (g, h, w, 3)
     # I think the 3 dimension is an xyz point in the camera frame(?)
 
-    scores = score_vmap(rendered_images, obs_img)
+    scores = score_vmap(rendered_images, obs_img, width)
     best_idx = jnp.argmax(scores) # jnp.argsort(scores)[-4]
     cps = cps_expanded[best_idx]
     return cps, scores[best_idx]
@@ -134,18 +135,62 @@ cps_to_pose_parallel = jax.vmap(cps_to_pose, in_axes=(0,None,None,None))
 
 def score_images(
     rendered, # (h, w, 3) - point cloud
-    observed # (h, w, 3) - point cloud
+    observed, # (h, w, 3) - point cloud
+    width
 ):
     # get L2 distance between each corresponding point
     distances = jnp.linalg.norm(observed - rendered, axis=-1)
-    width = 0.04
 
     # Contribute 1/(h*w) * 1/width to the score for ach nearby pixel,
     # and contribute nothing for each faraway pixel.
     vals = (distances < width/2) / width
     return vals.mean()
 
-score_vmap = jax.jit(jax.vmap(score_images, in_axes=(0, None)))
+score_vmap = jax.jit(jax.vmap(score_images, in_axes=(0, None, None)))
+
+### Full inference loop
+def run_inference(table_pose, obs_img,
+            grid_param_sequence,
+    width_sequence = None,
+    key = jax.random.PRNGKey(30),
+    cps = jnp.zeros((0,3)),
+    indices = jnp.array([], dtype=jnp.int32),
+    n_objs_to_add = 1
+):
+    if width_sequence is None:
+        width_sequence = [0.04 for _ in grid_param_sequence]
+
+    face_child = 3
+    best_score = -np.inf
+    best_index = -1
+    best_cps = None
+    best_indices = None
+    key = jax.random.split(key,2)[0]
+    low, high = jnp.array([-0.2, -0.2, -jnp.pi]), jnp.array([0.2, 0.2, jnp.pi])
+    key = jax.random.PRNGKey(30)
+    for i in range(n_objs_to_add):
+        print(f"Fitting object {len(indices) + 1}...")
+        for next_index in range(len(b.RENDERER.model_box_dims)):
+            potential_indices = jnp.concatenate([indices, jnp.array([next_index])])
+            potential_cps = jnp.concatenate([cps, jax.random.uniform(key, shape=(1,3,),minval=low, maxval=high)])
+            potential_cps, score = c2f_jit(
+                table_pose,
+                face_child,
+                potential_cps,
+                potential_indices,
+                len(potential_indices) - 1,
+                list(zip(get_grids(grid_param_sequence), width_sequence)),
+                obs_img
+            )
+            if score > best_score:
+                best_index = next_index
+                best_score = score
+                best_cps = potential_cps
+                best_indices = potential_indices
+        cps = best_cps
+        indices = best_indices
+
+    return cps, indices, cps_to_pose(cps, indices, table_pose, face_child)
 
 ####
 
