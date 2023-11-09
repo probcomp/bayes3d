@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import os, sys
+import os, sys
 import torch
 import bayes3d as b
 from jax_renderer import Renderer as JaxRenderer
@@ -9,7 +10,9 @@ sys.path.append('/home/ubuntu/workspace/diff-dope')
 import diffdope as dd
 
 JAX_RENDERER = True
-if not JAX_RENDERER:
+if JAX_RENDERER:
+    r = JaxRenderer(intrinsics)
+else:
     import bayes3d.rendering.nvdiffrast_full.nvdiffrast.torch as dr
     glctx = dr.RasterizeGLContext()
 
@@ -63,7 +66,6 @@ pos_clip_ja = dd.xfm_points(pos, transform_mtx[None,...])  # transform points
 # Rasterize
 #----------------------
 if JAX_RENDERER:
-    r = JaxRenderer(intrinsics)
     pos_clip_ja_jax = jnp.array(pos_clip_ja.cpu())
     pos_idx_jax = jnp.array(pos_idx.cpu())
     resolution = jnp.array([200,200])
@@ -75,4 +77,5 @@ else:
     b.viz.get_depth_image(jnp.array(ret[0][0][:,:,2].cpu())).save("img_torch.png")
 
 from IPython import embed; embed()
+
 

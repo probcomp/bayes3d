@@ -38,7 +38,6 @@ class Renderer(object):
         ).reshape(-1))
 
     def rasterize(self, pos_clip_ja, pos_idx, resolution):
-        print("Etnered rasterize")
         return _render_custom_call(self, pos_clip_ja, pos_idx, resolution)
 
 # Useful reference for understanding the custom calls setup:
