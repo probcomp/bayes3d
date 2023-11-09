@@ -18,7 +18,7 @@ import numpy as np
 from jaxlib.hlo_helpers import custom_call
 from tqdm import tqdm
 
-WITH_GRAD = False
+WITH_GRAD = True # todo move to renderer constructor
 
 class Renderer(object):
     def __init__(self, intrinsics, num_layers=1024):
@@ -114,8 +114,8 @@ def _build_render_primitive(r: "Renderer"):
                 # The inputs:
                 operands=[pos_clip_ja, pos_idx, resolution],
                 # # Layout specification:
-                operand_layouts=[(2, 1, 0,), (1, 0,), (0,)],
-                result_layouts=[(3, 2, 1, 0), (3, 2, 1, 0)],
+                # operand_layouts=[(2, 1, 0,), (1, 0,), (0,)],
+                # result_layouts=[(3, 2, 1, 0), (3, 2, 1, 0)],
                 # GPU specific additional data
                 backend_config=opaque
             ).results

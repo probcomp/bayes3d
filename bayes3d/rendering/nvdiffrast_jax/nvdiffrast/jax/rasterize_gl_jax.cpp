@@ -53,8 +53,8 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
                         const float* pos, const int* tri, 
                         std::vector<int> dims,
                         std::vector<int> resolution, 
-                        float* out)
-                        // float* out_db)
+                        float* out,
+                        float* out_db)
 { 
     // const at::cuda::OptionalCUDAGuard device_guard(at::device_of(pos));
     RasterizeGLState& s = *stateWrapper.pState;
@@ -97,11 +97,6 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
     }
 
     // // Copy input data to GL and render.
-    // const float* posPtr = pos.data_ptr<float>();
-    // const int32_t* rangesPtr = instance_mode ? 0 : ranges.data_ptr<int32_t>(); // This is in CPU memory.
-    // const int32_t* triPtr = tri.data_ptr<int32_t>();
-    // int vtxPerInstance = instance_mode ? pos.size(1) : 0;
-    // rasterizeRender(NVDR_CTX_PARAMS, s, stream, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
     int peeling_idx = -1;
     const float* posPtr = pos;
     const int32_t* rangesPtr = 0; // This is in CPU memory.
@@ -109,16 +104,10 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
     int vtxPerInstance = dims[1];
     rasterizeRender(NVDR_CTX_PARAMS, s, stream, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
 
-    // // Allocate output tensors.
-    // torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
-    // torch::Tensor out = torch::empty({depth, height, width, 4}, opts);
-    // torch::Tensor out_db = torch::empty({depth, height, width, s.enableDB ? 4 : 0}, opts);
-    // float* outputPtr[2];
-    // outputPtr[0] = out.data_ptr<float>();
-    // outputPtr[1] = s.enableDB ? out_db.data_ptr<float>() : NULL;
+    // Allocate output tensors.
     float* outputPtr[2];
     outputPtr[0] = out;
-    outputPtr[1] = NULL;// s.enableDB ? out_db : NULL;
+    outputPtr[1] = s.enableDB ? out_db : NULL;
 
     // Copy rasterized results into CUDA buffers.
     rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, depth);
@@ -136,12 +125,13 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
         *UnpackDescriptor<DiffRasterizeCustomCallDescriptor>(opaque, opaque_len);
     RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
 
-    void *pos = buffers[0];
-    void *tri = buffers[1];
-    void *_resolution = buffers[3];
+    const float *pos = reinterpret_cast<const float *> (buffers[0]);
+    const int *tri = reinterpret_cast<const int *> (buffers[1]);
+    const int *_resolution = reinterpret_cast<const int *> (buffers[2]);
 
-    void *out = buffers[4];
-    // void *out_db = buffers[5];   // TODO (see jax documentation on modifications for multiple outputs)
+    float *out = reinterpret_cast<float *> (buffers[3]);
+    float *out_db = reinterpret_cast<float *> (buffers[4]);
+    
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
 
     std::vector<int> resolution;
@@ -157,12 +147,12 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
 
     _rasterize_fwd_gl(stream,
                       stateWrapper,
-                      reinterpret_cast<const float *>(pos),
-                      reinterpret_cast<const int *>(tri),
+                      pos,
+                      tri,
                       pos_dim,
                       resolution, 
-                      reinterpret_cast<float *>(out) 
-                    //   reinterpret_cast<float *>(out_db)  
+                      out,
+                      out_db
                       );
     cudaStreamSynchronize(stream);
 }
