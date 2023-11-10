@@ -15,41 +15,6 @@
 #include "../common/framework.h"
 #include "../common/glutil.h"
 
-//------------------------------------------------------------------------
-// OpenGL-related persistent state for forward op.
-
-struct RasterizeGLState // Must be initializable by memset to zero.
-{
-    int                     width;              // Allocated frame buffer width.
-    int                     height;             // Allocated frame buffer height.
-    int                     depth;              // Allocated frame buffer depth.
-    int                     posCount;           // Allocated position buffer in floats.
-    int                     triCount;           // Allocated triangle buffer in ints.
-    GLContext               glctx;
-    GLuint                  glFBO;
-    GLuint                  glColorBuffer[2];
-    GLuint                  glPrevOutBuffer;
-    GLuint                  glDepthStencilBuffer;
-    GLuint                  glVAO;
-    GLuint                  glTriBuffer;
-    GLuint                  glPosBuffer;
-    GLuint                  glProgram;
-    GLuint                  glProgramDP;
-    GLuint                  glVertexShader;
-    GLuint                  glGeometryShader;
-    GLuint                  glFragmentShader;
-    GLuint                  glFragmentShaderDP;
-    cudaGraphicsResource_t  cudaColorBuffer[2];
-    cudaGraphicsResource_t  cudaPrevOutBuffer;
-    cudaGraphicsResource_t  cudaPosBuffer;
-    cudaGraphicsResource_t  cudaTriBuffer;
-    int                     enableDB;
-    int                     enableZModify;      // Modify depth in shader, workaround for a rasterization issue on A100.
-};
-
-
-class RasterizeGLStateWrapper;
-
 // struct SetUpCustomCallDescriptor {
 //     RasterizeGLStateWrapper* gl_state_wrapper;
     
@@ -72,8 +37,7 @@ class RasterizeGLStateWrapper;
 //     int on_object;
 // };
 
-struct DiffRasterizeCustomCallDescriptor {
-    RasterizeGLStateWrapper* gl_state_wrapper;
+struct DiffInterpolateCustomCallDescriptor {
     int num_images;
     int num_vertices;
     int num_triangles;

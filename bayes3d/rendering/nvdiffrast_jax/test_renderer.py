@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import os, sys
-import os, sys
+import time
 import torch
 import bayes3d as b
 from jax_renderer import Renderer as JaxRenderer
@@ -10,11 +10,6 @@ sys.path.append('/home/ubuntu/workspace/diff-dope')
 import diffdope as dd
 
 JAX_RENDERER = True
-if JAX_RENDERER:
-    r = JaxRenderer(intrinsics)
-else:
-    import bayes3d.rendering.nvdiffrast_full.nvdiffrast.torch as dr
-    glctx = dr.RasterizeGLContext()
 
 #--------------------
 # Setup 
@@ -33,15 +28,20 @@ proj_cam = torch.from_numpy(np.array(b.camera._open_gl_projection_matrix(
     intrinsics.near, intrinsics.far
 ))).cuda()
 
+if JAX_RENDERER:
+    r = JaxRenderer(intrinsics)
+else:
+    import bayes3d.rendering.nvdiffrast_full.nvdiffrast.torch as dr
+    glctx = dr.RasterizeGLContext()
+
+#---------------------
+# Load object
+#---------------------
 model_dir = os.path.join(b.utils.get_assets_dir(),"bop/ycbv/models")
 idx = 14
 mesh_path = os.path.join(model_dir,"obj_" + "{}".format(idx).rjust(6, '0') + ".ply")
 m = b.utils.load_mesh(mesh_path)
 m = b.utils.scale_mesh(m, 1.0/100.0)
-
-#---------------------
-# Load object
-#---------------------
 
 vtx_pos = torch.from_numpy(m.vertices.astype(np.float32)).cuda()
 pos_idx = torch.from_numpy(m.faces.astype(np.int32)).cuda()
@@ -62,6 +62,7 @@ posw = torch.cat([pos, torch.ones([pos.shape[0], pos.shape[1], 1]).cuda()], axis
 transform_mtx = torch.matmul(proj_cam, rot_mtx_44)  # transform = projection + pose rotation
 pos_clip_ja = dd.xfm_points(pos, transform_mtx[None,...])  # transform points
 
+
 #----------------------
 # Rasterize
 #----------------------
@@ -69,12 +70,28 @@ if JAX_RENDERER:
     pos_clip_ja_jax = jnp.array(pos_clip_ja.cpu())
     pos_idx_jax = jnp.array(pos_idx.cpu())
     resolution = jnp.array([200,200])
+
+    start_time = time.time()
     ret = r.rasterize(pos_clip_ja_jax, pos_idx_jax, resolution=resolution)
+    end_time = time.time()
+    
     b.viz.get_depth_image(ret[0][0][:,:,2]).save("img_jax.png")
+    print(f"JAX rasterization: {(end_time - start_time)*1000} ms")
 else:
     resolution = [200,200]
+    
+    start_time = time.time()
     ret = dr.rasterize(glctx, pos_clip_ja, pos_idx, resolution=resolution)
+    end_time = time.time()
+    
+    print(f"Torch rasterization: {(end_time - start_time)*1000} ms")
     b.viz.get_depth_image(jnp.array(ret[0][0][:,:,2].cpu())).save("img_torch.png")
+
+
+#----------------------
+# Interpolate
+#----------------------
+
 
 from IPython import embed; embed()
 
