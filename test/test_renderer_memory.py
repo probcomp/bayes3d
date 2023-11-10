@@ -56,6 +56,6 @@ for i in range(5):
 
 post_test_clearmesh = b.utils.get_gpu_memory()[0]
 
-
+# Expected result should be around 2MiB for the given camera intrinsics
 print("GPU memory lost with clear_meshmem() --> ", pre_test_clearmesh - post_test_clearmesh, " MiB")
 print("The memeory lost is from the JAX memeory in GPU and not accumulations in the GPU")
