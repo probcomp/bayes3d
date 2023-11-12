@@ -59,9 +59,13 @@ def _get_plugin(gl=False):
     if gl:
         source_files = [
             '../common/common.cpp',
+            '../common/rasterize.cu',
+            '../common/interpolate.cu',
             '../common/glutil.cpp',
             '../common/rasterize_gl.cpp',
-            'rasterize_gl_jax.cpp'
+            'jax_bindings.cpp',
+            'jax_rasterize_gl.cpp',
+            'jax_interpolate.cpp',
         ]
     else:
         source_files = []
