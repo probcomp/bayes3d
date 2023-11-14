@@ -265,57 +265,57 @@ def model_v5b(prev_state, N_total_vec, N_vec, outlier_volume,
 
     return (single_rendered_image, pose)
 
-@genjax.gen
-def model_v5c(prev_state, N_total_vec, N_vec, outlier_volume,
-            vel_params, variance_params, outlier_prob_params, occ_pose):
-    """
-    WITH OCCLUDER IDX for simple physics scene
-    """
-    (_, pose) = prev_state
-    pose = b.gaussian_vmf_pose(pose, *vel_params)  @ "velocity"
+# @genjax.gen
+# def model_v5c(prev_state, N_total_vec, N_vec, outlier_volume,
+#             vel_params, variance_params, outlier_prob_params, occ_pose):
+#     """
+#     WITH OCCLUDER IDX for simple physics scene
+#     """
+#     (_, pose) = prev_state
+#     pose = b.gaussian_vmf_pose(pose, *vel_params)  @ "velocity"
 
-    indices = b.uniform_discrete_array(N_total_vec, N_vec) @ "indices"
+#     indices = b.uniform_discrete_array(N_total_vec, N_vec) @ "indices"
 
-    all_poses = jnp.stack([pose,occ_pose])
+#     all_poses = jnp.stack([pose,occ_pose])
 
-    single_rendered_image = b.RENDERER.render(
-        all_poses, jnp.array([0,1]) 
-    )[...,:3]
+#     single_rendered_image = b.RENDERER.render(
+#         all_poses, jnp.array([0,1]) 
+#     )[...,:3]
 
-    variance = genjax.distributions.tfp_uniform(*variance_params) @ "variance"
-    outlier_prob  = genjax.distributions.tfp_uniform(*outlier_prob_params) @ "outlier_prob"
+#     variance = genjax.distributions.tfp_uniform(*variance_params) @ "variance"
+#     outlier_prob  = genjax.distributions.tfp_uniform(*outlier_prob_params) @ "outlier_prob"
 
-    image = b.image_likelihood(single_rendered_image, variance, outlier_prob, outlier_volume, 1.0) @ "depth"
+#     image = b.image_likelihood(single_rendered_image, variance, outlier_prob, outlier_volume, 1.0) @ "depth"
 
-    return (single_rendered_image, pose)
+#     return (single_rendered_image, pose)
 
-@genjax.gen
-def model_v5d(prev_state, N_total_vec, N_vec, outlier_volume,
-            vel_params, variance_params, outlier_prob_params, occ_pose):
-    """
-    WITH OCCLUDER IDX for simple physics scene
-    """
-    (_, prev_pose, pose) = prev_state
-    # find pose change
-    vel_pos = pose[:3,3] - prev_pose[:3,3]
-    vel_pose = b.t3d.transform_from_pos(vel_pos)
-    next_pose = vel_pose @ pose # in global frame
-    pose = b.gaussian_vmf_pose(next_pose, *vel_params)  @ "velocity"
+# @genjax.gen
+# def model_v5d(prev_state, N_total_vec, N_vec, outlier_volume,
+#             vel_params, variance_params, outlier_prob_params, occ_pose):
+#     """
+#     WITH OCCLUDER IDX for simple physics scene
+#     """
+#     (_, prev_pose, pose) = prev_state
+#     # find pose change
+#     vel_pos = pose[:3,3] - prev_pose[:3,3]
+#     vel_pose = b.t3d.transform_from_pos(vel_pos)
+#     next_pose = vel_pose @ pose # in global frame
+#     pose = b.gaussian_vmf_pose(next_pose, *vel_params)  @ "velocity"
 
-    indices = b.uniform_discrete_array(N_total_vec, N_vec) @ "indices"
+#     indices = b.uniform_discrete_array(N_total_vec, N_vec) @ "indices"
 
-    all_poses = jnp.stack([next_pose,occ_pose])
+#     all_poses = jnp.stack([next_pose,occ_pose])
 
-    single_rendered_image = b.RENDERER.render(
-        all_poses, jnp.array([0,1]) 
-    )[...,:3]
+#     single_rendered_image = b.RENDERER.render(
+#         all_poses, jnp.array([0,1]) 
+#     )[...,:3]
 
-    variance = genjax.distributions.tfp_uniform(*variance_params) @ "variance"
-    outlier_prob  = genjax.distributions.tfp_uniform(*outlier_prob_params) @ "outlier_prob"
+#     variance = genjax.distributions.tfp_uniform(*variance_params) @ "variance"
+#     outlier_prob  = genjax.distributions.tfp_uniform(*outlier_prob_params) @ "outlier_prob"
 
-    image = b.image_likelihood(single_rendered_image, variance, outlier_prob, outlier_volume, 1.0) @ "depth"
+#     image = b.image_likelihood(single_rendered_image, variance, outlier_prob, outlier_volume, 1.0) @ "depth"
 
-    return (single_rendered_image, pose, next_pose)
+#     return (single_rendered_image, pose, next_pose)
 
 @genjax.gen
 def model_v6(T_vec, outlier_volume,
