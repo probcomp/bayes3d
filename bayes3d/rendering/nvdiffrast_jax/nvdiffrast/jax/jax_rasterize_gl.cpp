@@ -237,6 +237,7 @@ void jax_rasterize_bwd(cudaStream_t stream,
     const float *ddb = reinterpret_cast<const float *> (buffers[4]);
 
     float *grad = reinterpret_cast<float *> (buffers[5]);  // output
+    cudaMemset(grad, 0, d.num_images*d.num_vertices*4*sizeof(float));
     
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
 

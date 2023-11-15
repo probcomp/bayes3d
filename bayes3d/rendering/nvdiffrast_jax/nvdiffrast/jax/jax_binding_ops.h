@@ -1,4 +1,5 @@
 #include <string>
+#include <pybind11/pybind11.h>
 
 // https://en.cppreference.com/w/cpp/numeric/bit_cast
 template <class To, class From>
@@ -21,8 +22,6 @@ template <typename T>
 std::string PackDescriptorAsString(const T& descriptor) {
   return std::string(bit_cast<const char*>(&descriptor), sizeof(T));
 }
-
-#include <pybind11/pybind11.h>
 
 template <typename T>
 pybind11::bytes PackDescriptor(const T& descriptor) {

@@ -20,6 +20,9 @@ void jax_interpolate_fwd(cudaStream_t stream,
                       void **buffers,
                       const char *opaque, std::size_t opaque_len);
 
+void jax_interpolate_bwd(cudaStream_t stream,
+                      void **buffers,
+                      const char *opaque, std::size_t opaque_len);
 
 //---------------------------------------------------
 
@@ -33,12 +36,13 @@ pybind11::dict Registrations() {
   dict["jax_rasterize_fwd_gl"] = EncapsulateFunction(jax_rasterize_fwd_gl);
   dict["jax_interpolate_fwd"] = EncapsulateFunction(jax_interpolate_fwd);
   dict["jax_rasterize_bwd"] = EncapsulateFunction(jax_rasterize_bwd);
+  dict["jax_interpolate_bwd"] = EncapsulateFunction(jax_interpolate_bwd);
   return dict;
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // State classes.
-    pybind11::class_<RasterizeGLStateWrapper>(m, "RasterizeGLStateWrapper").def(pybind11::init<bool, bool, int>())
+    pybind11::class_<RasterizeGLStateWrapper>(m, "RasterizeGLStateWrapper", py::module_local()).def(pybind11::init<bool, bool, int>())
         .def("set_context",     &RasterizeGLStateWrapper::setContext)
         .def("release_context", &RasterizeGLStateWrapper::releaseContext);
 
