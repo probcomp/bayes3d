@@ -1,5 +1,5 @@
 from typing import Tuple
-
+import gc
 import functools
 import bayes3d.rendering.nvdiffrast.common as dr
 import bayes3d.camera
@@ -62,6 +62,20 @@ class Renderer(object):
         self.meshes =[]
         self.mesh_names =[]
         self.model_box_dims = jnp.zeros((0,3))
+
+    def clear_gpu_meshmem(self):
+        """
+        Forcefully deallocate/clear any GPU memory used for mesh data.
+        NOTE: INITIALZE NEW renderer instance if using this function.
+        """
+        # cpp files are modified so that the destructors deallocate GPU memory
+        self.renderer_env = None
+        # Release the meshes
+        self.meshes.clear()
+        self.mesh_names.clear()
+        self.model_box_dims = jnp.zeros((0, 3))
+        # Force the garbage collector to run to reclaim memory
+        gc.collect()
 
     def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None, center_mesh=True):
         """Add a mesh to the renderer from a file.
