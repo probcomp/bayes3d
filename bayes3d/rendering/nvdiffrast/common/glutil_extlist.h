@@ -6,6 +6,8 @@
 // distribution of this software and related documentation without an express
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
+// ... (previous declarations)
+
 #ifndef GL_VERSION_1_2
 GLUTIL_EXT(void,   glTexImage3D,                GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void *pixels);
 #endif
@@ -13,12 +15,15 @@ GLUTIL_EXT(void,   glTexImage3D,                GLenum target, GLint level, GLin
 GLUTIL_EXT(void,   glBindBuffer,                GLenum target, GLuint buffer);
 GLUTIL_EXT(void,   glBufferData,                GLenum target, ptrdiff_t size, const void* data, GLenum usage);
 GLUTIL_EXT(void,   glGenBuffers,                GLsizei n, GLuint* buffers);
+GLUTIL_EXT(void,   glDeleteBuffers,             GLsizei n, const GLuint* buffers); // <-- Add this line
 #endif
 #ifndef GL_VERSION_2_0
 GLUTIL_EXT(void,   glAttachShader,              GLuint program, GLuint shader);
 GLUTIL_EXT(void,   glCompileShader,             GLuint shader);
 GLUTIL_EXT(GLuint, glCreateProgram,             void);
 GLUTIL_EXT(GLuint, glCreateShader,              GLenum type);
+GLUTIL_EXT(void,   glDeleteProgram,            GLuint program); // <-- Add this line
+GLUTIL_EXT(void,   glDeleteShader,             GLuint shader); // <-- Add this line
 GLUTIL_EXT(void,   glDrawBuffers,               GLsizei n, const GLenum* bufs);
 GLUTIL_EXT(void,   glEnableVertexAttribArray,   GLuint index);
 GLUTIL_EXT(void,   glGetProgramInfoLog,         GLuint program, GLsizei bufSize, GLsizei* length, char* infoLog);
@@ -32,8 +37,12 @@ GLUTIL_EXT(void,   glUniformMatrix4fv,          GLint location, GLsizei count, G
 GLUTIL_EXT(void,   glUseProgram,                GLuint program);
 GLUTIL_EXT(void,   glVertexAttribPointer,       GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer);
 #endif
+#ifndef GL_VERSION_3_0
+GLUTIL_EXT(void,   glDeleteVertexArrays,        GLsizei n, const GLuint* arrays); // <-- Add this line
+#endif
 #ifndef GL_VERSION_3_2
 GLUTIL_EXT(void,   glFramebufferTexture,        GLenum target, GLenum attachment, GLuint texture, GLint level);
+GLUTIL_EXT(void,   glDeleteFramebuffers,        GLsizei n, const GLuint* framebuffers); // <-- Add this line
 #endif
 #ifndef GL_ARB_framebuffer_object
 GLUTIL_EXT(void,   glBindFramebuffer,           GLenum target, GLuint framebuffer);

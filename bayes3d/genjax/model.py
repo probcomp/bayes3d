@@ -11,6 +11,7 @@ from tqdm import tqdm
 from genjax._src.core.transforms.incremental import NoChange
 from genjax._src.core.transforms.incremental import UnknownChange
 from genjax._src.core.transforms.incremental import Diff
+from collections import namedtuple
 import inspect
 from .genjax_distributions import *
 
@@ -124,28 +125,44 @@ def multivmap(f, args=None):
             multivmapped = jax.vmap(multivmapped, in_axes=make_onehot(len(args), i, hot=0, cold=None))
     return multivmapped
 
-def make_enumerator(addresses):
-    def enumerator(trace, key, *args):
-        return trace.update(
-            key,
-            genjax.choice_map({
+Enumerator = namedtuple("Enumerator",["update_choices", "update_choices_with_weight","update_choices_get_score", "enumerate_choices", "enumerate_choices_with_weights", "enumerate_choices_get_scores"])
+
+def default_chm_builder(addresses, args, chm_args = None):
+    return genjax.choice_map({
                 addr: c for (addr, c) in zip(addresses, args)
-            }),
-            tuple(map(lambda v: Diff(v, UnknownChange), trace.args)),
-        )[2]
-    
-    def enumerator_score(trace, key, *args):
-        return enumerator(trace, key, *args).get_score()
-    return jax.jit(enumerator), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses)))
+            })
 
 def make_unknown_change_argdiffs(trace):
     return tuple(map(lambda v: Diff(v, UnknownChange), trace.args))
 
-def viz_trace_rendered_observed(trace):
+def make_no_change_argdiffs(trace):
+    return tuple(map(lambda v: Diff(v, NoChange), trace.args))
+
+def make_enumerator(addresses, chm_builder = default_chm_builder, argdiff_f = make_unknown_change_argdiffs, chm_args = None):
+    def enumerator(trace, key, *args):
+        return trace.update(
+            key,
+            chm_builder(addresses, args, chm_args),
+            argdiff_f(trace),
+        )[2]
+
+    def enumerator_with_weight(trace, key, *args):
+        return trace.update(
+            key,
+            chm_builder(addresses, args, chm_args),
+            argdiff_f(trace),
+        )[1:3]
+    
+    def enumerator_score(trace, key, *args):
+        return enumerator(trace, key, *args).get_score()
+
+    return Enumerator(jax.jit(enumerator), jax.jit(enumerator_with_weight), jax.jit(enumerator_score), jax.jit(multivmap(enumerator, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_with_weight, (False, False,) + (True,) * len(addresses))), jax.jit(multivmap(enumerator_score, (False, False,) + (True,) * len(addresses))))
+
+def viz_trace_rendered_observed(trace, scale = 2):
     return b.viz.hstack_images(
         [
-            b.viz.scale_image(b.get_depth_image(get_rendered_image(trace)[...,2]), 2),
-            b.viz.scale_image(b.get_depth_image(trace["image"][...,2]), 2)
+            b.viz.scale_image(b.get_depth_image(get_rendered_image(trace)[...,2]), scale),
+            b.viz.scale_image(b.get_depth_image(trace["image"][...,2]), scale)
         ]
     )
 
