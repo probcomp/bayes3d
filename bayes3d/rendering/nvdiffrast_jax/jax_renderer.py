@@ -37,7 +37,6 @@ class Renderer(object):
         def _rasterize_fwd(pos, tri, resolution):
             rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pos, tri, resolution)
             saved_tensors = (pos, tri, rast_out)
-        
             return (rast_out, rast_out_db), saved_tensors
 
         def _rasterize_bwd(saved_tensors, diffs):

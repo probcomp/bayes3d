@@ -31,12 +31,12 @@ vtx_pos = jnp.array(m.vertices.astype(np.float32))
 pos_idx = jnp.array(m.faces.astype(np.int32))
 print("Mesh has %d triangles and %d vertices." % (pos_idx.shape[0], vtx_pos.shape[0]))
 
-
-
-rast_out, rast_out_db = jax_renderer.rasterize(vtx_pos[None,...], pos_idx, jnp.array([200,200]))
+pos = vtx_pos[None,...]
+pos = jnp.concatenate([pos, jnp.ones((*pos.shape[:-1],1))], axis=-1)
+rast_out, rast_out_db = jax_renderer.rasterize(pos, pos_idx, jnp.array([200,200]))
 
 def func(i):
-    rast_out, rast_out_db = jax_renderer.rasterize(vtx_pos[None,...] + i, pos_idx, jnp.array([200,200]))
+    rast_out, rast_out_db = jax_renderer.rasterize(pos + i, pos_idx, jnp.array([200,200]))
     return rast_out.mean()
 
 func_jit = jax.jit(func)
