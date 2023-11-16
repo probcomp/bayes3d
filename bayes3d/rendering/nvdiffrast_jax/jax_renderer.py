@@ -28,12 +28,6 @@ class Renderer(object):
         """
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(output_db=True)
-        self.proj_list = list(bayes3d.camera._open_gl_projection_matrix(
-            intrinsics.height, intrinsics.width, 
-            intrinsics.fx, intrinsics.fy, 
-            intrinsics.cx, intrinsics.cy, 
-            intrinsics.near, intrinsics.far
-        ).reshape(-1))
         self.rasterize = jax.tree_util.Partial(self._rasterize, self)
         self.interpolate = jax.tree_util.Partial(self._interpolate, self)
 
