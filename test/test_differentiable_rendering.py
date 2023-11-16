@@ -34,4 +34,15 @@ print("Mesh has %d triangles and %d vertices." % (pos_idx.shape[0], vtx_pos.shap
 
 
 rast_out, rast_out_db = jax_renderer.rasterize(vtx_pos[None,...], pos_idx, jnp.array([200,200]))
-color = jax_renderer.interpolate(vtx_pos[None,...], rast_out, pos_idx, rast_out_db)
+
+def func(i):
+    rast_out, rast_out_db = jax_renderer.rasterize(vtx_pos[None,...] + i, pos_idx, jnp.array([200,200]))
+    return rast_out.mean()
+
+func_jit = jax.jit(func)
+func_jit(0.0)
+
+grad_func = jax.value_and_grad(func)
+val,grad = grad_func(0.0)
+
+

@@ -17,6 +17,7 @@ from jax.lib import xla_client
 import numpy as np
 from jaxlib.hlo_helpers import custom_call
 from tqdm import tqdm
+from jax import custom_vjp
 
 class Renderer(object):
     def __init__(self, intrinsics, num_layers=1024):
@@ -28,33 +29,51 @@ class Renderer(object):
         """
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(output_db=True)
-        self.rasterize = jax.tree_util.Partial(self._rasterize, self)
-        self.interpolate = jax.tree_util.Partial(self._interpolate, self)
+
+        @custom_vjp
+        def rasterize(pos, tri, resolution):
+            return _rasterize_fwd_custom_call(self, pos, tri, resolution)
+
+        def _rasterize_fwd(pos, tri, resolution):
+            rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pos, tri, resolution)
+            saved_tensors = (pos, tri, rast_out)
+        
+            return (rast_out, rast_out_db), saved_tensors
+
+        def _rasterize_bwd(saved_tensors, diffs):
+            pos, tri, rast_out = saved_tensors
+            dy, ddb = diffs
+
+            grads = _rasterize_bwd_custom_call(self, pos, tri, rast_out, dy, ddb)
+            return grads[0], None
+
+        rasterize.defvjp(_rasterize_fwd, _rasterize_bwd)
+        self.rasterize = rasterize
 
     #------------------
     # Rasterization
     #------------------
 
-    @functools.partial(jax.custom_vjp, nondiff_argnums=(0,3))
-    def _rasterize(self, pos, tri, resolution):
-        rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pos, tri, resolution)
-        return (rast_out, rast_out_db)
+    # @functools.partial(jax.custom_vjp, nondiff_argnums=(0,3))
+    # def _rasterize(self, pos, tri, resolution):
+    #     rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pos, tri, resolution)
+    #     return (rast_out, rast_out_db)
 
-    def _rasterize_fwd(self, pos, tri, resolution):
-        rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pos, tri, resolution)
-        saved_tensors = (pos, tri, rast_out)
+    # def _rasterize_fwd(self, pos, tri, resolution):
+    #     rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pos, tri, resolution)
+    #     saved_tensors = (pos, tri, rast_out)
     
-        return (rast_out, rast_out_db), saved_tensors
+    #     return (rast_out, rast_out_db), saved_tensors
 
-    def _rasterize_bwd(self, _, saved_tensors, diffs):
-        pos, tri, rast_out = saved_tensors
-        dy, ddb = diffs
+    # def _rasterize_bwd(self, _, saved_tensors, diffs):
+    #     pos, tri, rast_out = saved_tensors
+    #     dy, ddb = diffs
 
-        grads = _rasterize_bwd_custom_call(self, pos, tri, rast_out, dy, ddb)
-        return grads[0], None
+    #     grads = _rasterize_bwd_custom_call(self, pos, tri, rast_out, dy, ddb)
+    #     return grads[0], None
     
-    _rasterize.defvjp(_rasterize_fwd, 
-                    _rasterize_bwd)
+    # _rasterize.defvjp(_rasterize_fwd, 
+    #                 _rasterize_bwd)
         
     #------------------
     # Interpolation
