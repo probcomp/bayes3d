@@ -44,7 +44,7 @@ class Renderer(object):
             dy, ddb = diffs
 
             grads = _rasterize_bwd_custom_call(self, pos, tri, rast_out, dy, ddb)
-            return grads[0], None
+            return grads[0], None, None
 
         rasterize.defvjp(_rasterize_fwd, _rasterize_bwd)
         self.rasterize = rasterize
