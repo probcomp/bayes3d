@@ -108,7 +108,7 @@ if not JAX_RENDERER:
     dummy_ddb = torch.from_numpy(np.array(dummy_ddb)).cuda()
 
 # context variable for torch autograd testing with manual gradient input
-TorchCtx = namedtuple('TorchCtx', ['saved_tensors', 'saved_grad_db'])
+TorchCtx = namedtuple('TorchCtx', ['saved_tensors', 'saved_grad_db', 'saved_misc'])
 
 #----------------------
 # TEST 1 : Rasterize
@@ -136,8 +136,6 @@ if JAX_RENDERER:
                                 dummy_ddb))[0]
     end_time = time.time()
 
-    from IPython import embed; embed()
-
     # print results
     print("JAX FWD (sum, min, max):", rast_out.sum().item(), rast_out.min().item(), rast_out.max().item())
     print("JAX FWD grads (sum, min, max):", rast_out_db.sum().item(), rast_out_db.min().item(), rast_out_db.max().item())
@@ -155,7 +153,7 @@ else:
     # evaluate and time.
     start_time = time.time()
     rast_out, rast_out_db  = dr.rasterize(torch_glctx, pos_clip_ja, pos_idx, resolution=resolution)
-    ctx = TorchCtx(saved_tensors=(pos_clip_ja, pos_idx, rast_out), saved_grad_db=True)
+    ctx = TorchCtx(saved_tensors=(pos_clip_ja, pos_idx, rast_out), saved_grad_db=True, saved_misc=None)
     pos_grads = dr._rasterize_func.backward(ctx, dummy_dy, dummy_ddb)[1]   # 7 outputs; all are None except pos input
     end_time = time.time()
 
@@ -175,16 +173,20 @@ if JAX_RENDERER:
     print("\n\n---------------------TESTING JAX INTERPOLATE---------------------\n\n")
     posw_jax = jnp.array(posw.cpu())
 
+    all_attributes = jnp.array([0,1,2,3])
+
     # jit with dummy input
-    jax_renderer.interpolate(jnp.zeros_like(posw_jax), jnp.zeros_like(rast_out), jnp.ones_like(pos_idx_jax))
+    jax_renderer.interpolate(jnp.zeros_like(posw_jax), jnp.zeros_like(rast_out), jnp.ones_like(pos_idx_jax), jnp.ones_like(rast_out_db), all_attributes)
 
     start_time = time.time()
     (gb_pos, dummy), interpolate_vjp = jax.vjp(jax_renderer.interpolate, 
                                                         posw_jax, 
                                                         rast_out, 
-                                                        pos_idx_jax)
-    g_attr, g_rast, _ = interpolate_vjp((dummy_dy, 
-                        dummy))
+                                                        pos_idx_jax, 
+                                                        rast_out_db,
+                                                        all_attributes)
+    g_attr, g_rast, _, _, _ = interpolate_vjp((dummy_dy, 
+                                        dummy))
     end_time = time.time()
 
     # print results
@@ -200,9 +202,9 @@ else:
     print("\n\n---------------------TESTING TORCH INTERPOLATE---------------------\n\n")
 
     start_time = time.time()
-    gb_pos, dummy = dr.interpolate(posw, rast_out, pos_idx)
-    ctx = TorchCtx(saved_tensors=(posw, rast_out, pos_idx), saved_grad_db=None)
-    grads = dr._interpolate_func.backward(ctx, dummy_dy, dummy)   # 6 outputs; all are None except pos input
+    gb_pos, dummy = dr.interpolate(posw, rast_out, pos_idx, rast_db = rast_out_db, diff_attrs = "all")
+    ctx = TorchCtx(saved_tensors=(posw, rast_out, pos_idx, rast_out_db), saved_grad_db=None, saved_misc=(1, []))
+    grads = dr._interpolate_func_da.backward(ctx, dummy_dy, dummy)   # 6 outputs; all are None except pos input
     g_attr, g_rast = grads[0], grads[1]
     end_time = time.time()
 

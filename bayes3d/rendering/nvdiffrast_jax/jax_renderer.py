@@ -58,33 +58,31 @@ class Renderer(object):
         # Interpolation
         #------------------
 
-        @jax.tree_util.Partial(custom_vjp, nondiff_argnums=(3,4))
-        def interpolate(attr, rast, tri, rast_db=None, _diff_attrs="all"):
-            diff_attrs = jax.lax.cond(isinstance(_diff_attrs, jnp.ndarray), lambda:_diff_attrs, lambda:jnp.array([]))   # if None or "all", then diff_attrs = []
+        @jax.tree_util.Partial(custom_vjp)
+        def interpolate(attr, rast, tri, rast_db, diff_attrs):
             num_total_attrs = attr.shape[-1]
-            diff_attrs_all = jax.lax.cond((isinstance(_diff_attrs, str) and _diff_attrs == "all") or (diff_attrs.shape[0] == num_total_attrs), 
+            diff_attrs_all = jax.lax.cond(diff_attrs.shape[0] == num_total_attrs, 
                                         lambda:True, 
                                         lambda:False)   
-            rast_db = jax.lax.cond(rast_db is None, lambda:jnp.array([]), lambda:rast_db)
             return _interpolate_fwd_custom_call(self, attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
 
-        def _interpolate_fwd(attr, rast, tri, rast_db=None, diff_attrs="all"):
-            diff_attrs = jax.lax.cond(isinstance(_diff_attrs, jnp.ndarray), lambda:_diff_attrs, lambda:jnp.array([]))   # if None or "all", then diff_attrs = []
+        def _interpolate_fwd(attr, rast, tri, rast_db, diff_attrs):
+            print("Entering fwd")
             num_total_attrs = attr.shape[-1]
-            diff_attrs_all = jax.lax.cond((isinstance(_diff_attrs, str) and _diff_attrs == "all") or (diff_attrs.shape[0] == num_total_attrs), 
+            diff_attrs_all = jax.lax.cond(diff_attrs.shape[0] == num_total_attrs, 
                                         lambda:True, 
-                                        lambda:False) 
-            rast_db = jax.lax.cond(rast_db is None, lambda:jnp.array([]), lambda:rast_db)
-            out, out_da = _interpolate_fwd_custom_call(self, attr, rast, tri, rast_db, diff_attrs)
-            saved_tensors = (attr, rast, tri, rast_db)
+                                        lambda:False)   
+            out, out_da = _interpolate_fwd_custom_call(self, attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
+            saved_tensors = (attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
 
+            print("COmpleted fwd")
             return (out, out_da), saved_tensors
         
-        def _interpolate_bwd(_rast_db, _, saved_tensors, diffs):
-            attr, rast, tri, rast_db = saved_tensors
+        def _interpolate_bwd(saved_tensors, diffs):
+            attr, rast, tri, rast_db, diff_attrs_all, diff_attrs_list = saved_tensors
             dy, dda = diffs 
-            g_attr, g_rast = _interpolate_bwd_custom_call(self, attr, rast, tri, dy)
-            return g_attr, g_rast, None
+            g_attr, g_rast, g_rast_db = _interpolate_bwd_custom_call(self, attr, rast, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list)
+            return g_attr, g_rast, None, g_rast_db, None
         
         interpolate.defvjp(_interpolate_fwd, _interpolate_bwd)
         self.interpolate = interpolate
@@ -314,8 +312,13 @@ def _build_interpolate_fwd_primitive(r: "Renderer"):
         num_triangles = tri_aval.shape[0]
         num_diff_attrs = diff_attr_aval.shape[0]
 
-        if num_diff_attrs > 0 and rast_db_aval.shape[-1] != num_diff_attrs:
-            raise NotImplementedError(f"To propagate bary gradients through {num_diff_attrs} attributes, supply image-space derivatives: got {rast_db_aval.shape}")
+        print(num_images, num_vertices, num_attributes)
+        print(depth, height, width)
+        print(num_triangles)
+        print(num_diff_attrs)
+
+        if num_diff_attrs > 0 and rast_db_aval.shape[-1] < num_diff_attrs:
+            raise NotImplementedError(f"Attempt to propagate bary gradients through {num_diff_attrs} attributes: got {rast_db_aval.shape}")
 
         out_shp_dtype = mlir.ir.RankedTensorType.get(
             [num_images, height, width, num_attributes],
@@ -338,7 +341,7 @@ def _build_interpolate_fwd_primitive(r: "Renderer"):
             # Output types
             result_types=[out_shp_dtype, out_db_shp_dtype],
             # The inputs:
-            operands=[attr, rast_out, tri],
+            operands=[attr, rast_out, tri, rast_db, diff_attrs],
             backend_config=opaque
         ).results
 
@@ -360,8 +363,8 @@ def _build_interpolate_fwd_primitive(r: "Renderer"):
 #### BACKWARD ####
 
 @functools.partial(jax.jit, static_argnums=(0,))
-def _interpolate_bwd_custom_call(r: "Renderer", attr, rast_out, tri, dy):
-    return _build_interpolate_bwd_primitive(r).bind(attr, rast_out, tri, dy)
+def _interpolate_bwd_custom_call(r: "Renderer", attr, rast_out, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list):
+    return _build_interpolate_bwd_primitive(r).bind(attr, rast_out, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list)
 
 @functools.lru_cache(maxsize=None)
 def _build_interpolate_bwd_primitive(r: "Renderer"):
@@ -369,22 +372,25 @@ def _build_interpolate_bwd_primitive(r: "Renderer"):
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
 
-    def _interpolate_bwd_abstract(attr, rast_out, tri, dy):
+    def _interpolate_bwd_abstract(attr, rast_out, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list):
         if (len(attr.shape) != 3):
             raise ValueError(f"Pass in a [num_images, num_vertices, num_attributes] sized first input")
         num_images, num_vertices, num_attributes = attr.shape
         depth, height, width, rast_channels = rast_out.shape
+        depth_db, height_db, width_db, rast_channels_db = rast_db.shape
 
         dtype = dtypes.canonicalize_dtype(attr.dtype)
 
         g_attr_abstract = ShapedArray((num_images, num_vertices, num_attributes), dtype)
         g_rast_abstract = ShapedArray((depth, height, width, rast_channels), dtype)  
-        return [g_attr_abstract, g_rast_abstract] 
+        g_rast_db_abstract = ShapedArray((depth_db, height_db, width_db, rast_channels_db), dtype)
+        return [g_attr_abstract, g_rast_abstract, g_rast_db_abstract] 
         
     # Provide an MLIR "lowering" of the interpolate primitive.
-    def _interpolate_bwd_lowering(ctx, attr, rast_out, tri, dy):
+    def _interpolate_bwd_lowering(ctx, attr, rast_out, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list):
         # Extract the numpy type of the inputs
-        attr_aval, rast_out_aval, tri_aval, dy_aval = ctx.avals_in
+        attr_aval, rast_out_aval, tri_aval, dy_aval, rast_db_aval, _, _, diff_attr_aval = ctx.avals_in
+
         if attr_aval.ndim != 3:
             raise NotImplementedError(f"Only 3D attribute inputs supported: got {attr_aval.shape}")
         if rast_out_aval.ndim != 4:
@@ -400,7 +406,9 @@ def _build_interpolate_bwd_primitive(r: "Renderer"):
 
         num_images, num_vertices, num_attributes = attr_aval.shape
         depth, height, width, rast_channels = rast_out_aval.shape
+        depth_db, height_db, width_db, rast_channels_db = rast_db_aval.shape
         num_triangles = tri_aval.shape[0]
+        num_diff_attrs = diff_attr_aval.shape[0]
 
         g_attr_shp_dtype = mlir.ir.RankedTensorType.get(
             [num_images, num_vertices, num_attributes],
@@ -408,11 +416,15 @@ def _build_interpolate_bwd_primitive(r: "Renderer"):
         g_rast_shp_dtype = mlir.ir.RankedTensorType.get(
             [depth, height, width, rast_channels],
             mlir.dtype_to_ir_type(np_dtype))
+        g_rast_db_shp_dtype = mlir.ir.RankedTensorType.get(
+            [depth_db, height_db, width_db, rast_channels_db],
+            mlir.dtype_to_ir_type(np_dtype))
 
         opaque = dr._get_plugin(gl=True).build_diff_interpolate_descriptor(
                                                                         [num_images, num_vertices, num_attributes], 
                                                                         [depth, height, width], 
-                                                                        [num_triangles]
+                                                                        [num_triangles], 
+                                                                        num_diff_attrs
                                                                         )
 
         op_name = "jax_interpolate_bwd"
@@ -420,9 +432,9 @@ def _build_interpolate_bwd_primitive(r: "Renderer"):
         return custom_call(
             op_name,
             # Output types
-            result_types=[g_attr_shp_dtype, g_rast_shp_dtype],
+            result_types=[g_attr_shp_dtype, g_rast_shp_dtype, g_rast_db_shp_dtype],
             # The inputs:
-            operands=[attr, rast_out, tri, dy],
+            operands=[attr, rast_out, tri, dy, rast_db, dda, diff_attrs_list],
             backend_config=opaque
         ).results
 

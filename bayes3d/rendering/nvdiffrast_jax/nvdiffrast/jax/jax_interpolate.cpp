@@ -127,10 +127,15 @@ void jax_interpolate_fwd(cudaStream_t stream,
     tri_shape.push_back(d.num_triangles);
 
     int num_diff_attrs = d.num_diff_attributes;
-    std::vector<int> diff_attrs_vec;
-    diff_attrs_vec.resize(num_diff_attrs);
-    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&diff_attrs_vec[0], diff_attrs, num_diff_attrs * sizeof(int), cudaMemcpyDeviceToHost));
     bool diff_attrs_all = (num_diff_attrs == d.num_attributes);
+
+    std::vector<int> diff_attrs_vec;
+
+    if (diff_attrs_all){
+        diff_attrs_vec.resize(0);
+    }else{
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&diff_attrs_vec[0], diff_attrs, num_diff_attrs * sizeof(int), cudaMemcpyDeviceToHost));
+    }
 
     cudaStreamSynchronize(stream);
     _interpolate_fwd_da(stream,
@@ -156,11 +161,13 @@ void _interpolate_grad_da(cudaStream_t stream,
                         const float* attr, const float* rast, const int* tri, const float* dy,
                         const float* rast_db, const float* dda, bool diff_attrs_all, std::vector<int>& diff_attrs_vec,
                         std::vector<int> attr_shape, std::vector<int> rast_shape, std::vector<int> tri_shape, 
-                        float* g_attr, float* g_rast)
+                        float* g_attr, float* g_rast, float* g_rast_db)
 {
     InterpolateKernelParams p = {}; // Initialize all fields to zero.
-    bool enable_da = false;
+    bool enable_da = (diff_attrs_all || !diff_attrs_vec.empty());
     p.instance_mode = 1;  // hardcoded
+
+    NVDR_CHECK(enable_da, "ENABLE DA");
 
     // Depth of attributes.
     int attr_depth = p.instance_mode ? attr_shape[0] : 1;
@@ -174,21 +181,24 @@ void _interpolate_grad_da(cudaStream_t stream,
     p.depth        = rast_shape[0];
 
     // Set attribute pixel differential info if enabled, otherwise leave as zero.
-    p.numDiffAttr = 0;
+    if (enable_da)
+        set_diff_attrs(p, diff_attrs_all, diff_attrs_vec);
+    else
+        p.numDiffAttr = 0;
 
     // Get input pointers.
     p.attr = attr;
     p.rast = rast;
     p.tri = tri;
     p.dy = dy;
-    p.rastDB = NULL;
-    p.dda = NULL;
+    p.rastDB = enable_da ? rast_db : NULL;
+    p.dda = enable_da ? dda : NULL;
     p.attrBC = 0;
 
     // Allocate output tensors.
     p.gradAttr = g_attr;
     p.gradRaster = g_rast;
-    p.gradRasterDB = NULL;  // assuming enable_da = false
+    p.gradRasterDB = enable_da ? g_rast_db : NULL;  // assuming enable_da = false
 
     // Verify that buffers are aligned to allow float2/float4 operations.
     NVDR_CHECK(!((uintptr_t)p.rast         & 15), "rast input tensor not aligned to float4");
@@ -209,21 +219,6 @@ void _interpolate_grad_da(cudaStream_t stream,
     NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
 }
 
-// Version without derivatives.
-void _interpolate_grad(cudaStream_t stream, const float* attr, const float* rast, const int* tri, const float* dy,
-                    std::vector<int> attr_shape, std::vector<int> rast_shape, std::vector<int> tri_shape, 
-                    float* g_attr, float* g_rast)
-{
-
-    std::vector<int> empty_vec;
-    const float* empty_tensor;
-    _interpolate_grad_da(stream, 
-                        attr, rast, tri, dy, 
-                        empty_tensor, empty_tensor, false, empty_vec,
-                        attr_shape, rast_shape, tri_shape,
-                        g_attr, g_rast);
-}
-
 
 void jax_interpolate_bwd(cudaStream_t stream,
                           void **buffers,
@@ -236,9 +231,13 @@ void jax_interpolate_bwd(cudaStream_t stream,
     const float *rast_out = reinterpret_cast<const float *> (buffers[1]);
     const int *tri = reinterpret_cast<const int *> (buffers[2]);
     const float *dy = reinterpret_cast<const float *> (buffers[3]);
+    const float *rast_db = reinterpret_cast<const float *> (buffers[4]);
+    const float *dda = reinterpret_cast<const float *> (buffers[5]);
+    const int *diff_attrs = reinterpret_cast<const int *> (buffers[6]);
 
-    float *g_attr = reinterpret_cast<float *> (buffers[4]);
-    float *g_rast = reinterpret_cast<float *> (buffers[5]);  
+    float *g_attr = reinterpret_cast<float *> (buffers[7]);
+    float *g_rast = reinterpret_cast<float *> (buffers[8]);  
+    float* g_rast_db = reinterpret_cast<float *> (buffers[9]);
     cudaMemset(g_attr, 0, d.num_images*d.num_vertices*d.num_attributes*sizeof(float));
 
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
@@ -256,17 +255,33 @@ void jax_interpolate_bwd(cudaStream_t stream,
     std::vector<int> tri_shape;
     tri_shape.push_back(d.num_triangles);
 
+    int num_diff_attrs = d.num_diff_attributes;
+    bool diff_attrs_all = (num_diff_attrs == d.num_attributes);
+
+    std::vector<int> diff_attrs_vec;
+
+    if (diff_attrs_all){
+        diff_attrs_vec.resize(0);
+    }else{
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&diff_attrs_vec[0], diff_attrs, num_diff_attrs * sizeof(int), cudaMemcpyDeviceToHost));
+    }
+
     cudaStreamSynchronize(stream);
-    _interpolate_grad(stream,
+    _interpolate_grad_da(stream,
                     attr,
                     rast_out, 
                     tri, 
                     dy,
+                    rast_db, //
+                    dda, //
+                    diff_attrs_all, // 
+                    diff_attrs_vec, //
                     attr_shape, 
                     rast_shape, 
                     tri_shape, 
                     g_attr,
-                    g_rast
+                    g_rast, 
+                    g_rast_db //
                     );
     cudaStreamSynchronize(stream);
 }
