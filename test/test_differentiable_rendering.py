@@ -30,9 +30,10 @@ m = b.utils.scale_mesh(m, 1.0/100.0)
 vtx_pos = jnp.array(m.vertices.astype(np.float32))
 pos_idx = jnp.array(m.faces.astype(np.int32))
 print("Mesh has %d triangles and %d vertices." % (pos_idx.shape[0], vtx_pos.shape[0]))
-
+resolution = jnp.array([200,200])
 pos = vtx_pos[None,...]
 pos = jnp.concatenate([pos, jnp.ones((*pos.shape[:-1],1))], axis=-1)
+
 rast_out, rast_out_db = jax_renderer.rasterize(pos, pos_idx, jnp.array([200,200]))
 
 def func(i):
@@ -40,9 +41,26 @@ def func(i):
     return rast_out.mean()
 
 func_jit = jax.jit(func)
-func_jit(0.0)
-
+print(func_jit(0.0))
 grad_func = jax.value_and_grad(func)
 val,grad = grad_func(0.0)
+print(grad)
+
+
+
+# # Test Torch
+# import nvdiffrast.torch as dr   # modified nvdiffrast to expose backward fn call api
+# torch_glctx = dr.RasterizeGLContext()
+# device = torch.device("cuda")
+# def func_torch(i):
+#     rast_out, rast_out_db  = dr.rasterize(torch_glctx, torch.tensor(np.array(pos),device=device) + i, torch.tensor(np.array(pos_idx),device=device), resolution=torch.tensor(np.array(resolution),device=device))
+#     return rast_out.mean()
+# input_vec = torch.tensor([0.0],  device=device, requires_grad=True)
+# loss = func_torch(input_vec)
+# print(loss)
+# loss.backward()
+# print(input_vec.grad)
+
+
 
 
