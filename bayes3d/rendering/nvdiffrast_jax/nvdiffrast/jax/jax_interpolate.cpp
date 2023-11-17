@@ -22,6 +22,24 @@ void InterpolateGradKernel  (const InterpolateKernelParams p);
 void InterpolateGradKernelDa(const InterpolateKernelParams p);
 
 //------------------------------------------------------------------------
+// Helper
+
+static void set_diff_attrs(InterpolateKernelParams& p, bool diff_attrs_all, std::vector<int>& diff_attrs_vec)
+{
+    if (diff_attrs_all)
+    {
+        p.numDiffAttr = p.numAttr;
+        p.diff_attrs_all = 1;
+    }
+    else
+    {
+        NVDR_CHECK(diff_attrs_vec.size() <= IP_MAX_DIFF_ATTRS, "too many entries in diff_attrs list (increase IP_MAX_DIFF_ATTRS)");
+        p.numDiffAttr = diff_attrs_vec.size();
+        memcpy(p.diffAttrs, &diff_attrs_vec[0], diff_attrs_vec.size()*sizeof(int));
+    }
+}
+
+//------------------------------------------------------------------------
 // Forward op.
 
 void _interpolate_fwd_da(cudaStream_t stream, 
@@ -34,10 +52,8 @@ void _interpolate_fwd_da(cudaStream_t stream,
 
 {
     InterpolateKernelParams p = {}; // Initialize all fields to zero.
-    bool enable_da = false;
+    bool enable_da = (diff_attrs_all || !diff_attrs_vec.empty());;
     p.instance_mode = 1;  // assume instanced mode for JAX renderer.
-
-    NVDR_CHECK(enable_da == false, "No support for attribute grads.");
 
     // Extract input dimensions; assume instanced mode.
     p.numVertices  = attr_shape[1];
@@ -47,8 +63,12 @@ void _interpolate_fwd_da(cudaStream_t stream,
     p.width        = rast_shape[2];
     p.depth        = rast_shape[0];
 
+
     // Set attribute pixel differential info if enabled, otherwise leave as zero.
-    p.numDiffAttr = 0;
+    if (enable_da)
+        set_diff_attrs(p, diff_attrs_all, diff_attrs_vec);
+    else
+        p.numDiffAttr = 0;
 
     // Get input/output pointers.
     p.attr = attr;
@@ -75,17 +95,6 @@ void _interpolate_fwd_da(cudaStream_t stream,
     NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
 }
 
-void _interpolate_fwd(cudaStream_t stream, const float* attr, const float* rast, const int* tri, 
-                    std::vector<int> attr_shape, std::vector<int> rast_shape, std::vector<int> tri_shape, 
-                    float* out, float* out_da)
-{
-    std::vector<int> empty_vec;
-    const float* empty_tensor;
-    _interpolate_fwd_da(stream, attr, rast, tri, empty_tensor, false, 
-                        empty_vec, attr_shape, rast_shape, tri_shape, 
-                        out, out_da);
-}
-
 void jax_interpolate_fwd(cudaStream_t stream,
                           void **buffers,
                           const char *opaque, std::size_t opaque_len) {
@@ -96,9 +105,11 @@ void jax_interpolate_fwd(cudaStream_t stream,
     const float *attr = reinterpret_cast<const float *> (buffers[0]);
     const float *rast_out = reinterpret_cast<const float *> (buffers[1]);
     const int *tri = reinterpret_cast<const int *> (buffers[2]);
+    const float *rast_db = reinterpret_cast<const float *> (buffers[3]);
+    const int *diff_attrs = reinterpret_cast<const int *> (buffers[4]);
 
-    float *out = reinterpret_cast<float *> (buffers[3]);
-    float *_out_da_dummy = reinterpret_cast<float *> (buffers[4]);  // because no attribute grad, this output is meaningless
+    float *out = reinterpret_cast<float *> (buffers[5]);
+    float *out_da = reinterpret_cast<float *> (buffers[6]);  
     
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
 
@@ -115,16 +126,25 @@ void jax_interpolate_fwd(cudaStream_t stream,
     std::vector<int> tri_shape;
     tri_shape.push_back(d.num_triangles);
 
+    int num_diff_attrs = d.num_diff_attributes;
+    std::vector<int> diff_attrs_vec;
+    diff_attrs_vec.resize(num_diff_attrs);
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&diff_attrs_vec[0], diff_attrs, num_diff_attrs * sizeof(int), cudaMemcpyDeviceToHost));
+    bool diff_attrs_all = (num_diff_attrs == d.num_attributes);
+
     cudaStreamSynchronize(stream);
-    _interpolate_fwd(stream,
+    _interpolate_fwd_da(stream,
                     attr, 
                     rast_out, 
                     tri, 
+                    rast_db, 
+                    diff_attrs_all,
+                    diff_attrs_vec,
                     attr_shape, 
                     rast_shape, 
                     tri_shape, 
                     out,
-                    _out_da_dummy
+                    out_da
                     );
     cudaStreamSynchronize(stream);
 }

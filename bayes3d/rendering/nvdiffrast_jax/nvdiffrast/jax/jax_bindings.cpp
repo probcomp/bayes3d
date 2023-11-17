@@ -61,7 +61,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("build_diff_interpolate_descriptor",
             [](std::vector<int> attr_shape,
             std::vector<int> rast_shape,
-            std::vector<int> tri_shape) {
+            std::vector<int> tri_shape, 
+            ) {
             DiffInterpolateCustomCallDescriptor d;
             d.num_images = attr_shape[0], 
             d.num_vertices = attr_shape[1],
@@ -73,14 +74,15 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             return PackDescriptor(d);
         });
     m.def("build_diff_rasterize_bwd_descriptor",
-            [](std::vector<int> pos_shape, std::vector<int> tri_shape, std::vector<int> rast_out_shape) {
+            [](std::vector<int> pos_shape, std::vector<int> tri_shape, std::vector<int> rast_shape, int num_diff_attrs) {
             DiffRasterizeBwdCustomCallDescriptor d;
             d.num_images = pos_shape[0];
             d.num_vertices = pos_shape[1];
             d.num_triangles = tri_shape[0];
-            d.rast_height = rast_out_shape[1];
-            d.rast_width = rast_out_shape[2];
-            d.rast_depth = rast_out_shape[0];
+            d.rast_height = rast_shape[1];
+            d.rast_width = rast_shape[2];
+            d.rast_depth = rast_shape[0];
+            d.num_diff_attrs = num_diff_attrs;
             return PackDescriptor(d);
         });
 }

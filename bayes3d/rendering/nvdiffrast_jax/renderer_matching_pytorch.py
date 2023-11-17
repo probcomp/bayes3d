@@ -88,7 +88,7 @@ rot_mtx_44 = torch.tensor([[-0.9513,  0.1699,  0.2573,  0.0000],
                             [-0.1890, -0.9806, -0.0514,  2.5000],
                             [ 0.0000,  0.0000,  0.0000,  1.0000]],).cuda()
 pos = vtx_pos[None,...]
-# posw = torch.cat([pos, torch.ones([pos.shape[0], pos.shape[1], 1]).cuda()], axis=2)  # (xyz) -> (xyz1)
+posw = torch.cat([pos, torch.ones([pos.shape[0], pos.shape[1], 1]).cuda()], axis=2)  # (xyz) -> (xyz1)
 transform_mtx = torch.matmul(proj_cam, rot_mtx_44)  # transform = projection + pose rotation
 pos_clip_ja = xfm_points(pos, transform_mtx[None,...])  # transform points
 
@@ -136,8 +136,11 @@ if JAX_RENDERER:
                                 dummy_ddb))[0]
     end_time = time.time()
 
+    from IPython import embed; embed()
+
     # print results
     print("JAX FWD (sum, min, max):", rast_out.sum().item(), rast_out.min().item(), rast_out.max().item())
+    print("JAX FWD grads (sum, min, max):", rast_out_db.sum().item(), rast_out_db.min().item(), rast_out_db.max().item())
     print("JAX BWD (sum, min, max):", pos_grads.sum().item(), pos_grads.min().item(), pos_grads.max().item())  # TODO this returns nans
     print(f"JAX rasterization (eval + grad): {(end_time - start_time)*1000} ms")
 
@@ -158,6 +161,7 @@ else:
 
     # print results
     print("TORCH FWD (sum, min, max):", rast_out.sum().item(), rast_out.min().item(), rast_out.max().item())
+    print("TORCH FWD grads (sum, min, max):", rast_out_db.sum().item(), rast_out_db.min().item(), rast_out_db.max().item())
     print("TORCH BWD (sum, min, max):", pos_grads.sum().item(), pos_grads.min().item(), pos_grads.max().item())
     print(f"Torch rasterization (eval + grad): {(end_time - start_time)*1000} ms")
 

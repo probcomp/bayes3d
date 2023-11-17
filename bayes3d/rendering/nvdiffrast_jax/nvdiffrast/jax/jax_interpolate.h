@@ -20,6 +20,7 @@ struct DiffInterpolateCustomCallDescriptor {
     int rast_width;  // rast[2]
     int rast_depth;  // rast[0]
     int num_triangles;  // tri[0]
+    int num_diff_attributes;  // diff_attr
 };
 
 #endif // !(defined(NVDR_TORCH) && defined(__CUDACC__))

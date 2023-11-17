@@ -61,13 +61,6 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
     // const at::cuda::OptionalCUDAGuard device_guard(at::device_of(pos));
     RasterizeGLState& s = *stateWrapper.pState;
 
-    // // Check inputs.
-    // NVDR_CHECK_DEVICE(pos, tri);
-    // NVDR_CHECK_F32(pos);
-
-    // // Check that GL context was created for the correct GPU.
-    // NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
-
     // Determine number of outputs
     int num_outputs = s.enableDB ? 2 : 1;
 
