@@ -34,7 +34,6 @@ resolution = jnp.array([200,200])
 pos = vtx_pos[None,...]
 pos = jnp.concatenate([pos, jnp.ones((*pos.shape[:-1],1))], axis=-1)
 
-rast_out, rast_out_db = jax_renderer.rasterize(pos, pos_idx, jnp.array([200,200]))
 
 def func(i):
     rast_out, rast_out_db = jax_renderer.rasterize(pos + i, pos_idx, jnp.array([200,200]))
@@ -45,8 +44,6 @@ print(func_jit(0.0))
 grad_func = jax.value_and_grad(func)
 val,grad = grad_func(0.0)
 print(grad)
-
-
 
 # # Test Torch
 # import nvdiffrast.torch as dr   # modified nvdiffrast to expose backward fn call api
@@ -62,5 +59,29 @@ print(grad)
 # print(input_vec.grad)
 
 
+def func(i):
+    rast_out, rast_out_db = jax_renderer.rasterize(pos + i, pos_idx, jnp.array([200,200]))
+    colors,_ = jax_renderer.interpolate(pos + i, rast_out, pos_idx, rast_out_db, jnp.array([0,1,2,3]))
+    return colors.mean()
+
+func_jit = jax.jit(func)
+print(func_jit(0.0))
+grad_func = jax.value_and_grad(func)
+val,grad = grad_func(0.0)
+print(grad)
+
+# # Test Torch
+# import nvdiffrast.torch as dr   # modified nvdiffrast to expose backward fn call api
+# torch_glctx = dr.RasterizeGLContext()
+# device = torch.device("cuda")
+# def func_torch(i):
+#     rast_out, rast_out_db  = dr.rasterize(torch_glctx, torch.tensor(np.array(pos),device=device) + i, torch.tensor(np.array(pos_idx),device=device), resolution=torch.tensor(np.array(resolution),device=device))
+#     colors,_ = dr.interpolate( torch.tensor(np.array(pos),device=device) + i, rast_out, torch.tensor(np.array(pos_idx),device=device), rast_out_db)
+#     return colors.mean()
+# input_vec = torch.tensor([0.0],  device=device, requires_grad=True)
+# loss = func_torch(input_vec)
+# print(loss)
+# loss.backward()
+# print(input_vec.grad)
 
 
