@@ -86,3 +86,81 @@ def c2f_pose_update_v2(trace_, key, pose_grid, enumerator):
         pose_grid[scores.argmax()]
     )
 c2f_pose_update_v2_jit = jax.jit(c2f_pose_update_v2, static_argnames=("enumerator",))
+
+
+# Every thing below is from a working single particle tracker, which i will comment out for now
+"""
+
+def pose_update_v4(key, trace_, pose_grid, enumerator):
+    
+    weights = enumerator.enumerate_choices_get_scores(trace_, key, pose_grid)
+    sampled_idx = weights.argmax() # jax.random.categorical(key, weights)
+
+    return *enumerator.update_choices_with_weight(
+        trace_, key,
+        pose_grid[sampled_idx]
+    ), pose_grid[sampled_idx]
+
+pose_update_v4_jit = jax.jit(pose_update_v4, static_argnames=("enumerator",))
+
+
+def c2f_pose_update_v4(key, trace_, gridding_schedule_stacked, enumerator, t):
+
+    # reference_vel = jax.lax.cond(jnp.equal(t,1),lambda:trace_.args[1][1],lambda:trace_["velocity"][t-1])
+    reference_vel = trace_["velocity"][t-1]
+    for i in range(gridding_schedule_stacked.shape[0]):
+        updated_grid = jnp.einsum("ij,ajk->aik", reference_vel, gridding_schedule_stacked[i])
+        weight, trace_, reference_vel = pose_update_v4_jit(key, trace_, updated_grid, enumerator)
+        
+    return weight, trace_
+
+c2f_pose_update_v4_vmap_jit = jax.jit(jax.vmap(c2f_pose_update_v4, in_axes=(0,0,None,None,None)),
+                                    static_argnames=("enumerator", "t"))
+
+c2f_pose_update_v4_jit = jax.jit(c2f_pose_update_v4,static_argnames=("enumerator", "t"))
+
+def make_new_keys(key, N_keys):
+    key, other_key = jax.random.split(key)
+    new_keys = jax.random.split(other_key, N_keys)
+    if N_keys > 1:
+        return key, new_keys
+    else:
+        return key, new_keys[0]
+
+
+def initial_choice_map(metadata):
+    return genjax.index_choice_map(
+            jnp.arange(0,metadata["T"]+1),
+            genjax.choice_map(metadata["CHOICE_MAP_ARGS"])
+        )
+
+def update_choice_map(gt, t):
+    return genjax.index_choice_map(
+            [t], genjax.choice_map(
+                {'depth' : jnp.expand_dims(gt[t], axis = 0)}
+            )
+        )
+
+
+def argdiffs_modelv5(trace, t):
+"""
+# Argdiffs specific to modelv5
+"""
+    # print(trace.args)
+    args = trace.get_args()
+    argdiffs = (
+        Diff(args[0], NoChange),
+        jtu.tree_map(lambda v: Diff(v, NoChange), args[1]),
+        *jtu.tree_map(lambda v: Diff(v, NoChange), args[2:]),
+    )
+    return argdiffs
+
+def proposal_choice_map(addresses, args, chm_args):
+    addr = addresses[0] # custom defined
+    return genjax.index_choice_map(
+                    jnp.array([chm_args[0]]),genjax.choice_map({
+                        addr: jnp.expand_dims(args[0], axis = 0)
+            }))
+
+
+"""

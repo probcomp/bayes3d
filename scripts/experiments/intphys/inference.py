@@ -240,6 +240,12 @@ def inference_approach_F2(model, gt, gridding_schedule, init_chm, T, model_args,
 
     # initialize SMC/SIS
     init_log_weight, init_particle = init_fn(init_key, init_chm, (T, init_state, *model_args))
+    _,_, init_particle, _ = model.update(init_key, init_particle, genjax.index_choice_map(
+            [0], genjax.choice_map(
+                {'velocity' : jnp.expand_dims(init_state[-1], axis = 0)}
+            )),
+            argdiffs_modelv5(init_particle, 0))
+
     argdiffs = argdiffs_modelv5(init_particle, 0)
     _, init_log_weight, init_particle, _ = update_fn(
             init_key, init_particle, update_choice_map(gt, 0), argdiffs)
@@ -247,7 +253,7 @@ def inference_approach_F2(model, gt, gridding_schedule, init_chm, T, model_args,
 
     def smc_body(state, t):
         # get new keys
-        print("step")
+        print("jit compiling")
         jprint("t = {}",t)
         key, log_weight, particle = state
         key, update_key = make_new_keys(key, 1)
@@ -279,80 +285,3 @@ def inference_approach_F2(model, gt, gridding_schedule, init_chm, T, model_args,
     print("SCAN finished")
     rendered = particle.get_retval()[0]
     return final_log_weight, particle, rendered
-
-
-"""
-Code for F2 inference
-
-def pose_update_v4(key, trace_, pose_grid, enumerator):
-    
-    scores = enumerator.enumerate_choices_get_scores(trace_, key, pose_grid)
-    return enumerator.update_choices_with_weight(
-        trace_, key,
-        pose_grid[scores.argmax()]
-    )
-pose_update_v4_jit = jax.jit(pose_update_v4, static_argnames=("enumerator",))
-
-def c2f_pose_update_v4(key, trace_, gridding_schedule_stacked, enumerator):
-
-    for i in range(gridding_schedule_stacked.shape[0]):
-        weight, trace_ = pose_update_v4_jit(key, trace_, gridding_schedule_stacked[i], enumerator)
-        
-    return weight, trace_
-
-c2f_pose_update_v4_vmap_jit = jax.jit(jax.vmap(c2f_pose_update_v4, in_axes=(0,0,None,None)),
-                                    static_argnames=("enumerator"))
-
-c2f_pose_update_v4_jit = jax.jit(c2f_pose_update_v4,static_argnames=("enumerator"))
-
-def make_new_keys(key, N_keys):
-    key, other_key = jax.random.split(key)
-    new_keys = jax.random.split(other_key, N_keys)
-    if N_keys > 1:
-        return key, new_keys
-    else:
-        return key, new_keys[0]
-
-
-def initial_choice_map(metadata):
-    return genjax.index_choice_map(
-            jnp.arange(0,metadata["T"]+1), genjax.choice_map(
-                metadata["CHOICE_MAP_ARGS"]
-            )
-        )
-
-def update_choice_map(gt, t):
-    return genjax.index_choice_map(
-            [t], genjax.choice_map(
-                {'depth' : jnp.expand_dims(gt[t], axis = 0)}
-            )
-        )
-
-# def update_choice_map(gt, t):
-#     return genjax.index_choice_map(
-#             jnp.arange(t+1), genjax.choice_map(
-#                 {'depth' : gt[:t+1]}
-#             )
-#         )
-
-# update_choice_map_jit = jax.jit(update_choice_map, static_argnames=("t"))
-
-def argdiffs_modelv5(trace, t):
-
-    # print(trace.args)
-    args = trace.get_args()
-    argdiffs = (
-        Diff(args[0], NoChange),
-        jtu.tree_map(lambda v: Diff(v, NoChange), args[1]),
-        *jtu.tree_map(lambda v: Diff(v, NoChange), args[2:]),
-    )
-    return argdiffs
-
-def proposal_choice_map(addresses, args, chm_args):
-    addr = addresses[0] # custom defined
-    return genjax.index_choice_map(
-                    jnp.array([chm_args[0]]),genjax.choice_map({
-                        addr: jnp.expand_dims(args[0], axis = 0)
-            }))
-
-"""

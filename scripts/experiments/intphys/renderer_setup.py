@@ -57,6 +57,6 @@ def setup_renderer_and_meshes_v3(height, width, focal_length, near,
 
     b.setup_renderer(intrinsics)
 
-    # only add the bunny obj
+    # only add the cube obj
     b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(), "sample_objs/cube.obj")
                                   , scaling_factor=0.1, mesh_name = "cube")

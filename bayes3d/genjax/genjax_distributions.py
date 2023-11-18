@@ -35,6 +35,17 @@ class ImageLikelihood(ExactDensity):
         return b.threedp3_likelihood(
             observed_image, latent_image, variance, outlier_prob,
         )
+    
+@dataclass
+class OldImageLikelihood(ExactDensity):
+    def sample(self, key, img, variance, outlier_prob, outlier_volume, focal_length):
+        return img
+
+    def logpdf(self, image, s, variance, outlier_prob, outlier_volume, focal_length):
+        return b.threedp3_likelihood_old(
+            image, s, variance, outlier_prob,
+            outlier_volume, focal_length, 3
+        )
 
 @dataclass
 class ContactParamsUniform(ExactDensity):
@@ -66,6 +77,7 @@ class UniformDiscrete(ExactDensity):
 
 gaussian_vmf_pose = GaussianVMFPose()
 image_likelihood = ImageLikelihood()
+old_image_likelihood = OldImageLikelihood()
 contact_params_uniform = ContactParamsUniform()
 uniform_discrete = UniformDiscrete()
 uniform_discrete_array = UniformDiscreteArray()

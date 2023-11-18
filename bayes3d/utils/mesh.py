@@ -1,4 +1,6 @@
 import trimesh
+# weird new issue with trimesh in the latest versions
+from trimesh import voxel as trimesh_voxel
 import numpy as np
 import bayes3d.transforms_3d as t3d
 import bayes3d as j
@@ -48,7 +50,7 @@ def make_marching_cubes_mesh_from_point_cloud(
     point_cloud,
     pitch
 ):
-    mesh = trimesh.voxel.ops.points_to_marching_cubes(point_cloud, pitch=pitch)
+    mesh = trimesh_voxel.ops.points_to_marching_cubes(point_cloud, pitch=pitch)
     return mesh
 
 def make_alpha_mesh_from_point_cloud(
