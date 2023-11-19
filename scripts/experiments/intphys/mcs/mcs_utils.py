@@ -143,6 +143,8 @@ BUGS IDENTIFIED:
 
 Object masking goes wrong in gravity scenes with that stupid pole entering the top ---> need to mae sure this is not 
 in the mask
+
+OBJECT MASKING is wrong for frames where object is entering from the top
 """
 
 def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.1):
@@ -154,8 +156,11 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
     init_queue = []
     review_id = 0
     registered_objects = []
+    gt_images_bg = []
+    gt_images_obj = []
     # Rule, for first frame, process any object as object model
     # Afterwards, everything must come from the edges
+
 
     get_distance = lambda x,y : jnp.linalg.norm(x[:3,3]-y[:3,3])
     print("Extracting Meshes")
@@ -168,6 +173,10 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
         # remove all the -1 indices
         obj_ids = jnp.delete(jnp.sort(jnp.unique(obj_ids_fixed_shape)),0) # This will not be jittable
         # print(obj_ids)
+        depth_bg = depths[t] * (1.0 - obj_mask) + intrinsics.far * (obj_mask)
+        depth_obj = depths[t] * (obj_mask) + intrinsics.far * (1.0 - obj_mask)
+        gt_images_bg.append(b.t3d.unproject_depth(depth_bg, intrinsics))
+        gt_images_obj.append(b.t3d.unproject_depth(depth_obj, intrinsics))
 
         for obj_id in obj_ids:
 
@@ -215,6 +224,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                             'id' : review_id,
                             'num_pixels' : num_pixels,
                             't' : t,
+                            ''
                             'distance_to_edge_1' : distance_to_edge_1,
                             'distance_to_edge_2' : distance_to_edge_2,
                             'updating_pose' : pose,
@@ -292,7 +302,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                 
                 init_object_model_metadata['mesh'] = mesh
                 registered_objects.append(init_object_model_metadata)
-                print("Adding new mesh at t = {}",t)
+                print("Adding new mesh for t = {}",init_object_model_metadata['t'])
         # Ensure the every review in the review stack has the same time step as the current review
         del_idxs = []
         for i in list(reversed(range(len(review_stack)))):
@@ -304,25 +314,39 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
             print("REVIEW STACK HAS NOT BEEN FULLY RESOLVED, LOGIC ERROR")
 
     # now extract the data at low resolution
-    gt_images, depths, segs, _, intrinsics = observations_to_data(observations,scale = scale)
-    gt_images_bg = []
-    gt_images_obj = []
     print("Extracting downsampled data")
-    for t in tqdm(range(T)):
-        # print("t = ",t)
-        seg = segs[t]
-        gt_image = gt_images[t]
-        seg_ids = jnp.unique(seg)
-        obj_ids_fixed_shape, obj_mask = get_object_mask(gt_image, seg)
-        # remove all the -1 indices
-        obj_ids = jnp.delete(jnp.sort(jnp.unique(obj_ids_fixed_shape)),0) # This will not be jittable
-        # print(obj_ids)
-        depth_bg = depths[t] * (1.0 - obj_mask) + intrinsics.far * (obj_mask)
-        depth_obj = depths[t] * (obj_mask) + intrinsics.far * (1.0 - obj_mask)
-        gt_images_bg.append(b.t3d.unproject_depth(depth_bg, intrinsics))
-        gt_images_obj.append(b.t3d.unproject_depth(depth_obj, intrinsics))
+    gt_images, _, _, _, intrinsics = observations_to_data(observations,scale = scale)
+    # get new height and width
+    new_h = intrinsics.height
+    new_w = intrinsics.width
+    # resize the depths
+    depths_bg = [jax.image.resize(x[...,2], (new_h, new_w), 'nearest') for x in gt_images_bg]
+    depths_obj = [jax.image.resize(x[...,2], (new_h, new_w), 'nearest') for x in gt_images_obj]
+    # get new point clouds based on new intrisics
+    gt_images_bg = jnp.stack([b.t3d.unproject_depth(x, intrinsics) for x in depths_bg])
+    gt_images_obj = jnp.stack([b.t3d.unproject_depth(x, intrinsics) for x in depths_obj])
 
-    gt_images_bg = jnp.stack(gt_images_bg)
-    gt_images_obj = jnp.stack(gt_images_obj)
 
     return gt_images, gt_images_bg, gt_images_obj, intrinsics, registered_objects
+
+
+def multiview(gt_images, gt_images_bg, gt_images_obj, tr,t):
+    return b.multi_panel([b.scale_image(b.get_depth_image(gt_images_obj[92][...,2]),3),
+               b.scale_image(b.get_depth_image(gt_images_bg[92][...,2]),3),
+               b.scale_image(b.get_depth_image(gt_images[92][...,2]),3),
+               b.scale_image(b.get_depth_image(tr['depth'][92][...,2]),3),
+               b.scale_image(b.get_depth_image(tr.get_retval()[0][92][...,2]),3)
+               ],labels = ['obj', 'bg', 'gt', 'sampled', 'rendered'])
+
+def multiview_video(gt_images, gt_images_bg, gt_images_obj, tr, scale = 3, framerate = 30):
+    T = gt_images.shape[0]
+    images = []
+    for t in range(T):
+        images.append(b.multi_panel([b.scale_image(b.get_depth_image(gt_images_obj[t][...,2]),scale),
+                    b.scale_image(b.get_depth_image(gt_images_bg[t][...,2]),scale),
+                    b.scale_image(b.get_depth_image(gt_images[t][...,2]),scale),
+                    b.scale_image(b.get_depth_image(tr.get_retval()[0][t][...,2]),scale),
+                    b.scale_image(b.get_depth_image(tr.get_retval()[1][t][...,2]),scale)
+                    ],labels = ['obj', 'bg', 'gt/sampled', 'rendered', 'rendered_obj']))
+    return display_video(images, framerate=framerate)
+    
