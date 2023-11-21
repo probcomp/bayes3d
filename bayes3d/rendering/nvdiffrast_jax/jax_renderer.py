@@ -52,6 +52,8 @@ class Renderer(object):
 
         rasterize.defvjp(_rasterize_fwd, _rasterize_bwd)
         self.rasterize = rasterize
+        self._rasterize_fwd = _rasterize_fwd
+        self._rasterize_bwd = _rasterize_bwd
 
         
         #------------------
@@ -67,6 +69,7 @@ class Renderer(object):
             return _interpolate_fwd_custom_call(self, attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
 
         def _interpolate_fwd(attr, rast, tri, rast_db, diff_attrs):
+            print("Entering fwd")
             num_total_attrs = attr.shape[-1]
             diff_attrs_all = jax.lax.cond(diff_attrs.shape[0] == num_total_attrs, 
                                         lambda:True, 
@@ -74,6 +77,7 @@ class Renderer(object):
             out, out_da = _interpolate_fwd_custom_call(self, attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
             saved_tensors = (attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
 
+            print("COmpleted fwd")
             return (out, out_da), saved_tensors
         
         def _interpolate_bwd(saved_tensors, diffs):
@@ -84,34 +88,6 @@ class Renderer(object):
         
         interpolate.defvjp(_interpolate_fwd, _interpolate_bwd)
         self.interpolate = interpolate
-
-    def render(self, vertices, faces, object_pose, intrinsics, projection_matrix):
-        projection_matrix = b.camera._open_gl_projection_matrix(
-            intrinsics.height, intrinsics.width, 
-            intrinsics.fx, intrinsics.fy, 
-            intrinsics.cx, intrinsics.cy, 
-            intrinsics.near, intrinsics.far
-        )
-        final_mtx_proj = projection_matrix @ object_pose
-        posw = jnp.concatenate([vertices, jnp.ones((*vertices.shape[:-1],1))], axis=-1)
-        pos_clip_ja = xfm_points(vertices, final_mtx_proj)
-
-        rast_out, rast_out_db = self.rasterize(pos_clip_ja[None,...], faces, jnp.array([intrinsics.height, intrinsics.width]))
-        gb_pos,_ = self.interpolate(posw[None,...], rast_out, faces, rast_out_db, jnp.array([0,1,2,3]))
-        mask = rast_out[..., -1] > 0
-        shape_keep = gb_pos.shape
-        gb_pos = gb_pos.reshape(shape_keep[0], -1, shape_keep[-1])
-        gb_pos = gb_pos[..., :3]
-        depth = xfm_points(gb_pos, object_pose)
-        depth = depth.reshape(shape_keep)[..., 2] * -1
-        return -depth * mask + intrinsics.far * (1.0 - mask)
-
-
-def xfm_points(points, matrix):
-    points = jnp.concatenate([points, jnp.ones((*points.shape[:-1],1))], axis=-1)
-    return jnp.matmul(points, matrix.T)
-
-
 
 
 
@@ -131,6 +107,7 @@ def _register_custom_calls():
 
 #### FORWARD ####
 
+@functools.partial(jax.jit, static_argnums=(0,))
 def _rasterize_fwd_custom_call(r: "Renderer", pos, tri, resolution):
     return _build_rasterize_fwd_primitive(r).bind(pos, tri, resolution)
 
@@ -209,6 +186,7 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
 
 #### BACKWARD ####
 
+@functools.partial(jax.jit, static_argnums=(0,))
 def _rasterize_bwd_custom_call(r: "Renderer", pos, tri, rast_out, dy, ddb):
     return _build_rasterize_bwd_primitive(r).bind(pos, tri, rast_out, dy, ddb)
 
@@ -224,6 +202,7 @@ def _build_rasterize_bwd_primitive(r: "Renderer"):
         out_shp = pos.shape
         dtype = dtypes.canonicalize_dtype(pos.dtype)
 
+        print("abstract shape, dtype=", pos.shape, dtype)
 
         return [ShapedArray(out_shp, dtype)]
 
@@ -249,6 +228,7 @@ def _build_rasterize_bwd_primitive(r: "Renderer"):
             [num_images, num_vertices, 4],
             mlir.dtype_to_ir_type(np_dtype))  # gradients have same size as the positions
 
+        print("lowering shape, dtype=", out_shp_dtype)
 
         opaque = dr._get_plugin(gl=True).build_diff_rasterize_bwd_descriptor([num_images, num_vertices], 
                                                                             [num_triangles], 
@@ -285,6 +265,7 @@ def _build_rasterize_bwd_primitive(r: "Renderer"):
 
 #### FORWARD ####
 
+@functools.partial(jax.jit, static_argnums=(0,))
 def _interpolate_fwd_custom_call(r: "Renderer", attr, rast_out, tri, rast_db, diff_attrs_all, diff_attrs):
     return _build_interpolate_fwd_primitive(r).bind(attr, rast_out, tri, rast_db, diff_attrs_all, diff_attrs)
 
@@ -333,6 +314,11 @@ def _build_interpolate_fwd_primitive(r: "Renderer"):
         num_triangles = tri_aval.shape[0]
         num_diff_attrs = diff_attr_aval.shape[0]
 
+        print(num_images, num_vertices, num_attributes)
+        print(depth, height, width)
+        print(num_triangles)
+        print(num_diff_attrs)
+
         if num_diff_attrs > 0 and rast_db_aval.shape[-1] < num_diff_attrs:
             raise NotImplementedError(f"Attempt to propagate bary gradients through {num_diff_attrs} attributes: got {rast_db_aval.shape}")
 
@@ -378,6 +364,7 @@ def _build_interpolate_fwd_primitive(r: "Renderer"):
 
 #### BACKWARD ####
 
+@functools.partial(jax.jit, static_argnums=(0,))
 def _interpolate_bwd_custom_call(r: "Renderer", attr, rast_out, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list):
     return _build_interpolate_bwd_primitive(r).bind(attr, rast_out, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list)
 
