@@ -109,8 +109,6 @@ import numpy as np
 import jax
 from jax import jit, vmap
 import jax.numpy as jnp
-
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 5
 from typing import Any, NamedTuple
 
 
@@ -123,7 +121,7 @@ Array2      = Array
 ArrayNx2    = Array
 ArrayNx3    = Array
 
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 7
+# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 6
 def area_of_triangle(a:Array3, b:Array3, c:Array3=jnp.zeros(3)):
 
     v = a-c
@@ -146,7 +144,7 @@ def _compute_area_and_normal(f:FaceIndex, vertices):
 
 compute_area_and_normals = jit(vmap(_compute_area_and_normal, (0,None)))
 
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 8
+# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 7
 def patch_trimesh(mesh:trimesh.base.Trimesh):
     """
     Return a patched copy of a trimesh object, and 
@@ -170,7 +168,7 @@ def texture_uv_basis(face_idx:Array, mesh):
 def uv_to_color(uv:ArrayNx2, mesh):
     return mesh.visual.material.to_color(uv)
 
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 9
+# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 8
 def barycentric_to_mesh(p:Array3, i:FaceIndex, mesh):
     x = jnp.sum(p[:,None]*mesh.vertices[mesh.faces[i]], axis=0)
     return x
@@ -201,28 +199,19 @@ def get_colors_from_mesh(ps:ArrayNx3, fs:FaceIndices, mesh):
     cs  = uv_to_color(uvs, mesh)/255
     return cs
 
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 11
+# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 10
 def uniformly_sample_from_mesh(key, n, mesh, with_color=True):
     """Uniformly sample `n` points and optionally their color on the surface from a mesh."""
-    key, keys = keysplit(key,1,2)
-
-    xs,ps,fs = sample_from_mesh(key, n, mesh)
-
-    # First sample face indices, then sample barycentric coordinates, and
-    # finally compute the positions of the points.
-    # fs = jax.random.categorical(keys[0], jnp.log(areas), shape=(n,))
-    # ps = jax.random.dirichlet(keys[1], jnp.ones(3), (n,)).reshape((n,3,1))
-    # xs = jnp.sum(ps*mesh.vertices[mesh.faces[fs]], axis=1)
+    xs, ps, fs = sample_from_mesh(key, n, mesh)
 
     if with_color:
-        uvs = jnp.sum(ps* texture_uv_basis(fs, mesh), axis=1)
-        cs  = uv_to_color(uvs, mesh)/255
+        cs = get_colors_from_mesh(ps, fs, mesh)
     else:
         cs = jnp.full((n,3), 0.5)
 
     return xs, cs
 
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 12
+# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 11
 def get_cluster_counts(n, labels):
     nums = []
     for label in range(n):
@@ -230,7 +219,7 @@ def get_cluster_counts(n, labels):
         nums.append(np.sum(idx))
     return np.array(nums)
 
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 13
+# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 12
 def get_colors(cs, n, labels):
     colors = []
     nums   = []
@@ -240,7 +229,7 @@ def get_colors(cs, n, labels):
         colors.append(cs[idx])
     return colors, np.array(nums)
 
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 14
+# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 13
 def get_mean_colors(cs, n, labels):
     mean_colors = []
     nums        = []
@@ -254,7 +243,7 @@ def get_mean_colors(cs, n, labels):
     return np.array(mean_colors), np.array(nums)
     
 
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 15
+# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 14
 def ellipsoid_embedding(Cov):
     """Returns A with cov = A@A.T"""
     sigma, U = jnp.linalg.eigh(Cov)
@@ -262,7 +251,7 @@ def ellipsoid_embedding(Cov):
     return U @ D @ jnp.linalg.inv(U)
 
 
-# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 16
+# %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 15
 def pack_transform(x, A, scale=1.0):
     B = scale*A
     return jnp.array([
