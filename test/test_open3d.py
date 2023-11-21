@@ -41,10 +41,35 @@ poses = jnp.array(poses)
 
 
 visualizer = Open3DVisualizer(intrinsics)
+
+visualizer.clear()
 for (pose, path) in zip(poses, mesh_paths):
     visualizer.make_mesh_from_file(path, pose)
+rgbd_textured_reconstruction = visualizer.capture_image(intrinsics, jnp.eye(4))
 
-rgbd = visualizer.capture_image(intrinsics, jnp.eye(4))
-b.get_rgb_image(rgbd.rgb).save("test.png")
+visualizer.clear()
+colors = b.viz.distinct_colors(len(gt_ids))
+for (i,(pose, path)) in enumerate(zip(poses, mesh_paths)):
+    mesh = b.utils.load_mesh(path)
+    visualizer.make_trimesh(mesh, pose, (*tuple(colors[i]), 1.0))
+
+rgbd_color_mesh_reconstruction= visualizer.capture_image(intrinsics, jnp.eye(4))
+
+panel = b.viz.multi_panel(
+    [
+        b.get_rgb_image(rgbd.rgb),
+        b.get_rgb_image(rgbd_textured_reconstruction.rgb),
+        b.get_rgb_image(rgbd_color_mesh_reconstruction.rgb),
+        b.overlay_image(
+            b.get_rgb_image(rgbd.rgb),
+            b.get_rgb_image(rgbd_color_mesh_reconstruction.rgb),
+        )
+    ]
+)
+
+panel.save("test.png")
+
+
+
 
 from IPython import embed; embed()
