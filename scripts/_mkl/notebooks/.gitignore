@@ -4,7 +4,6 @@
 _unstaged/
 unstaged/
 data/
-kubric/
 
 # _files are private, helps keeping the repo clean
 # while prototyping
