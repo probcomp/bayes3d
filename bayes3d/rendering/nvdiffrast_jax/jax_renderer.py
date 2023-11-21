@@ -69,7 +69,6 @@ class Renderer(object):
             return _interpolate_fwd_custom_call(self, attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
 
         def _interpolate_fwd(attr, rast, tri, rast_db, diff_attrs):
-            print("Entering fwd")
             num_total_attrs = attr.shape[-1]
             diff_attrs_all = jax.lax.cond(diff_attrs.shape[0] == num_total_attrs, 
                                         lambda:True, 
@@ -77,7 +76,6 @@ class Renderer(object):
             out, out_da = _interpolate_fwd_custom_call(self, attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
             saved_tensors = (attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
 
-            print("COmpleted fwd")
             return (out, out_da), saved_tensors
         
         def _interpolate_bwd(saved_tensors, diffs):
@@ -202,7 +200,6 @@ def _build_rasterize_bwd_primitive(r: "Renderer"):
         out_shp = pos.shape
         dtype = dtypes.canonicalize_dtype(pos.dtype)
 
-        print("abstract shape, dtype=", pos.shape, dtype)
 
         return [ShapedArray(out_shp, dtype)]
 
@@ -227,8 +224,6 @@ def _build_rasterize_bwd_primitive(r: "Renderer"):
         out_shp_dtype = mlir.ir.RankedTensorType.get(
             [num_images, num_vertices, 4],
             mlir.dtype_to_ir_type(np_dtype))  # gradients have same size as the positions
-
-        print("lowering shape, dtype=", out_shp_dtype)
 
         opaque = dr._get_plugin(gl=True).build_diff_rasterize_bwd_descriptor([num_images, num_vertices], 
                                                                             [num_triangles], 
@@ -313,11 +308,6 @@ def _build_interpolate_fwd_primitive(r: "Renderer"):
         depth, height, width = rast_out_aval.shape[:3]
         num_triangles = tri_aval.shape[0]
         num_diff_attrs = diff_attr_aval.shape[0]
-
-        print(num_images, num_vertices, num_attributes)
-        print(depth, height, width)
-        print(num_triangles)
-        print(num_diff_attrs)
 
         if num_diff_attrs > 0 and rast_db_aval.shape[-1] < num_diff_attrs:
             raise NotImplementedError(f"Attempt to propagate bary gradients through {num_diff_attrs} attributes: got {rast_db_aval.shape}")
