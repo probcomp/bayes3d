@@ -51,6 +51,12 @@ def make_marching_cubes_mesh_from_point_cloud(
     mesh = trimesh.voxel.ops.points_to_marching_cubes(point_cloud, pitch=pitch)
     return mesh
 
+def open3d_mesh_to_trimesh(mesh):
+    return trimesh.Trimesh(
+        vertices=np.asarray(mesh.vertices),
+        faces=np.asarray(mesh.triangles)
+    )
+
 def make_alpha_mesh_from_point_cloud(
     point_cloud,
     alpha

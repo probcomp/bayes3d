@@ -18,7 +18,6 @@ import torch.utils.cpp_extension
 
 _cached_plugin = {}
 def _get_plugin(gl=False):
-    print("New Plugin")
     assert isinstance(gl, bool)
 
     # Return cached plugin if already loaded.
