@@ -138,8 +138,9 @@ if JAX_RENDERER:
 
     # print results
     print("JAX FWD (sum, min, max):", rast_out.sum().item(), rast_out.min().item(), rast_out.max().item())
+    print("JAX FWD (sum for channels):", rast_out[...,0].sum().item(), rast_out[...,1].sum().item(), rast_out[...,2].sum().item(),rast_out[...,3].sum().item(),)
     print("JAX FWD grads (sum, min, max):", rast_out_db.sum().item(), rast_out_db.min().item(), rast_out_db.max().item())
-    print("JAX BWD (sum, min, max):", pos_grads.sum().item(), pos_grads.min().item(), pos_grads.max().item())  # TODO this returns nans
+    print("JAX BWD (sum, min, max):", pos_grads.sum().item(), pos_grads.min().item(), pos_grads.max().item())   
     print(f"JAX rasterization (eval + grad): {(end_time - start_time)*1000} ms")
 
     # save viz
@@ -159,6 +160,7 @@ else:
 
     # print results
     print("TORCH FWD (sum, min, max):", rast_out.sum().item(), rast_out.min().item(), rast_out.max().item())
+    print("TORCH FWD (sum for channels):", rast_out[...,0].sum().item(), rast_out[...,1].sum().item(), rast_out[...,2].sum().item(),rast_out[...,3].sum().item(),)
     print("TORCH FWD grads (sum, min, max):", rast_out_db.sum().item(), rast_out_db.min().item(), rast_out_db.max().item())
     print("TORCH BWD (sum, min, max):", pos_grads.sum().item(), pos_grads.min().item(), pos_grads.max().item())
     print(f"Torch rasterization (eval + grad): {(end_time - start_time)*1000} ms")
@@ -191,6 +193,7 @@ if JAX_RENDERER:
 
     # print results
     print(f"JAX FWD (sum, min, max): {gb_pos.sum().item(), gb_pos.min().item(), gb_pos.max().item()}")
+    print("JAX FWD (sum for channels):", gb_pos[...,0].sum().item(), gb_pos[...,1].sum().item(), gb_pos[...,2].sum().item(),gb_pos[...,3].sum().item(),)
     print(f"JAX BWD (sum, min, max): g_attr={g_attr.sum().item(), g_attr.min().item(), g_attr.max().item()}\ng_rast={g_rast.sum().item(), g_rast.min().item(), g_rast.max().item()}")
     print(f"JAX interpolation: {(end_time - start_time)*1000} ms")
 
@@ -210,6 +213,7 @@ else:
 
     # print results
     print(f"TORCH FWD (sum, min, max): {gb_pos.sum().item(), gb_pos.min().item(), gb_pos.max().item()}")
+    print("TORCH FWD (sum for channels):", gb_pos[...,0].sum().item(), gb_pos[...,1].sum().item(), gb_pos[...,2].sum().item(),gb_pos[...,3].sum().item(),)
     print(f"TORCH BWD (sum, min, max): g_attr={g_attr.sum().item(), g_attr.min().item(), g_attr.max().item()}\ng_rast={g_rast.sum().item(), g_rast.min().item(), g_rast.max().item()}")
     print(f"Torch interpolation: {(end_time - start_time)*1000} ms")
 
