@@ -68,7 +68,7 @@ def masker_f(point_cloud_image, segmentation, object_mask, object_ids, id, iter)
     # Use the mask to select elements, keeping the original shape
     masked_point_cloud_segment = jnp.where(mask[..., None], point_cloud_image, jnp.nan)
 
-    bbox_dims, pose = custom_aabb(masked_point_cloud_segment)
+    bbox_dims = custom_aabb(masked_point_cloud_segment)
     is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
         (bbox_dims[0] < 0.1),
         (bbox_dims[1] < 0.1)),
@@ -83,7 +83,7 @@ def custom_aabb(object_points):
     mins = jnp.nanmin(object_points, axis = (0,1))
     dims = (maxs - mins)
     center = (maxs + mins) / 2
-    return dims, t3d.transform_from_pos(center)
+    return dims
 
 @jax.jit
 def get_object_mask(point_cloud_image, segmentation):
@@ -104,7 +104,7 @@ def get_object_mask(point_cloud_image, segmentation):
 
 WALL_Z = 14.
 CAM_POSE = np.array([[ 1,0,0,0],
-[0,0,-1,-4.5],
+[0,0,-1,-4.5], # 4.5 is an arbitrary value
 [ 0,1,0,1.5],
 [ 0,0,0,1]])
 World2Cam = np.linalg.inv(CAM_POSE)
@@ -191,8 +191,9 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
             if t == 0:
                 init_object_model = True
                 init_object_model_metadata = {
-                    't' : t,
-                    'pose' : pose
+                    't_init' : t,
+                    'pose' : pose,
+                    't_fully_in_scene' : t
                 }
             else:
                 init_object_model = False
@@ -223,8 +224,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                         {
                             'id' : review_id,
                             'num_pixels' : num_pixels,
-                            't' : t,
-                            ''
+                            't_init' : t,
                             'distance_to_edge_1' : distance_to_edge_1,
                             'distance_to_edge_2' : distance_to_edge_2,
                             'updating_pose' : pose,
@@ -233,7 +233,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                     )
             if len(review_stack) > 0:
                 # find which object under review is the closest
-                distances_rs = [get_distance(pose,r['updating_pose']) for r in review_stack if r['t'] == t - 1]
+                distances_rs = [get_distance(pose,r['updating_pose']) for r in review_stack if r['t_init'] == t - 1]
 
                 if len(distances_rs) > 0:
                     min_dist = np.min(distances_rs)
@@ -265,8 +265,9 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                         # print("Obj init")
                         init_object_model = True
                         init_object_model_metadata = {
-                            't' : init_queue[init_queue_idx]['t'],
-                            'pose' : init_queue[init_queue_idx]['init_pose']  # TODO A MORE ACCURATE ESTIMATION OF INIT POSE
+                            't_init' : init_queue[init_queue_idx]['t_init'],
+                            'pose' : init_queue[init_queue_idx]['init_pose'],  # TODO A MORE ACCURATE ESTIMATION OF INIT POSE
+                            't_full' : t
                         }
                         del init_queue[init_queue_idx]
                     else:
@@ -302,15 +303,15 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                 
                 init_object_model_metadata['mesh'] = mesh
                 registered_objects.append(init_object_model_metadata)
-                print("Adding new mesh for t = {}",init_object_model_metadata['t'])
+                print("Adding new mesh for t = {}",init_object_model_metadata['t_init'])
         # Ensure the every review in the review stack has the same time step as the current review
         del_idxs = []
         for i in list(reversed(range(len(review_stack)))):
-            if review_stack[i]['t'] < t:
+            if review_stack[i]['t_init'] < t:
                 print("Review Stack not resolved, object may have left view, deleting review")
                 del review_stack[i]
 
-        if len(review_stack) > 0 and (not np.all([r['t'] == t for r in review_stack])):
+        if len(review_stack) > 0 and (not np.all([r['t_init'] == t for r in review_stack])):
             print("REVIEW STACK HAS NOT BEEN FULLY RESOLVED, LOGIC ERROR")
 
     # now extract the data at low resolution
@@ -331,12 +332,12 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
 
 
 def multiview(gt_images, gt_images_bg, gt_images_obj, tr,t):
-    return b.multi_panel([b.scale_image(b.get_depth_image(gt_images_obj[92][...,2]),3),
-               b.scale_image(b.get_depth_image(gt_images_bg[92][...,2]),3),
-               b.scale_image(b.get_depth_image(gt_images[92][...,2]),3),
-               b.scale_image(b.get_depth_image(tr['depth'][92][...,2]),3),
-               b.scale_image(b.get_depth_image(tr.get_retval()[0][92][...,2]),3)
-               ],labels = ['obj', 'bg', 'gt', 'sampled', 'rendered'])
+    return b.multi_panel([b.scale_image(b.get_depth_image(gt_images_obj[t][...,2]),4),
+                b.scale_image(b.get_depth_image(gt_images_bg[t][...,2]),4),
+                b.scale_image(b.get_depth_image(gt_images[t][...,2]),4),
+                b.scale_image(b.get_depth_image(tr.get_retval()[0][t][...,2]),4),
+                b.scale_image(b.get_depth_image(tr.get_retval()[1][t][...,2]),4)
+                ],labels = ['obj', 'bg', 'gt/sampled', 'rendered', 'rendered_obj'])
 
 def multiview_video(gt_images, gt_images_bg, gt_images_obj, tr, scale = 3, framerate = 30):
     T = gt_images.shape[0]
@@ -350,3 +351,73 @@ def multiview_video(gt_images, gt_images_bg, gt_images_obj, tr, scale = 3, frame
                     ],labels = ['obj', 'bg', 'gt/sampled', 'rendered', 'rendered_obj']))
     return display_video(images, framerate=framerate)
     
+
+def separating_axis_test(axis, box1, box2):
+    """
+    Projects both boxes onto the given axis and checks for overlap.
+    """
+    min1, max1 = project_box(axis, box1)
+    min2, max2 = project_box(axis, box2)
+
+    return jax.lax.cond(jnp.logical_or(max1 < min2, max2 < min1), lambda: False, lambda: True)
+
+    # if max1 < min2 or max2 < min1:
+    #     return False
+    # return True
+
+def project_box(axis, box):
+    """
+    Projects a box onto an axis and returns the min and max projection values.
+    """
+    corners = get_transformed_box_corners(box)
+    projections = jnp.array([jnp.dot(corner, axis) for corner in corners])
+    return jnp.min(projections), jnp.max(projections)
+
+def get_transformed_box_corners(box):
+    """
+    Returns the 8 corners of the box based on its dimensions and pose.
+    """
+    dim, pose = box
+    corners = []
+    for dx in [-dim[0]/2, dim[0]/2]:
+        for dy in [-dim[1]/2, dim[1]/2]:
+            for dz in [-dim[2]/2, dim[2]/2]:
+                corner = jnp.array([dx, dy, dz, 1])
+                transformed_corner = pose @ corner
+                corners.append(transformed_corner[:3])
+    return corners
+
+def are_bboxes_intersecting(dim1, dim2, pose1, pose2):
+    """
+    Checks if two oriented bounding boxes (OBBs), which are AABBs with poses, are intersecting using the Separating 
+    Axis Theorem (SAT).
+
+    Args:
+        dim1 (jnp.ndarray): Bounding box dimensions of first object. Shape (3,)
+        dim2 (jnp.ndarray): Bounding box dimensions of second object. Shape (3,)
+        pose1 (jnp.ndarray): Pose of first object. Shape (4,4)
+        pose2 (jnp.ndarray): Pose of second object. Shape (4,4)
+    Output:
+        Bool: Returns true if bboxes intersect
+    """
+    box1 = (dim1, pose1)
+    box2 = (dim2, pose2)
+
+    # Axes to test - the face normals of each box
+    axes_to_test = []
+    for i in range(3):  # Add the face normals of box1
+        axes_to_test.append(pose1[:3, i])
+    for i in range(3):  # Add the face normals of box2
+        axes_to_test.append(pose2[:3, i])
+
+    # Perform SAT on each axis
+    count_ = 0
+    for axis in axes_to_test:
+        count_+= jax.lax.cond(separating_axis_test(axis, box1, box2), lambda:0,lambda:-1)
+
+    return jax.lax.cond(count_ < 0, lambda:False,lambda:True)
+
+are_bboxes_intersecting_jit = jax.jit(are_bboxes_intersecting)
+# For one reference pose (object 1) and many possible poses for the second object
+are_bboxes_intersecting_many = jax.vmap(are_bboxes_intersecting, in_axes = (None, None, None, 0))
+are_bboxes_intersecting_many_jit = jax.jit(are_bboxes_intersecting_many)
