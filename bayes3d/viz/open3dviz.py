@@ -87,6 +87,32 @@ class Open3DVisualizer(object):
         self.render.scene.add_geometry(f"{self.counter}", pcd, mtl)
         self.counter+=1
         return pcd
+        
+    def make_particles(self, cloud, color=None, radius=0.01, update=True):
+        if color is None:
+            color = j.BLUE
+
+        if color.shape[0] != cloud.shape[0]:
+            colors = np.tile(color, (cloud.shape[0], 1))
+        else:
+            colors = color
+
+        # Create a group to hold all the spheres
+        sphere_group = o3d.geometry.TriangleMesh()
+
+        for i, point in enumerate(cloud):
+            # Create a small sphere for each point
+            sphere = o3d.geometry.TriangleMesh.create_sphere(radius=radius)
+            sphere.translate(point)
+            sphere.paint_uniform_color(colors[i])
+            sphere_group += sphere
+
+        mtl = o3d.visualization.rendering.MaterialRecord()  # or MaterialRecord(), for later versions of Open3D
+        mtl.shader = "defaultUnlit"
+
+        self.render.scene.add_geometry(f"{self.counter}", sphere_group, mtl)
+        self.counter += 1
+        return sphere_group
 
     def make_mesh_from_file(self, filename, pose, scaling_factor=1.0):
         mesh = o3d.io.read_triangle_model(filename)

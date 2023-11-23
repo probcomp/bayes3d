@@ -316,19 +316,19 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
 
     # now extract the data at low resolution
     print("Extracting downsampled data")
-    gt_images, _, _, _, intrinsics = observations_to_data(observations,scale = scale)
+    gt_images_downsampled, _, _, _, intrinsics_downsampled = observations_to_data(observations,scale = scale)
     # get new height and width
-    new_h = intrinsics.height
-    new_w = intrinsics.width
+    new_h = intrinsics_downsampled.height
+    new_w = intrinsics_downsampled.width
     # resize the depths
     depths_bg = [jax.image.resize(x[...,2], (new_h, new_w), 'nearest') for x in gt_images_bg]
     depths_obj = [jax.image.resize(x[...,2], (new_h, new_w), 'nearest') for x in gt_images_obj]
     # get new point clouds based on new intrisics
-    gt_images_bg = jnp.stack([b.t3d.unproject_depth(x, intrinsics) for x in depths_bg])
-    gt_images_obj = jnp.stack([b.t3d.unproject_depth(x, intrinsics) for x in depths_obj])
+    gt_images_bg_downsampled = jnp.stack([b.t3d.unproject_depth(x, intrinsics_downsampled) for x in depths_bg])
+    gt_images_obj_downsampled = jnp.stack([b.t3d.unproject_depth(x, intrinsics_downsampled) for x in depths_obj])
 
 
-    return gt_images, gt_images_bg, gt_images_obj, intrinsics, registered_objects
+    return (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects
 
 
 def multiview(gt_images, gt_images_bg, gt_images_obj, tr,t):
