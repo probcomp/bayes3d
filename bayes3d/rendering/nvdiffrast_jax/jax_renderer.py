@@ -87,9 +87,33 @@ class Renderer(object):
 
 
 
+    def render(self, vertices, faces, object_pose, intrinsics):
+        jax_renderer = self
+        projection_matrix = b.camera._open_gl_projection_matrix(
+            intrinsics.height, intrinsics.width, 
+            intrinsics.fx, intrinsics.fy, 
+            intrinsics.cx, intrinsics.cy, 
+            intrinsics.near, intrinsics.far
+        )
+        final_mtx_proj = projection_matrix @ object_pose
+        posw = jnp.concatenate([vertices, jnp.ones((*vertices.shape[:-1],1))], axis=-1)
+        pos_clip_ja = xfm_points(vertices, final_mtx_proj)
+        rast_out, rast_out_db = jax_renderer.rasterize(pos_clip_ja[None,...], faces, jnp.array([intrinsics.height, intrinsics.width]))
+        gb_pos,_ = jax_renderer.interpolate(posw[None,...], rast_out, faces, rast_out_db, jnp.array([0,1,2,3]))
+        mask = rast_out[..., -1] > 0
+        shape_keep = gb_pos.shape
+        gb_pos = gb_pos.reshape(shape_keep[0], -1, shape_keep[-1])
+        gb_pos = gb_pos[..., :3]
+        depth = xfm_points(gb_pos, object_pose)
+        depth = depth.reshape(shape_keep)[..., 2] * -1
+        return depth * mask, mask
+
 # ================================================================================================
 # Register custom call targets helpers
 # ================================================================================================
+def xfm_points(points, matrix):
+    points2 = jnp.concatenate([points, jnp.ones((*points.shape[:-1],1))], axis=-1)
+    return jnp.matmul(points2, matrix.T)
 
 # XLA array layout in memory
 def default_layouts(*shapes):
