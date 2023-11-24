@@ -11,6 +11,10 @@ from PIL import Image
 import bayes3d.transforms_3d as t3d
 from jax.debug import print as jprint
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+from bayes3d.viz import open3dviz as o3dviz
+import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
 
 
 class MCS_Observation:
@@ -421,3 +425,58 @@ are_bboxes_intersecting_jit = jax.jit(are_bboxes_intersecting)
 # For one reference pose (object 1) and many possible poses for the second object
 are_bboxes_intersecting_many = jax.vmap(are_bboxes_intersecting, in_axes = (None, None, None, 0))
 are_bboxes_intersecting_many_jit = jax.jit(are_bboxes_intersecting_many)
+
+
+def get_particle_images(intrinsics_orig, inferred_poses, T, cam_pose = CAM_POSE_CV2, radius = 0.1):
+    viz = o3dviz.Open3DVisualizer(intrinsics_orig)
+    viz_poses = jnp.reshape(inferred_poses, (inferred_poses.shape[0], 
+                inferred_poses.shape[1]*inferred_poses.shape[2],
+                inferred_poses.shape[3], inferred_poses.shape[4]))
+    viz_poses_world = jnp.einsum("ij,abjk->abik",cam_pose, viz_poses)
+    particle_images = []
+    for t in tqdm(range(T)):
+        pcd = viz.make_particles(viz_poses_world[t,:,:3,3], radius = radius)
+        particle_arr = viz.capture_image(intrinsics_orig,cam_pose).rgb
+        particle_img = Image.fromarray(np.array(particle_arr).astype(np.uint8)[...,:3])
+        particle_images.append(particle_img)
+        viz.clear()
+    del viz
+    return particle_images
+
+def plot_vector(ax, origin, direction, color):
+    """Plot a vector from 'origin' in the 'direction' with a specific 'color'."""
+    ax.quiver(*origin, *direction, color=color, arrow_length_ratio=0.1)
+
+def visualize_rotation_matrices(rot_matrices):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Creating a sphere
+    u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
+    x = np.cos(u) * np.sin(v)
+    y = np.sin(u) * np.sin(v)
+    z = np.cos(v)
+    ax.plot_wireframe(x, y, z, color="k", alpha=0.1)
+
+    # Choose a unit vector (e.g., along the z-axis)
+    val = 1/(3)**(0.5)
+    unit_vector = np.array([val, -val, val])
+
+    # Color for the vector
+    color = "r"  # Red
+    plot_vector(ax, [0, 0, 0], unit_vector, "b")
+    # For each rotation matrix
+    for R in rot_matrices:
+        # Transform the unit vector by the rotation matrix
+        transformed_vector = R @ unit_vector
+        plot_vector(ax, [0, 0, 0], transformed_vector, color)
+
+    # Setting the limits and labels
+    ax.set_xlim([-1, 1])
+    ax.set_ylim([-1, 1])
+    ax.set_zlim([-1, 1])
+    ax.set_xlabel('X axis')
+    ax.set_ylabel('Y axis')
+    ax.set_zlabel('Z axis')
+
+    plt.show()
