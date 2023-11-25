@@ -106,7 +106,7 @@ class Renderer(object):
         gb_pos = gb_pos[..., :3]
         depth = xfm_points(gb_pos, object_pose)
         depth = depth.reshape(shape_keep)[..., 2] * -1
-        return depth * mask, mask
+        return - (depth * mask), mask
 
 # ================================================================================================
 # Register custom call targets helpers
