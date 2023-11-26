@@ -4,7 +4,7 @@
 __all__ = ['normal_cdf', 'normal_pdf', 'normal_logpdf', 'inv', 'key', 'Array', 'Shape', 'FaceIndex', 'FaceIndices', 'ArrayN',
            'Array3', 'Array2', 'ArrayNx2', 'ArrayNx3', 'Matrix', 'PrecisionMatrix', 'CovarianceMatrix', 'SquareMatrix',
            'Vector', 'Direction', 'BaseVector', 'cast_rays', 'bilinear', 'log_gaussian', 'gaussian',
-           'ellipsoid_embedding', 'fuzzy_intersection']
+           'fuzzy_intersection']
 
 # %% ../../scripts/_mkl/notebooks/06a - Gaussian Renderer.ipynb 3
 import bayes3d as b3d
@@ -68,13 +68,6 @@ def gaussian(x, mu, omega:PrecisionMatrix):
 inv = jnp.linalg.inv
 
 # %% ../../scripts/_mkl/notebooks/06a - Gaussian Renderer.ipynb 8
-def ellipsoid_embedding(cov:CovarianceMatrix):
-    """Returns A with cov = A@A.T"""
-    sigma, U = jnp.linalg.eigh(cov)
-    D = jnp.diag(jnp.sqrt(sigma))
-    return U @ D @ jnp.linalg.inv(U)
-
-# %% ../../scripts/_mkl/notebooks/06a - Gaussian Renderer.ipynb 12
 def fuzzy_intersection(mu:Vector, omega:PrecisionMatrix, x:Vector, v:Direction):
     """
     Returns the "intersection" of a ray with a gaussian which we define as
@@ -83,7 +76,7 @@ def fuzzy_intersection(mu:Vector, omega:PrecisionMatrix, x:Vector, v:Direction):
     t = bilinear(mu - x, v, omega)/bilinear(v, v, omega)
     return t
 
-# %% ../../scripts/_mkl/notebooks/06a - Gaussian Renderer.ipynb 13
+# %% ../../scripts/_mkl/notebooks/06a - Gaussian Renderer.ipynb 9
 def _cast_ray(v, mus, precisions, colors, weights, zmax=2., bg_color=jnp.array([1.,1.,1.,1.0])):
     # TODO: Deal with negative intersections behind the camera
     # TODO: Maybe switch to log probs?
