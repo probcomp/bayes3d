@@ -70,6 +70,20 @@ grad_func = jax.value_and_grad(func)
 val,grad = grad_func(0.0)
 print(grad)
 
+
+# Test vmap
+
+pose = jnp.eye(4)
+multiple_poses = jnp.array([pose, pose, pose])
+render_vmap = jax.vmap(jax.jit(jax_renderer.render), in_axes=(None, None, 0, None))
+# render_out = jax_renderer.render(vtx_pos, pos_idx, pose, intrinsics)
+render_vmap_out = render_vmap(vtx_pos, pos_idx, multiple_poses, intrinsics)
+
+# rasterize_vmap = jax.vmap(jax_renderer.rasterize, in_axes=(0, None, None))
+# rasterize_vmap(pos, pos_idx, jnp.array([200,200]))
+
+from IPython import embed; embed()
+
 # # Test Torch
 # import nvdiffrast.torch as dr   # modified nvdiffrast to expose backward fn call api
 # torch_glctx = dr.RasterizeGLContext()

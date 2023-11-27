@@ -85,8 +85,6 @@ class Renderer(object):
         
     _interpolate.defvjp(_interpolate_fwd, _interpolate_bwd)
 
-
-
     def render(self, vertices, faces, object_pose, intrinsics):
         jax_renderer = self
         projection_matrix = b.camera._open_gl_projection_matrix(
@@ -98,8 +96,16 @@ class Renderer(object):
         final_mtx_proj = projection_matrix @ object_pose
         posw = jnp.concatenate([vertices, jnp.ones((*vertices.shape[:-1],1))], axis=-1)
         pos_clip_ja = xfm_points(vertices, final_mtx_proj)
-        rast_out, rast_out_db = jax_renderer.rasterize(pos_clip_ja[None,...], faces, jnp.array([intrinsics.height, intrinsics.width]))
+        num_vertices = pos_clip_ja.shape[-2]
+        rast_out, rast_out_db = jax_renderer.rasterize(pos_clip_ja[None,...], faces, jnp.array([intrinsics.height, intrinsics.width]))         
+        
+        print(f"rast_out {rast_out.shape}")
+        
         gb_pos,_ = jax_renderer.interpolate(posw[None,...], rast_out, faces, rast_out_db, jnp.array([0,1,2,3]))
+
+        print(f"gb_pos {gb_pos.shape}")
+
+
         mask = rast_out[..., -1] > 0
         shape_keep = gb_pos.shape
         gb_pos = gb_pos.reshape(shape_keep[0], -1, shape_keep[-1])
@@ -155,25 +161,24 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
     def _rasterize_fwd_lowering(ctx, pos, tri, resolution):
         """
         Single-object (one obj represented by tri) rasterization with 
-        multiple poses (first dimension fo pos)
         dr.rasterize(glctx, pos, tri, resolution=resolution)
         """
         # Extract the numpy type of the inputs
-        poses_aval, tri_aval, resolution_aval = ctx.avals_in
-        if poses_aval.ndim != 3:
-            raise NotImplementedError(f"Only 3D vtx position inputs supported: got {poses_aval.shape}")
+        pos_aval, tri_aval, resolution_aval = ctx.avals_in
+        if pos_aval.ndim != 3:
+            raise NotImplementedError(f"Only 3D vtx position inputs supported: got {pos_aval.shape}")
         if tri_aval.ndim != 2:
             raise NotImplementedError(f"Only 2D triangle inputs supported: got {tri_aval.shape}")
         if resolution_aval.shape[0] != 2:
             raise NotImplementedError(f"Only 2D resolutions supported: got {resolution_aval.shape}")
 
-        np_dtype = np.dtype(poses_aval.dtype)
+        np_dtype = np.dtype(pos_aval.dtype)
         if np_dtype != np.float32:
             raise NotImplementedError(f"Unsupported vtx positions dtype {np_dtype}")
         if np.dtype(tri_aval.dtype) != np.int32:
             raise NotImplementedError(f"Unsupported triangles dtype {tri_aval.dtype}")
 
-        num_images, num_vertices = poses_aval.shape[:2]
+        num_images, num_vertices = pos_aval.shape[:2]
         num_triangles = tri_aval.shape[0]
         out_shp_dtype = mlir.ir.RankedTensorType.get(
             [num_images, r.intrinsics.height, r.intrinsics.width, 4],
@@ -191,9 +196,35 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
             # The inputs:
             operands=[pos, tri, resolution],
             backend_config=opaque,
-            operand_layouts=default_layouts(poses_aval.shape, tri_aval.shape, resolution_aval.shape),
+            operand_layouts=default_layouts(pos_aval.shape, tri_aval.shape, resolution_aval.shape),
             result_layouts=default_layouts((num_images, r.intrinsics.height, r.intrinsics.width, 4,), (num_images, r.intrinsics.height, r.intrinsics.width, 4,)),
         ).results
+
+    
+    # ************************************
+    # *  SUPPORT FOR BATCHING WITH VMAP  *
+    # ************************************
+    def _rasterize_fwd_batch(args, axes):
+        pos, tri, resolution = args
+
+        if pos.ndim == 4:  # called from r.render
+            n_batch = pos.shape[0]
+            _ = pos.shape[1]   # dummy dimension from the [None, ...] in `render`
+            n_vtx = pos.shape[2]
+            pos = pos.reshape(n_batch, n_vtx, 4) 
+            out, out_db = _rasterize_fwd_custom_call(r, pos, tri, resolution)
+
+            out_axes = None, None
+        elif pos.ndim == 3:   # called directly from r.rasterize
+            n_batch = pos.shape[0]
+            n_vtx = pos.shape[1]
+            pos = pos.reshape(n_batch, n_vtx, 4) 
+            out, out_db = _rasterize_fwd_custom_call(r, pos, tri, resolution)
+            out_axes = None, None
+        else:
+            raise NotImplementedError(f"Only 3D vtx position inputs supported for underlying vmap: got {pos_aval.shape}")  
+
+        return (out, out_db), out_axes
 
     # *********************************************
     # *  REGISTER THE OP WITH JAX  *
@@ -205,6 +236,7 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
 
     # # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_rasterize_prim, _rasterize_fwd_lowering, platform="gpu")
+    batching.primitive_batchers[_rasterize_prim] = _rasterize_fwd_batch
 
     return _rasterize_prim
 
@@ -269,6 +301,35 @@ def _build_rasterize_bwd_primitive(r: "Renderer"):
             result_layouts=default_layouts((num_images, num_vertices, 4,)),
         ).results
 
+    # ************************************
+    # *  SUPPORT FOR BATCHING WITH VMAP  *
+    # ************************************
+    def _rasterize_bwd_batch(args, axes):
+        pos, tri, rast, dy, ddb = args
+
+        if pos.ndim == 4:  # called from r.render
+            n_batch = pos.shape[0]
+            _ = pos.shape[1]   # dummy dimension from the [None, ...] in `render`
+            n_vtx = pos.shape[2]
+            pos = pos.reshape(n_batch, n_vtx, 4) 
+            out = _rasterize_fwd_custom_call(r, pos, tri, dy, ddb)
+
+            out = out.reshape(n_batch, *out.shape[1:])
+            out_axes = None
+        elif pos.ndim == 3:   # called directly from r.rasterize
+            n_batch = pos.shape[0]
+            n_vtx = pos.shape[1]
+            pos = pos.reshape(n_batch, n_vtx, 4) 
+            out, out_db = _rasterize_fwd_custom_call(r, pos, tri, dy, ddb)
+
+            out = out.reshape(n_batch, *out.shape[1:])
+            out_db = out_db.reshape(out.shape)
+            out_axes = None
+        else:
+            raise NotImplementedError(f"Only 3D vtx position inputs supported for underlying vmap: got {pos_aval.shape}")  
+
+        return (out, ), out_axes
+
     # *********************************************
     # *  REGISTER THE OP WITH JAX  *
     # *********************************************
@@ -279,6 +340,7 @@ def _build_rasterize_bwd_primitive(r: "Renderer"):
 
     # # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_rasterize_prim, _rasterize_bwd_lowering, platform="gpu")
+    batching.primitive_batchers[_rasterize_prim] = _rasterize_bwd_batch
 
     return _rasterize_prim
 
@@ -368,6 +430,23 @@ def _build_interpolate_fwd_primitive(r: "Renderer"):
             result_layouts=default_layouts((num_images, height, width, num_attributes,), (num_images, height, width, num_attributes,)),
         ).results
 
+    # ************************************
+    # *  SUPPORT FOR BATCHING WITH VMAP  *
+    # ************************************
+    def _interpolate_fwd_batch(args, axes):
+        attr, rast_out, tri, rast_db, diff_attrs_all, diff_attr = args
+
+        if attr.ndim != 3:
+            raise NotImplementedError(f"Only 3D attribution inputs supported for underlying vmap: got {attr.shape}")  
+
+        # prepare attributes for vmapped shape 
+        n_batch = rast_out.shape[0]
+        attr = jnp.concatenate([attr for _ in range(n_batch)], axis=0)
+        out, out_db = _interpolate_fwd_custom_call(r, attr, rast_out, tri, rast_db, diff_attrs_all, diff_attr)
+
+        out_axes = None, None
+        return (out, out_db), out_axes
+
     # *********************************************
     # *  REGISTER THE OP WITH JAX  *
     # *********************************************
@@ -378,6 +457,7 @@ def _build_interpolate_fwd_primitive(r: "Renderer"):
 
     # # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_interpolate_prim, _interpolate_fwd_lowering, platform="gpu")
+    batching.primitive_batchers[_interpolate_prim] = _interpolate_fwd_batch
 
     return _interpolate_prim
 
@@ -463,6 +543,23 @@ def _build_interpolate_bwd_primitive(r: "Renderer"):
             result_layouts=default_layouts((num_images, num_vertices, num_attributes,), (depth, height, width, rast_channels,), (depth_db, height_db, width_db, rast_channels_db,)),
         ).results
 
+    # ************************************
+    # *  SUPPORT FOR BATCHING WITH VMAP  *
+    # ************************************
+    def _interpolate_bwd_batch(args, axes):
+        attr, rast_out, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list = args
+
+        if attr.ndim != 3:
+            raise NotImplementedError(f"Only 3D attribution inputs supported for underlying vmap: got {attr.shape}")  
+
+        # prepare attributes for vmapped shape 
+        n_batch = rast_out.shape[0]
+        attr = jnp.concatenate([attr for _ in range(n_batch)], axis=0)
+        out, out_db = _interpolate_bwd_custom_call(r, attr, rast_out, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list)
+
+        out_axes = None, None
+        return (out, out_db), out_axes
+
     # *********************************************
     # *  REGISTER THE OP WITH JAX  *
     # *********************************************
@@ -470,6 +567,7 @@ def _build_interpolate_bwd_primitive(r: "Renderer"):
     _interpolate_prim.multiple_results = True
     _interpolate_prim.def_impl(functools.partial(xla.apply_primitive, _interpolate_prim))
     _interpolate_prim.def_abstract_eval(_interpolate_bwd_abstract)
+    batching.primitive_batchers[_interpolate_prim] = _interpolate_bwd_batch
 
     # # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_interpolate_prim, _interpolate_bwd_lowering, platform="gpu")
