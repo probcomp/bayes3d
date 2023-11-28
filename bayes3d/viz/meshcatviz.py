@@ -1,7 +1,6 @@
 import meshcat
 import numpy as np
 import meshcat.geometry as g
-VISUALIZER = None
 from matplotlib.colors import rgb2hex
 import bayes3d.transforms_3d as t3d
 import jax.numpy as jnp
@@ -10,6 +9,8 @@ import jax.numpy as jnp
 RED = np.array([1.0, 0.0, 0.0])
 GREEN = np.array([0.0, 1.0, 0.0])
 BLUE = np.array([0.0, 0.0, 1.0])
+
+VISUALIZER = None
 
 def setup_visualizer():
     global VISUALIZER
