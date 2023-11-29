@@ -7,7 +7,6 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("movie_path", 
                         help="Path to movie file", 
-                        default="/home/nishadgothoskar/bayes3d/assets/IMG_3075.MOV", 
                         type=str)
 args = parser.parse_args()
 
