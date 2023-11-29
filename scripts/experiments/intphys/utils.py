@@ -33,6 +33,18 @@ def make_schedule_translation_3d(grid_widths, grid_nums):
         sched.append(grid)
     return sched
 
+def make_schedule_translation_3d_variable_grid(grid_widths, grid_nums):
+    sched = []
+
+    for (grid_width, grid_num) in zip(grid_widths, grid_nums):
+        grid = b.utils.make_translation_grid_enumeration(
+            -grid_width[0], -grid_width[1], -grid_width[2], 
+            +grid_width[0], +grid_width[1], +grid_width[2], 
+            *grid_num,  # *grid_num is num_x, num_y, num_z
+        )
+        sched.append(grid)
+    return sched
+
 def make_schedule_3d(grid_widths, grid_nums, rot_angle_bounds, fib_points, angle_points, sphere_angle):
 
     sched = []
@@ -46,6 +58,7 @@ def make_schedule_3d(grid_widths, grid_nums, rot_angle_bounds, fib_points, angle
         )
         sched.append(grid)
     return sched                                
+
 
 def velocity_chm_builder(addresses, args):
     chm = genjax.choice_map({
