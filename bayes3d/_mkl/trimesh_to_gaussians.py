@@ -9,7 +9,8 @@ from bayes3d._mkl.trimesh_to_gaussians import (
     uniformly_sample_from_mesh, 
     ellipsoid_embedding, 
     get_mean_colors, 
-    pack_transform
+    pack_transform,
+    transform_from_gaussian
 )
 import trimesh
 import numpy as np
@@ -52,7 +53,7 @@ mus        = gm.means_
 covs       = gm.covariances_
 labels     = gm.predict(X)
 choleskys  = vmap(ellipsoid_embedding)(covs)
-transforms = vmap(pack_transform, (0,0,None))(mus, choleskys, 2.0)
+transforms = vmap(transform_from_gaussian, (0,0,None))(mus, covs, 2.0)
 mean_colors, nums = get_mean_colors(cs, gm.n_components, labels)
 ```
 """
@@ -79,7 +80,8 @@ from bayes3d._mkl.trimesh_to_gaussians import (
     uniformly_sample_from_mesh, 
     ellipsoid_embedding, 
     get_mean_colors, 
-    pack_transform
+    pack_transform,
+    transform_from_gaussian
 )
 import trimesh
 import numpy as np
@@ -122,7 +124,7 @@ mus        = gm.means_
 covs       = gm.covariances_
 labels     = gm.predict(X)
 choleskys  = vmap(ellipsoid_embedding)(covs)
-transforms = vmap(pack_transform, (0,0,None))(mus, choleskys, 2.0)
+transforms = vmap(transform_from_gaussian, (0,0,None))(mus, covs, 2.0)
 mean_colors, nums = get_mean_colors(cs, gm.n_components, labels)
 ```
 """
@@ -286,7 +288,7 @@ def get_mean_colors(cs, n, labels):
         idx = labels == label
         num = np.sum(idx)
         if num == 0: 
-            c = np.array([0.5,0.5,0.5, 0.0])
+            c = np.array([0.5, 0.5, 0.5, 0.0])
         else: 
             c = np.mean(cs[idx], axis=0)
         nums.append(num)

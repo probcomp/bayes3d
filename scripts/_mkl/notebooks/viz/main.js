@@ -291,7 +291,8 @@ function handle_payload(payload, ui, shared_data) {
             // SET UP THE SCENE
             ui.scene.clear();
             ui.fixed_scene_objs.forEach(obj => ui.scene.add(obj));
-            ui.scene.background = new THREE.Color( 0xd3d3d3 );
+            // ui.scene.background = new THREE.Color( 0xd3d3d3 );
+            ui.scene.background = new THREE.Color( 0xffffff );
             const dir_light = new THREE.DirectionalLight( 0xffffff, 2 );
             dir_light.position.set( 0,  .1, 0); 
             dir_light.castShadow = true; 
@@ -335,13 +336,7 @@ function handle_payload(payload, ui, shared_data) {
             shared_data.num_frames = T
             shared_data.animation_frame_controller._max = shared_data.num_frames - 1
 
-            // shared_data.data = data
-            // shared_data.instanced_mesh = instanced_mesh
-
             shared_data.animation_update_handler = t => {
-                // const data = shared_data.data
-                // const instanced_mesh = shared_data.instanced_mesh
-
                 const xs = arrays.strided_slice(data.centers, t, arrays.ALL, arrays.ALL)
                 const cs = arrays.strided_slice(data.colors,  t, arrays.ALL, arrays.ALL)
                 const ss = arrays.strided_slice(data.scales,  t, arrays.ALL)
@@ -352,10 +347,38 @@ function handle_payload(payload, ui, shared_data) {
             }
 
             break;
-        case "gaussians":
-            console.log("case 'gaussians'")
 
-            const meshes = draw_utils.create_gaussian_meshes(data.transforms, data.colors)
+        case "animated gaussians":
+            console.log("animated gaussians", data.transforms.shape)
+            var T = data.transforms.shape[0]
+            var N = data.transforms.shape[1]
+            shared_data.num_frames = T
+            shared_data.animation_frame_controller._max = shared_data.num_frames - 1
+
+            var t = 0;
+            var transforms = arrays.strided_slice(data.transforms, t, arrays.ALL, arrays.ALL, arrays.ALL);
+            var colors = arrays.strided_slice(data.colors,  t, arrays.ALL, arrays.ALL);
+            var meshes = draw_utils.create_gaussian_meshes(transforms, colors);
+            meshes.forEach(mesh => ui.scene.add(mesh));
+            
+            
+            shared_data.animation_update_handler = t => {
+                const transforms = arrays.strided_slice(data.transforms, t, arrays.ALL, arrays.ALL, arrays.ALL)
+                const colors     = arrays.strided_slice(data.colors,  t, arrays.ALL, arrays.ALL)
+                draw_utils.update_gaussian_meshes(meshes, colors, transforms)
+            }
+
+            break;
+
+            
+        case "gaussians":
+            console.log("case 'gaussians'", data.transforms.shape, data.colors.shape)
+
+            
+            // var transforms = arrays.strided_slice(data.transforms, 0, arrays.ALL, arrays.ALL, arrays.ALL);
+            // var colors = arrays.strided_slice(data.colors,  0, arrays.ALL, arrays.ALL);
+
+            var meshes = draw_utils.create_gaussian_meshes(data.transforms, data.colors)
             meshes.forEach(mesh => ui.scene.add(mesh));
 
             shared_data.num_frames = meshes.length
