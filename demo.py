@@ -26,7 +26,7 @@ b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs
 
 num_frames = 60
 
-poses = [b.t3d.transform_from_pos(jnp.array([-3.0, 0.0, 4.0]))]
+poses = [b.t3d.transform_from_pos(jnp.array([-3.0, 0.0, 3.5]))]
 delta_pose = b.t3d.transform_from_rot_and_pos(
     R.from_euler('zyx', [-1.0, 0.1, 2.0], degrees=True).as_matrix(),
     jnp.array([0.09, 0.05, 0.02])

@@ -85,7 +85,23 @@ class Renderer(object):
         
     _interpolate.defvjp(_interpolate_fwd, _interpolate_bwd)
 
-
+    def render_many(self, vertices, faces, poses, intrinsics):
+        jax_renderer = self
+        projection_matrix = b.camera._open_gl_projection_matrix(
+            intrinsics.height, intrinsics.width, 
+            intrinsics.fx, intrinsics.fy, 
+            intrinsics.cx, intrinsics.cy, 
+            intrinsics.near, intrinsics.far
+        )
+        composed_projection = projection_matrix @ poses
+        vertices_homogenous = jnp.concatenate([vertices, jnp.ones((*vertices.shape[:-1],1))], axis=-1)
+        clip_spaces_projected_vertices = jnp.einsum("nij,mj->nmi", composed_projection, vertices_homogenous)
+        rast_out, rast_out_db = jax_renderer.rasterize(clip_spaces_projected_vertices, faces, jnp.array([intrinsics.height, intrinsics.width]))
+        interpolated_collided_vertices_clip, _ = jax_renderer.interpolate(jnp.tile(vertices_homogenous[None,...],(poses.shape[0],1,1)), rast_out, faces, rast_out_db, jnp.array([0,1,2,3]))
+        interpolated_collided_vertices = jnp.einsum("a...ij,a...j->a...i", poses, interpolated_collided_vertices_clip)
+        mask = rast_out[...,-1] > 0
+        depth = interpolated_collided_vertices[...,2] * mask
+        return depth
 
     def render(self, vertices, faces, object_pose, intrinsics):
         jax_renderer = self
