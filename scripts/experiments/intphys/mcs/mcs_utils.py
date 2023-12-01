@@ -15,6 +15,16 @@ import matplotlib.pyplot as plt
 from bayes3d.viz import open3dviz as o3dviz
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+from jax.scipy.special import logsumexp
+
+def normalize_weights(log_weights):
+    log_total_weight = logsumexp(log_weights)
+    log_normalized_weights = log_weights - log_total_weight
+    return log_normalized_weights
+
+def ess(log_normalized_weights):
+    log_ess = -logsumexp(2. * log_normalized_weights)
+    return jnp.exp(log_ess)
 
 
 class MCS_Observation:
@@ -35,6 +45,24 @@ class MCS_Observation:
 
 load_observations_npz = lambda x : np.load('val7_physics_npzs' + "/{}.npz".format(x),allow_pickle=True)["arr_0"]
 
+def observations_to_data_by_frame(observations, frame_idx, scale = 0.5):
+    intrinsics_data = observations[0].intrinsics
+    intrinsics = b.scale_camera_parameters(b.Intrinsics(intrinsics_data["height"],intrinsics_data["width"],
+                            intrinsics_data["fx"], intrinsics_data["fy"],
+                            intrinsics_data["cx"],intrinsics_data["cy"],
+                            intrinsics_data["near"],intrinsics_data["far"]),scale)
+    
+    obs = observations[frame_idx]
+    depth = np.asarray(jax.image.resize(obs.depth, (int(obs.depth.shape[0] * scale), 
+                        int(obs.depth.shape[1] * scale)), 'nearest'))
+    seg = np.asarray(jax.image.resize(obs.segmentation, (int(obs.segmentation.shape[0] * scale), 
+                        int(obs.segmentation.shape[1] * scale)), 'nearest'))
+    rgb = np.asarray(jax.image.resize(obs.rgb, (int(obs.rgb.shape[0] * scale), 
+                        int(obs.rgb.shape[1] * scale), 3), 'nearest'))
+    gt_image = np.asarray(b.unproject_depth_jit(depth, intrinsics))
+
+    return gt_image, depth, seg, rgb, intrinsics
+
 def observations_to_data(observations, scale = 0.5):
     intrinsics_data = observations[0].intrinsics
     intrinsics = b.scale_camera_parameters(b.Intrinsics(intrinsics_data["height"],intrinsics_data["width"],
@@ -49,7 +77,7 @@ def observations_to_data(observations, scale = 0.5):
     rgbs = [jax.image.resize(obs.rgb, (int(obs.rgb.shape[0] * scale), 
                         int(obs.rgb.shape[1] * scale), 3), 'nearest') for obs in observations]
     
-    gt_images = b.unproject_depth_vmap_jit(jnp.stack(depths), intrinsics)
+    gt_images = b.unproject_depth_vmap_jit(np.stack(depths), intrinsics)
 
     return gt_images, depths, segs, rgbs, intrinsics
 
@@ -106,6 +134,7 @@ def get_object_mask(point_cloud_image, segmentation):
 
 
 
+
 WALL_Z = 14.
 CAM_POSE = np.array([[ 1,0,0,0],
 [0,0,-1,-4.5], # 4.5 is an arbitrary value
@@ -152,44 +181,47 @@ OBJECT MASKING is wrong for frames where object is entering from the top
 """
 
 def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.1):
-    # extract the data at full resolution
-    gt_images, depths, segs, _, intrinsics = observations_to_data(observations,scale = 1)
     # preprocess object information before running it through model by using the gt_images
-    T = gt_images.shape[0]
+    T = len(observations)
     review_stack = []
     init_queue = []
     review_id = 0
     registered_objects = []
+    gt_images = []
     gt_images_bg = []
     gt_images_obj = []
     # Rule, for first frame, process any object as object model
     # Afterwards, everything must come from the edges
 
-
-    get_distance = lambda x,y : jnp.linalg.norm(x[:3,3]-y[:3,3])
+    get_distance = lambda x,y : np.linalg.norm(x[:3,3]-y[:3,3])
     print("Extracting Meshes")
+    obj_pixels = []
     for t in tqdm(range(T)):
+    # for t in range(T):
+        gt_image, depth, seg, rgb, intrinsics = observations_to_data_by_frame(observations, t, scale = 1)
+        gt_image = np.asarray(gt_image)
+        gt_images.append(gt_image)
         # print("t = ",t)
-        seg = segs[t]
-        gt_image = gt_images[t]
-        seg_ids = jnp.unique(seg)
+        seg_ids = np.unique(seg)
         obj_ids_fixed_shape, obj_mask = get_object_mask(gt_image, seg)
         # remove all the -1 indices
-        obj_ids = jnp.delete(jnp.sort(jnp.unique(obj_ids_fixed_shape)),0) # This will not be jittable
+        obj_ids = np.delete(np.sort(np.unique(obj_ids_fixed_shape)),0) # This will not be jittable
         # print(obj_ids)
-        depth_bg = depths[t] * (1.0 - obj_mask) + intrinsics.far * (obj_mask)
-        depth_obj = depths[t] * (obj_mask) + intrinsics.far * (1.0 - obj_mask)
-        gt_images_bg.append(b.t3d.unproject_depth(depth_bg, intrinsics))
-        gt_images_obj.append(b.t3d.unproject_depth(depth_obj, intrinsics))
+        depth_bg = depth * (1.0 - obj_mask) + intrinsics.far * (obj_mask)
+        depth_obj = depth * (obj_mask) + intrinsics.far * (1.0 - obj_mask)
+        gt_images_bg.append(np.asarray(b.t3d.unproject_depth(depth_bg, intrinsics)))
+        gt_images_obj.append(np.asarray(b.t3d.unproject_depth(depth_obj, intrinsics)))
+        obj_pixel_ct = 0
 
         for obj_id in obj_ids:
 
-            num_pixels = jnp.sum(seg == obj_id)
+            num_pixels = np.sum(seg == obj_id)
+            obj_pixel_ct += num_pixels
             point_cloud_segment = gt_image[seg == obj_id]
             dims, pose = b.utils.aabb(point_cloud_segment)
-            rows, cols = jnp.where(seg == obj_id)
-            distance_to_edge_1 = min(jnp.abs(rows - 0).min(), jnp.abs(rows - intrinsics.height + 1).min())
-            distance_to_edge_2 = min(jnp.abs(cols - 0).min(), jnp.abs(cols - intrinsics.width + 1).min())
+            rows, cols = np.where(seg == obj_id)
+            distance_to_edge_1 = min(np.abs(rows - 0).min(), np.abs(rows - intrinsics.height + 1).min())
+            distance_to_edge_2 = min(np.abs(cols - 0).min(), np.abs(cols - intrinsics.width + 1).min())
             # print(distance_to_edge_1, distance_to_edge_2)
 
             if t == 0:
@@ -272,7 +304,8 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                             't_init' : init_queue[init_queue_idx]['t_init'],
                             'pose' : init_queue[init_queue_idx]['init_pose'],  # TODO A MORE ACCURATE ESTIMATION OF INIT POSE
                             'full_pose' : pose,
-                            't_full' : t
+                            't_full' : t,
+                            'num_pixels': num_pixels
                         }
                         del init_queue[init_queue_idx]
                     else:
@@ -286,15 +319,15 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
             if init_object_model:
                 # This part makes the mesh
                 resolution = 0.01
-                voxelized = jnp.rint(point_cloud_segment / resolution).astype(jnp.int32)
+                voxelized = np.rint(point_cloud_segment / resolution).astype(np.int32)
                 min_z = voxelized[:,2].min()
                 depth_val = voxelized[:,2].max() - voxelized[:,2].min()
 
                 front_face = voxelized[voxelized[:,2] <= min_z+20, :]
                 slices = [front_face]
                 for i in range(depth_val):
-                    slices.append(front_face + jnp.array([0.0, 0.0, i]))
-                full_shape = jnp.vstack(slices) * resolution
+                    slices.append(front_face + np.array([0.0, 0.0, i]))
+                full_shape = np.vstack(slices) * resolution
 
                 dims, pose = b.utils.aabb(full_shape)
                 # print("before making mesh object", get_gpu_mem())
@@ -319,6 +352,12 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
         if len(review_stack) > 0 and (not np.all([r['t_init'] == t for r in review_stack])):
             print("REVIEW STACK HAS NOT BEEN FULLY RESOLVED, LOGIC ERROR")
 
+        obj_pixels.append(obj_pixel_ct)
+
+    gt_images = np.stack(gt_images)
+    gt_images_bg = np.stack(gt_images_bg)
+    gt_images_obj = np.stack(gt_images_obj)
+
     # now extract the data at low resolution
     print("Extracting downsampled data")
     gt_images_downsampled, _, _, _, intrinsics_downsampled = observations_to_data(observations,scale = scale)
@@ -333,7 +372,9 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
     gt_images_obj_downsampled = jnp.stack([b.t3d.unproject_depth(x, intrinsics_downsampled) for x in depths_obj])
 
 
-    return (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects
+
+
+    return (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects, obj_pixels
 
 
 def multiview(gt_images, gt_images_bg, gt_images_obj, tr,t):
