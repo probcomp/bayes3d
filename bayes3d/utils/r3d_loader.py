@@ -92,7 +92,7 @@ def get_poses(metadata_dict: dict) -> int:
     return camera_to_worlds
 
 
-def get_intrinsics(metadata_dict: dict, downscale_factor: float = 3.75) -> int:
+def get_intrinsics(metadata_dict: dict):
     """Converts Record3D metadata dict into intrinsic info needed by nerfstudio
     Args:
         metadata_dict: Dict containing Record3D metadata
@@ -105,52 +105,36 @@ def get_intrinsics(metadata_dict: dict, downscale_factor: float = 3.75) -> int:
 
     # Camera intrinsics
     K = np.array(metadata_dict["K"]).reshape((3, 3)).T
-    K = K / downscale_factor
-    K[2, 2] = 1.0
-    focal_length = K[0, 0]
+    K = K
+    fx = K[0, 0]
+    fy = K[1, 1]
 
     H = metadata_dict["h"]
     W = metadata_dict["w"]
-
-    H = int(H / downscale_factor)
-    W = int(W / downscale_factor)
 
     # # TODO(akristoffersen): The metadata dict comes with principle points,
     # # but caused errors in image coord indexing. Should update once that is fixed.
     # cx, cy = W / 2, H / 2
     cx, cy = K[0, 2], K[1, 2]
 
-    intrinsics_dict = {
-        "fx": focal_length,
-        "fy": focal_length,
-        "cx": cx,
-        "cy": cy,
-        "w": W,
-        "h": H,
-    }
+    scaling_factor = metadata_dict["dw"] / metadata_dict["w"]
 
-    return intrinsics_dict
+    intrinsics = b.Intrinsics(H, W, fx, fy, cx, cy, 0.01, 100.0)
+    intrinsics_depth = b.scale_camera_parameters(intrinsics, scaling_factor)
+
+    return intrinsics, intrinsics_depth
 
 def load_r3d(r3d_path):
     r3d_path = Path(r3d_path)
     import subprocess
     subprocess.run([f"cp {r3d_path} /tmp/{r3d_path.name}.zip"], shell=True)
-    subprocess.run([f"unzip -o /tmp/{r3d_path.name}.zip -d /tmp/{r3d_path.name}"], shell=True)
+    subprocess.run([f"unzip -qq -o /tmp/{r3d_path.name}.zip -d /tmp/{r3d_path.name}"], shell=True)
     datapath = f"/tmp/{r3d_path.name}"
 
     f = open(os.path.join(datapath, "metadata"), "r")
     metadata = json.load(f)
 
-    intrinsics_dict = get_intrinsics(metadata)
-    intrinsics = b.Intrinsics(
-        intrinsics_dict["h"],
-        intrinsics_dict["w"],
-        intrinsics_dict["fx"],
-        intrinsics_dict["fy"],
-        intrinsics_dict["cx"],
-        intrinsics_dict["cy"],
-        0.01, 1000.0
-    )
+    intrinsics, intrinsics_depth = get_intrinsics(metadata)
 
     color_paths = natsorted(glob.glob(os.path.join(datapath, "rgbd", "*.jpg")))
     depth_paths = natsorted(glob.glob(os.path.join(datapath, "rgbd", "*.depth")))
@@ -171,4 +155,4 @@ def load_r3d(r3d_path):
     )
     poses = (P @ poses @ P.T)
 
-    return jnp.array(colors), jnp.array(depths), jnp.array(poses), intrinsics
+    return jnp.array(colors), jnp.array(depths), jnp.array(poses), intrinsics, intrinsics_depth
