@@ -196,6 +196,9 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
     get_distance = lambda x,y : np.linalg.norm(x[:3,3]-y[:3,3])
     print("Extracting Meshes")
     obj_pixels = []
+
+    poses = [[] for _ in range(T)]
+
     for t in tqdm(range(T)):
     # for t in range(T):
         gt_image, depth, seg, rgb, intrinsics = observations_to_data_by_frame(observations, t, scale = 1)
@@ -219,6 +222,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
             obj_pixel_ct += num_pixels
             point_cloud_segment = gt_image[seg == obj_id]
             dims, pose = b.utils.aabb(point_cloud_segment)
+            poses[t].append(pose)
             rows, cols = np.where(seg == obj_id)
             distance_to_edge_1 = min(np.abs(rows - 0).min(), np.abs(rows - intrinsics.height + 1).min())
             distance_to_edge_2 = min(np.abs(cols - 0).min(), np.abs(cols - intrinsics.width + 1).min())
@@ -371,10 +375,10 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
     gt_images_bg_downsampled = jnp.stack([b.t3d.unproject_depth(x, intrinsics_downsampled) for x in depths_bg])
     gt_images_obj_downsampled = jnp.stack([b.t3d.unproject_depth(x, intrinsics_downsampled) for x in depths_obj])
 
+    # hack to determine gravity scene
+    is_gravity = len(init_queue) > 0
 
-
-
-    return (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects, obj_pixels
+    return (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects, obj_pixels, is_gravity, poses
 
 
 def multiview(gt_images, gt_images_bg, gt_images_obj, tr,t):
