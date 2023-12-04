@@ -1,6 +1,9 @@
 #-------------
 # my ignores
 # -------------
+_unstaged/
+unstaged/
+data/
 
 # _files are private, helps keeping the repo clean
 # while prototyping

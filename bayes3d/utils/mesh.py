@@ -51,6 +51,12 @@ def make_marching_cubes_mesh_from_point_cloud(
     mesh = trimesh.voxel.ops.points_to_marching_cubes(point_cloud, pitch=pitch)
     return mesh
 
+def open3d_mesh_to_trimesh(mesh):
+    return trimesh.Trimesh(
+        vertices=np.asarray(mesh.vertices),
+        faces=np.asarray(mesh.triangles)
+    )
+
 def make_alpha_mesh_from_point_cloud(
     point_cloud,
     alpha
@@ -88,3 +94,19 @@ def make_table_mesh(
     ]
     table = trimesh.util.concatenate([table_face] + table_legs)
     return table
+
+def point_cloud_image_to_trimesh(point_cloud_image):
+    height, width, _ = point_cloud_image.shape
+    ij_to_index = lambda i,j: i * width + j
+    ij_to_faces = lambda ij: jnp.array(
+        [
+            [ij_to_index(ij[0], ij[1]), ij_to_index(ij[0]+1, ij[1]), ij_to_index(ij[0], ij[1]+1)],
+            [ij_to_index(ij[0]+1, ij[1]), ij_to_index(ij[0]+1, ij[1]+1), ij_to_index(ij[0], ij[1]+1)]
+        ]
+    )
+    jj, ii = jnp.meshgrid(jnp.arange(width-1), jnp.arange(height-1))
+    indices = jnp.stack([ii,jj],axis=-1)
+    faces = jax.vmap(ij_to_faces)(indices.reshape(-1,2)).reshape(-1,3)
+    print(faces.shape)
+    vertices = point_cloud_first.reshape(-1,3)
+    mesh = trimesh.Trimesh(vertices, faces)

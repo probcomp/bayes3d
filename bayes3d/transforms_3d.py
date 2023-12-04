@@ -297,6 +297,29 @@ def rotation_matrix_to_quaternion(matrix):
     )
     return q * 0.5 / jnp.sqrt(t)
 
+def pose_matrix_to_translation_and_quaternion(pose_matrix):
+    """Converts a pose matrix to a translation and quaternion.
+
+    Args:
+        pose_matrix (jnp.ndarray): The pose matrix. Shape (4, 4)
+    Returns:
+        Tuple[jnp.ndarray, jnp.ndarray]: The translation and quaternion.
+            Translation shape (3,), quaternion shape (4,)
+    """
+    return pose_matrix[:3, 3], rotation_matrix_to_quaternion(pose_matrix[:3, :3])
+
+def translation_and_quaternion_to_pose_matrix(translation, quaternion):
+    """Converts a translation and quaternion to a pose matrix.
+
+    Args:
+        translation (jnp.ndarray): The translation. Shape (3,)
+        quaternion (jnp.ndarray): The quaternion. Shape (4,)
+    Returns:
+        jnp.ndarray: The pose matrix. Shape (4, 4)
+    """
+    return transform_from_rot_and_pos(
+        quaternion_to_rotation_matrix(quaternion), translation
+    )
 
 def quaternion_to_rotation_matrix(Q_in):
     """
