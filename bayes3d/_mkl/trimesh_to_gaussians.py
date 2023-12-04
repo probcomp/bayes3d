@@ -1,6 +1,6 @@
 """
-Trimesh to Gaussians
-Pretty much self-explanatory
+# Trimesh to Gaussians
+> Pretty much self-explanatory
 
 **Example:**
 ```python
@@ -9,25 +9,32 @@ from bayes3d._mkl.trimesh_to_gaussians import (
     uniformly_sample_from_mesh, 
     ellipsoid_embedding, 
     get_mean_colors, 
-    pack_transform
+    pack_transform,
+    transform_from_gaussian
 )
+import trimesh
 import numpy as np
+import jax.numpy as jnp
+import jax
+from jax import jit, vmap
 from sklearn.mixture import GaussianMixture
-from jax import vmap
+from bayes3d._mkl.utils import keysplit
 
+# SEED
+key = jax.random.PRNGKey(0)
 
-# Load and patch mesh
+# LOAD MESH
 # -------------------
 mesh = load_mesh(...)
 mesh = patch_trimesh(mesh)
 
-# Sample from mesh
+# SAMPLE FROM MESH
 # ----------------
 key = keysplit(key)
 n = 20_000
 xs, cs = uniformly_sample_from_mesh(key, n, mesh, with_color=True)
 
-# GMM config
+# GMM CONFIG
 # ----------
 key = keysplit(key)
 n_components = 150
@@ -35,7 +42,7 @@ noise        = 0.0;
 X            = xs + np.random.randn(*xs.shape)*noise
 means_init   = np.array(uniformly_sample_from_mesh(key, n_components, mesh, with_color=False)[0]);
 
-# Fit the GMM
+# FIT THE GMM
 # -----------
 gm = GaussianMixture(n_components=n_components, 
                      tol=1e-3, max_iter=100, 
@@ -46,7 +53,7 @@ mus        = gm.means_
 covs       = gm.covariances_
 labels     = gm.predict(X)
 choleskys  = vmap(ellipsoid_embedding)(covs)
-transforms = vmap(pack_transform, (0,0,None))(mus, choleskys, 2.0)
+transforms = vmap(transform_from_gaussian, (0,0,None))(mus, covs, 2.0)
 mean_colors, nums = get_mean_colors(cs, gm.n_components, labels)
 ```
 """
@@ -63,8 +70,8 @@ __all__ = ['Array', 'Shape', 'FaceIndex', 'FaceIndices', 'Array3', 'Array2', 'Ar
 
 # %% ../../scripts/_mkl/notebooks/05 - Trimesh to Gaussians.ipynb 2
 _doc_ = """
-Trimesh to Gaussians
-Pretty much self-explanatory
+# Trimesh to Gaussians
+> Pretty much self-explanatory
 
 **Example:**
 ```python
@@ -73,25 +80,32 @@ from bayes3d._mkl.trimesh_to_gaussians import (
     uniformly_sample_from_mesh, 
     ellipsoid_embedding, 
     get_mean_colors, 
-    pack_transform
+    pack_transform,
+    transform_from_gaussian
 )
+import trimesh
 import numpy as np
+import jax.numpy as jnp
+import jax
+from jax import jit, vmap
 from sklearn.mixture import GaussianMixture
-from jax import vmap
+from bayes3d._mkl.utils import keysplit
 
+# SEED
+key = jax.random.PRNGKey(0)
 
-# Load and patch mesh
+# LOAD MESH
 # -------------------
 mesh = load_mesh(...)
 mesh = patch_trimesh(mesh)
 
-# Sample from mesh
+# SAMPLE FROM MESH
 # ----------------
 key = keysplit(key)
 n = 20_000
 xs, cs = uniformly_sample_from_mesh(key, n, mesh, with_color=True)
 
-# GMM config
+# GMM CONFIG
 # ----------
 key = keysplit(key)
 n_components = 150
@@ -99,7 +113,7 @@ noise        = 0.0;
 X            = xs + np.random.randn(*xs.shape)*noise
 means_init   = np.array(uniformly_sample_from_mesh(key, n_components, mesh, with_color=False)[0]);
 
-# Fit the GMM
+# FIT THE GMM
 # -----------
 gm = GaussianMixture(n_components=n_components, 
                      tol=1e-3, max_iter=100, 
@@ -110,7 +124,7 @@ mus        = gm.means_
 covs       = gm.covariances_
 labels     = gm.predict(X)
 choleskys  = vmap(ellipsoid_embedding)(covs)
-transforms = vmap(pack_transform, (0,0,None))(mus, choleskys, 2.0)
+transforms = vmap(transform_from_gaussian, (0,0,None))(mus, covs, 2.0)
 mean_colors, nums = get_mean_colors(cs, gm.n_components, labels)
 ```
 """
@@ -274,7 +288,7 @@ def get_mean_colors(cs, n, labels):
         idx = labels == label
         num = np.sum(idx)
         if num == 0: 
-            c = np.array([0.5,0.5,0.5, 0.0])
+            c = np.array([0.5, 0.5, 0.5, 0.0])
         else: 
             c = np.mean(cs[idx], axis=0)
         nums.append(num)
