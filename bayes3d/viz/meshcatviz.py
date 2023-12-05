@@ -25,7 +25,7 @@ def set_background_color(color):
     VISUALIZER["/Background"].set_property("top_color", color)
     VISUALIZER["/Background"].set_property("bottom_color", color)
 
-def clear():
+def clear_visualizer():
     global VISUALIZER
     VISUALIZER.delete()
 
