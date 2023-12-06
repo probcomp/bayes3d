@@ -143,6 +143,7 @@ CAM_POSE = np.array([[ 1,0,0,0],
 World2Cam = np.linalg.inv(CAM_POSE)
 World2Cam[1:3] *= -1
 CAM_POSE_CV2 = np.linalg.inv(World2Cam)
+cam_pose = CAM_POSE_CV2
 
 def in_camera_view(renderer, known_id, pose):
     """ Check if pose point is in camera view """
@@ -160,7 +161,19 @@ def splice_image(rendered_object_image, obs_image_complement):
     rendered_images = keep_masks * rendered_object_image + (1.0 - keep_masks) * obs_image_complement
     return rendered_images
 
+@jax.jit
+def splice_image_new(rendered_object_image, obs_image_complement, far=150.0):
+    keep_masks = jnp.logical_or(
+        jnp.logical_and((rendered_object_image[...,2] <= obs_image_complement[..., 2]) * 
+        rendered_object_image[...,2] > 0.0, (obs_image_complement[...,2] >= far))
+        ,
+        (obs_image_complement[...,2] == 0)
+    )[...,None]
+    rendered_images = keep_masks * rendered_object_image + (1.0 - keep_masks) * obs_image_complement
+    return rendered_images
+
 splice_image_vmap = jax.vmap(splice_image, in_axes = (0,None))
+splice_image_double_vmap = jax.vmap(splice_image, in_axes = (0,None))
 
 
 
@@ -527,79 +540,52 @@ def visualize_rotation_matrices(rot_matrices):
 
     plt.show()
 
-@genjax.gen
-def physics_stepper_nov28(all_poses, t, t_full, i, friction, gravity):
-    # TODO: SAMPLING FRICTION SCHEME --> can be of a hmm style
+def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrinsics):
+    idx = 0
+    while len(poses[idx]) < 2:
+        idx += 1
+    while len(poses[idx]) > 1:
+        idx += 1
 
-    #################################################################
-    # First let us consider timestep t-1
-    #################################################################
-    # Step 2: find world pose
-    pose_prev = all_poses[t-1]
-    pose_prev_world = cam_pose @ pose_prev
+    while len(poses[idx]) < 2:
+        diff = np.linalg.norm(poses[idx+1][0][:3,3] - poses[idx][0][:3,3])
+        if diff == 0.0:
+            break
+        idx+=1
 
-    # Step 3: check if we are already on the floor
-    bottom_z, top_z, center_to_bottom = get_height_bounds(i, pose_prev_world)
-    # within 20% of the object's height in world frame
-    already_on_floor = jnp.less_equal(bottom_z,0.2 * (top_z - bottom_z))
-    
-    # Step 1: Find world velocity
-    vel_pose_camera = jnp.linalg.solve(all_poses[t-2], all_poses[t-1])
-    pre_vel_xyz_world = cam_pose[:3,:3] @ vel_pose_camera[:3,3]
-    mag_xyz = jnp.linalg.norm(pre_vel_xyz_world)
-    
-    mag_xyz_friction = jnp.linalg.norm(pre_vel_xyz_world[:2]) - friction * mag_xyz
+    ref_pose = poses[idx][0]
+    ref_depth_obj = gt_images_obj_orig[idx,...,2]
+    ref_depth_bg = gt_images_bg_orig[idx,...,2]
 
-    mag_xyz_friction = jax.lax.cond(
-        jnp.less_equal(jnp.abs(mag_xyz_friction),3e-2),
-        lambda:0.0,
-        lambda:mag_xyz_friction)
-    
-    # jax.lax.cond(t >= t_full,
-    #              lambda: jprint("mag : {}",mag_xyz_friction),
-    #              lambda: None)
-    
-    
+    obj_indices = np.argwhere(ref_depth_obj != intrinsics.far)
+    bottom_i = np.max(obj_indices[:,0])
 
+    base_pixel_offset = 20
+    base_depth_delta_thresh = 1
+    line = ref_depth_bg[bottom_i+base_pixel_offset]
+    base_j = None
+    for j in range(len(line)-1):
+        if line[j+1] > line[j] + base_depth_delta_thresh:
+            base_j = j
+            break
+        if j == len(line) - 2:
+            raise ValueError("There is no base for support")
 
-    dir_xyz_world = get_translation_direction(all_poses, t_full, t, already_on_floor)
+    pixels_stable = np.sum(obj_indices[:,1] <= base_j)
+    pixels_unstable = np.sum(obj_indices[:,1] > base_j)
+    stable = pixels_stable >= pixels_unstable
+    ref_height = (cam_pose @ ref_pose)[2,3]
+    end_height = (cam_pose @ poses[-1][0])[2,3]
+    # fell = ref_height > end_height + 0.2
+    fell = np.linalg.norm(ref_pose[:3,3] - poses[-1][0][:3,3]) > 0.1
+    perc = 100*(np.abs(pixels_unstable - pixels_stable)/(pixels_stable+pixels_unstable))
+    if perc < 5: # any outcome should be plausible
+        return True
 
-    # Step 5: find peturbed velocity (equal to original norm) with random rotation
-    perturbed_rot_pose = GaussianVMFPoseUntraced()(jnp.eye(4), *(1e-20, 100000.0))  @ "perturb"
-
-    # perturbed_rot_pose = jax.lax.cond(mag_xyz < 0.0,
-    #                              lambda:jnp.eye(4),
-    #                              lambda: perturbed_rot_pose)
-
-    dir_xyz_world = perturbed_rot_pose[:3,:3] @ dir_xyz_world # without friction
-
-    # Step 7: Determine mag and gravity
-    mag, gravity = jax.lax.cond(already_on_floor,lambda:(mag_xyz_friction,gravity),lambda:(mag_xyz, gravity))
-
-    # jprint("{},{}",dir_xyz_world, mag)
-
-    vel_xyz_world = mag * dir_xyz_world
-    # Step 6: apply gravity to perturbed velocity
-    vel_xyz_world = vel_xyz_world.at[2].set(vel_xyz_world[2] - gravity * 1./20)
-
-    vel_xyz_camera = inverse_cam_pose[:3,:3] @ vel_xyz_world
-
-    # Step 8: Get velocity update in camera frame
-    vel = pose_prev.at[:3,3].set(vel_xyz_camera)
-
-    # jprint("mag : {}",mag_xyz_friction)
-    # jprint("on_floor : {}",already_on_floor)
-
-    # Step 9: Identify next pose
-    next_pose = pose_prev.at[:3,3].set(pose_prev[:3,3] + vel[:3,3]) # trans only, no rot
-
-    # Step 10: Ensure new bottom of object is above floor --> ground collision
-    next_pose_world = cam_pose @ next_pose
-    bottom_z,_,center_to_bottom = get_height_bounds(i, next_pose_world)
-    next_pose = jax.lax.cond(
-        jnp.less_equal(bottom_z,0),
-        lambda:inverse_cam_pose @ next_pose_world.at[2,3].set(center_to_bottom),
-        lambda:next_pose
-    )
-
-    return next_pose
+    if stable and fell:
+        plausible = False
+    elif not stable and not fell:
+        plausible = False
+    else:
+        plausible = True
+    return plausible

@@ -92,7 +92,7 @@ class Open3DVisualizer(object):
         if color is None:
             color = j.BLUE
 
-        if color.shape[0] != cloud.shape[0]:
+        if cloud.ndim == 2:
             colors = np.tile(color, (cloud.shape[0], 1))
         else:
             colors = color
