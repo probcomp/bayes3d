@@ -547,11 +547,15 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
     while len(poses[idx]) > 1:
         idx += 1
 
+    first_checkpt = idx
+
     while len(poses[idx]) < 2:
         diff = np.linalg.norm(poses[idx+1][0][:3,3] - poses[idx][0][:3,3])
         if diff == 0.0:
             break
         idx+=1
+
+    second_checkpt = idx
 
     ref_pose = poses[idx][0]
     ref_depth_obj = gt_images_obj_orig[idx,...,2]
@@ -582,10 +586,78 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
     if perc < 5: # any outcome should be plausible
         return True
 
+    t_violation = 1e+20
     if stable and fell:
         plausible = False
+        t_violation = second_checkpt
     elif not stable and not fell:
         plausible = False
+        t_violation = first_checkpt
     else:
         plausible = True
-    return plausible
+
+    plausibility_list = []
+    for t in range(len(poses)):
+        if t >= t_violation:
+            plausibility_list.append(False)
+        else:
+            plausibility_list.append(True)
+            
+    return plausible, plausibility_list, t_violation
+
+def determine_plausibility(results, offset = 3, rend_fraction_thresh = 0.75):
+    # check to see if object is falling from top
+
+    T = results['resampled_indices'].shape[0] - offset
+    tsteps_before_start = results['inferred_poses'].shape[0] - T
+
+    height, width = results['intrinsics'].height, results['intrinsics'].width
+    starting_indices = results['all_obj_indices'][tsteps_before_start - offset]
+    if starting_indices is not []:
+        mean_i, mean_j = np.median(starting_indices[:,0]), np.median(starting_indices[:,1])
+        from_top = (mean_i < height/2) and (mean_j > mean_i) and (mean_j < width -mean_i)
+    else:
+        from_top = False
+
+    # first get base indices to reflect resampled particles
+    n_particles = results['resampled_indices'].shape[1]
+    resample_bools = np.all(results['resampled_indices'] == np.arange(n_particles), axis = 1)
+    base_indices = np.arange(n_particles)
+    for i in range(results['resampled_indices'].shape[0]):
+        base_indices = base_indices[results['resampled_indices'][i]]
+    # then get the rendering scores based on resampled_indices
+    rend = np.array(results["rend_ll"][offset:,base_indices])
+    # get the worst rendered scores (object-less)
+    WR = results["worst_rend"][offset:]
+    # flatten rend to get the best vector across time
+    rend = np.max(rend, axis = 1)
+
+    max_rend_possible = height * width * jax.scipy.stats.norm.pdf(
+        0.,
+        loc=0.0, 
+        scale=results["variance"]
+    ) * 0.01
+
+    t_violation = None
+    plausibility_list = [True for _ in range(tsteps_before_start)]
+    plausible = True
+    for t in range(T):
+        if WR[t] > rend[t]:
+            plausible = False
+            if t_violation is None:
+                t_violation = tsteps_before_start + t
+        if WR[t] < max_rend_possible and WR[t] == rend[t]:
+            plausible = False
+            if t_violation is None:
+                t_violation = tsteps_before_start + t
+        if from_top and rend[t] > WR[t] and WR[t] >= WR[t-1] and t > T/2:
+            WR_gap = max_rend_possible - WR[t]
+            rend_gap = max_rend_possible - rend[t]
+            rend_likelihood_fraction = (WR_gap - rend_gap)/WR_gap
+            if rend_likelihood_fraction < rend_fraction_thresh:
+                plausible = False
+                if t_violation is None:
+                    t_violation = tsteps_before_start + t
+
+        plausibility_list.append(plausible)
+    return plausible, t_violation, plausibility_list, from_top

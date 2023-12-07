@@ -11,8 +11,8 @@ input1=$1
 input2=$2
 
 # Run python scripts in parallel
-python ../run_mcs.py $input1 &
-python ../run_mcs.py $input2 &
+python ../run_mcs_full.py $input1 &
+python ../run_mcs_full.py $input2 &
 
 # Wait for all background processes to finish
 wait
