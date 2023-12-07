@@ -459,11 +459,11 @@ for i,registered_obj in enumerate(registered_objects):
     # f_p = registered_objects[i]["full_pose"]
     # registered_objects[i]["full_pose"] = f_p.at[2,3].set(f_p[2,3] + 0.5*b.RENDERER.model_box_dims[i][2])
 if len(registered_objects) == 0:
-    t_start = gt_images.shape[0]-100
-    registered_objects.append({'t_init' : gt_images.shape[0]-100,
+    t_start = int(np.abs(gt_images.shape[0]-100))
+    registered_objects.append({'t_init' : t_start,
                             'pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
                             'full_pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
-                            't_full' : gt_images.shape[0]-100})
+                            't_full' : t_start})
     b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"), scaling_factor = 0.1)
 else:
     t_start = np.min([x["t_full"] for x in registered_objects])
@@ -637,7 +637,8 @@ else:
 
     data = {"viz":images,"rend_ll":rend_ll, "phy_ll":phy_ll, "all_obj_indices" :all_obj_indices,
             "rendered_obj" : rendered_obj, "rendered" : rendered, "inferred_poses" : concat_inferred_poses,
-            "resampled_indices" : indices, "heuristic_poses" : poses, "worst_rend":worst_rend}
+            "resampled_indices" : indices, "heuristic_poses" : poses, "worst_rend":worst_rend,
+            "intrinsics" : intrinsics, "variance" : variance}
     with open(f'/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/results_5/results_{scene_name}.pkl', 'wb') as file:
         pickle.dump(data, file)
 
