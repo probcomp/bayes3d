@@ -253,7 +253,7 @@ def c2f_pose_update_v5(key, trace_, reference, gridding_schedule, enumerator, ob
         valid = jnp.logical_not(are_bboxes_intersecting_many_jit(
                             (100,100,20),
                             b.RENDERER.model_box_dims[obj_id],
-                            jnp.eye(4).at[:3,3].set([0,0,-10]),
+                            jnp.eye(4).at[:3,3].set([0,0,-10.1]),
                             jnp.einsum("ij,ajk->aik",cam_pose,updated_grid)
                             ))
         # if pose is not valid, use the reference pose
@@ -343,7 +343,7 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
     key, friction_keys = make_new_keys(key, n_particles)
     # frictions = jax.vmap(genjax.normal.sample, in_axes = (0,None,None))(friction_keys,*friction_params)
     # frictions = jnp.linspace(-0.03,0.07,n_particles)
-    qs = jnp.linspace(0.05,0.95,30)
+    qs = jnp.linspace(0.05,0.95,n_particles)
     frictions = tfp.distributions.Normal(0.02,0.05).quantile(qs)
     gravities = jnp.linspace(0.5,2,n_particles)
     # broadcast init_state to number of particles
@@ -365,11 +365,11 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
         key, resample_key = jax.random.split(key)
         key, proposal_key = jax.random.split(key)
 
-        variance = jax.lax.cond(
-            jnp.less_equal(t, model_args[1][0] + 2),
-            lambda: 3 * model_args[5],
-            lambda: model_args[5]
-        )
+        # variance = jax.lax.cond(
+        #     jnp.less_equal(t, model_args[1][0] + 2),
+        #     lambda: 1 * model_args[5],
+        #     lambda: model_args[5]
+        # )
 
         modified_model_args = (*model_args[:5], variance, *model_args[6:])
 
@@ -430,11 +430,14 @@ def reset_renderer():
 
 scene_name = sys.argv[1]
 print(f"Running {scene_name}")
+SCALE = 0.2
+# observations = load_observations_npz(scene_name)
 
-with open(f"/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/pickled_data/{scene_name}.pkl", 'rb') as file:
-    preprocessed_data = pickle.load(file)
-cam_pose = CAM_POSE_CV2
-SCALE = 0.1
+observations = np.load('/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/val7_physics_npzs' + "/{}.npz".format(scene_name),allow_pickle=True)["arr_0"]
+
+preprocessed_data = preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH=0.6, scale=SCALE)
+# with open(f"/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/pickled_data/{scene_name}.pkl", 'rb') as file:
+#     preprocessed_data = pickle.load(file)
 cam_pose = CAM_POSE_CV2
 inverse_cam_pose = jnp.linalg.inv(CAM_POSE_CV2)
 (gt_images, gt_images_bg, gt_images_obj, intrinsics),\
@@ -453,36 +456,44 @@ padded_all_obj_indices = jnp.stack([pad_array(array, max_rows) for array in all_
 b.setup_renderer(intrinsics, num_layers= 1024)
 for i,registered_obj in enumerate(registered_objects):
     b.RENDERER.add_mesh(registered_obj['mesh'])
-    f_p = registered_objects[i]["full_pose"]
-    registered_objects[i]["full_pose"] = f_p.at[2,3].set(f_p[2,3] + 0.5*b.RENDERER.model_box_dims[i][2])
+    # f_p = registered_objects[i]["full_pose"]
+    # registered_objects[i]["full_pose"] = f_p.at[2,3].set(f_p[2,3] + 0.5*b.RENDERER.model_box_dims[i][2])
 if len(registered_objects) == 0:
-    t_start = 0
-    registered_objects.append({'t_init' : 11,
+    t_start = gt_images.shape[0]-100
+    registered_objects.append({'t_init' : gt_images.shape[0]-100,
                             'pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
                             'full_pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
-                            't_full' : 11})
+                            't_full' : gt_images.shape[0]-100})
     b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"), scaling_factor = 0.1)
 else:
     t_start = np.min([x["t_full"] for x in registered_objects])
-# video_from_rendered(gt_images, scale = int(1/SCALE), framerate=30)
 
 gridding_schedules = []
 for box_dims in b.RENDERER.model_box_dims:
     c2fm1 = 2
     c2f0 = 1
-    c2f1 = 0.7 * c2f0
+    c2f1 = 0.35 * c2f0
+    # c2f1 = 0.7 * c2f0
     c2f2 = 0.7 * c2f1
     c2f3 = 0.2 * c2f2
     c2f4 = 0.2 * c2f3
     c2f5 = 0.2 * c2f4
     c2f6 = 0.2 * c2f5
 
-    c2fs = [c2f0,c2f1,c2f2,c2f3,c2f4,c2f5,c2f6] #c2fm1
+    c2fs = [c2f0,c2f1,c2f2,c2f3,c2f4]#,c2f5,c2f6] #c2fm1
+    # c2f0 = 1
+    # c2f1 = 0.15 * c2f0
+    # c2f2 = 0.05 * c2f1
+    # c2f3 = 0.05 * c2f2
+    # c2fs = [c2f0,c2f1,c2f2,c2f3]
 
     x,y,z = box_dims
     grid_widths = [[c2f*x, c2f*y, c2f*z] for c2f in c2fs]
 
-    grid_nums = [(13,13,13),(7,7,7),(7,7,7),(7,7,7), (7,7,7)]#,(7,7,7),(7,7,7)]
+    grid_nums = [(13,13,7),(7,7,7),(7,7,7),(7,7,7),(7,7,7)]#,(7,7,7),(7,7,7)]
+    # grid_nums = [(7,7,7),(5,5,5),(5,5,5), (5,5,5), (5,5,5), (3,3,3), (3,3,3)]
+    # grid_nums = [(5,5,5),(5,5,5),(5,5,5),(5,5,5), (5,5,5), (5,5,5)]#, (5,5,5), (5,5,5)]
+    # grid_nums = [(15,15,5), (41,5,5), (41,5,5), (41,5,5)]
     gridding_schedule_trans = make_schedule_translation_3d_variable_grid(grid_widths, grid_nums)
     gridding_schedules.append(gridding_schedule_trans)
 
@@ -525,10 +536,17 @@ else:
     print("finished run")
 
     worst_rend = outlier_gaussian_double_vmap(gt_images[t_start:], gt_images_bg[t_start:], variance,None)
+
     w = trace.project(genjax.select("depth"))
     offst = 3
     start = t_start +offst
     gap = w[offst:].max()-w[offst:].min()
+
+    max_rend_ll = gt_images.shape[1] * gt_images.shape[2]*jax.scipy.stats.norm.pdf(
+            0.,
+            loc=0.0, 
+            scale=variance
+        ) * 0.01
 
     rendering_ll_images = []
 
@@ -540,7 +558,7 @@ else:
     line = ax.plot(np.array([start]),worst_rend[offst], label = "Worst", linestyle = "--")[0]
     lines.append(line)
     ax.set_xlim([start,T])
-    ax.set_ylim([worst_rend.min(),95.75 + 0.1*(95.75 - worst_rend.min())])
+    ax.set_ylim([worst_rend[offst:].min(),max_rend_ll + 0.1*(max_rend_ll - worst_rend[offst:].min())])
     # ax.set_ylim([w[offst:].min()-0.1*gap,w[offst:].max()+0.1*gap])
     ax.set_xlabel("Time")
     ax.set_ylabel("Log Likelihood")
@@ -611,14 +629,15 @@ else:
                     # b.scale_image(b.get_depth_image(rendered_obj[t,particle_id,...,2]),3)
                     ],labels = ['gt/observed', 'particles',
                                 "physics likelihood", "rendering likelihood"]), 0.4))
-            
+    display_video(images, framerate=30)
+
 
     rend_ll = trace.project(genjax.select(("depth")))
     phy_ll = [trace.project(genjax.select((f"pose_{i}"))) for i in range(num_registered_objects)]
 
     data = {"viz":images,"rend_ll":rend_ll, "phy_ll":phy_ll, "all_obj_indices" :all_obj_indices,
             "rendered_obj" : rendered_obj, "rendered" : rendered, "inferred_poses" : concat_inferred_poses,
-            "resampled_indices" : indices, "heuristic_poses" : poses}
-    with open(f'/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/results_3/results_{scene_name}.pkl', 'wb') as file:
+            "resampled_indices" : indices, "heuristic_poses" : poses, "worst_rend":worst_rend}
+    with open(f'/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/results_5/results_{scene_name}.pkl', 'wb') as file:
         pickle.dump(data, file)
 
