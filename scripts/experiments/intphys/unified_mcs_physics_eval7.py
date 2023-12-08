@@ -1,7 +1,8 @@
+import os
+os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
 import sys
 import jax
 import csv
-import os
 import time
 import pickle
 import genjax
@@ -23,74 +24,10 @@ from tensorflow_probability.substrates import jax as tfp
 from genjax.generative_functions.distributions import ExactDensity
 import jax.tree_util as jtu
 from genjax._src.core.transforms.incremental import NoChange, UnknownChange, Diff
+import zmq
+import pickle5
+import zlib
 console = genjax.pretty()
-
-gt_dict = {
-    "passive_physics_validation_gravity_support_0001_01": 1,
-    "passive_physics_validation_gravity_support_0001_02": 1,
-    "passive_physics_validation_gravity_support_0001_03": 1,
-    "passive_physics_validation_gravity_support_0001_04": 1,
-    "passive_physics_validation_gravity_support_0001_05": 0,
-    "passive_physics_validation_gravity_support_0001_06": 0,
-    "passive_physics_validation_gravity_support_0001_07": 0,
-    "passive_physics_validation_gravity_support_0001_08": 0,
-    "passive_physics_validation_gravity_support_0001_09": 1,
-    "passive_physics_validation_gravity_support_0001_10": 1,
-    "passive_physics_validation_gravity_support_0001_11": 0,
-    "passive_physics_validation_gravity_support_0001_12": 0,
-    "passive_physics_validation_gravity_support_0001_13": 1,
-    "passive_physics_validation_gravity_support_0001_14": 1,
-    "passive_physics_validation_gravity_support_0001_15": 0,
-    "passive_physics_validation_gravity_support_0001_16": 0,
-    "passive_physics_validation_gravity_support_0001_17": 1,
-    "passive_physics_validation_gravity_support_0001_18": 1,
-    "passive_physics_validation_gravity_support_0001_19": 0,
-    "passive_physics_validation_gravity_support_0001_20": 0,
-    "passive_physics_validation_gravity_support_0001_21": 1,
-    "passive_physics_validation_gravity_support_0001_22": 1,
-    "passive_physics_validation_gravity_support_0001_23": 0,
-    "passive_physics_validation_gravity_support_0001_24": 0,
-    "passive_physics_validation_gravity_support_0001_25": 1,
-    "passive_physics_validation_gravity_support_0001_26": 0,
-    "passive_physics_validation_gravity_support_0001_27": 1,
-    "passive_physics_validation_gravity_support_0001_28": 0,
-    "passive_physics_validation_gravity_support_0001_29": 1,
-    "passive_physics_validation_gravity_support_0001_30": 0,
-    "passive_physics_validation_object_permanence_0001_01": 0,
-    "passive_physics_validation_object_permanence_0001_02": 0,
-    "passive_physics_validation_object_permanence_0001_03": 0,
-    "passive_physics_validation_object_permanence_0001_07": 0,
-    "passive_physics_validation_object_permanence_0001_08": 0,
-    "passive_physics_validation_object_permanence_0001_09": 0,
-    "passive_physics_validation_object_permanence_0001_13": 0,
-    "passive_physics_validation_object_permanence_0001_14": 0,
-    "passive_physics_validation_object_permanence_0001_15": 1,
-    "passive_physics_validation_object_permanence_0001_19": 1,
-    "passive_physics_validation_object_permanence_0001_20": 1,
-    "passive_physics_validation_object_permanence_0001_23": 1,
-    "passive_physics_validation_object_permanence_0001_24": 1,
-    "passive_physics_validation_object_permanence_0001_27": 1,
-    "passive_physics_validation_object_permanence_0001_28": 1,
-    "passive_physics_validation_shape_constancy_0001_01": 1,
-    "passive_physics_validation_shape_constancy_0001_02": 1,
-    "passive_physics_validation_shape_constancy_0001_05": 1,
-    "passive_physics_validation_shape_constancy_0001_06": 0,
-    "passive_physics_validation_shape_constancy_0001_07": 0,
-    "passive_physics_validation_spatio_temporal_continuity_0001_01": 1,
-    "passive_physics_validation_spatio_temporal_continuity_0001_02": 1,
-    "passive_physics_validation_spatio_temporal_continuity_0001_03": 1,
-    "passive_physics_validation_spatio_temporal_continuity_0001_07": 0,
-    "passive_physics_validation_spatio_temporal_continuity_0001_08": 0,
-    "passive_physics_validation_spatio_temporal_continuity_0001_09": 0,
-    "passive_physics_validation_spatio_temporal_continuity_0001_13": 1,
-    "passive_physics_validation_spatio_temporal_continuity_0001_14": 1,
-    "passive_physics_validation_spatio_temporal_continuity_0001_15": 1,
-    "passive_physics_validation_spatio_temporal_continuity_0001_19": 0,
-    "passive_physics_validation_spatio_temporal_continuity_0001_20": 0,
-    "passive_physics_validation_spatio_temporal_continuity_0001_21": 0,
-}
-
-# TODO: VIZ FOR MULTIPLE OBJECT FOR PHY LL
 
 # model time!
 
@@ -227,6 +164,22 @@ def outlier_gaussian(
     return average_probability
 
 outlier_gaussian_double_vmap = jax.vmap(outlier_gaussian, in_axes=(0,0,None,None))
+
+def outlier_gaussian_per_pixel(
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    variance,
+    outlier_prob,
+):
+    distances = jnp.linalg.norm(observed_xyz - rendered_xyz, axis=-1)
+    probabilities_per_pixel = jax.scipy.stats.norm.pdf(
+        distances,
+        loc=0.0, 
+        scale=variance
+    )
+    return 0.01 * probabilities_per_pixel
+
+outlier_gaussian_per_pixel_vmap = jax.vmap(outlier_gaussian_per_pixel, in_axes=(None,0,None,None))
 
 @dataclass
 class ImageLikelihoodArijit(ExactDensity):
@@ -422,9 +375,9 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
 
     def smc_body(carry, t):
         # get new keys
-        print("jit compiling")
+        # print("jit compiling")
         # initialize particle based on last time step
-        jprint("t = {}",t)
+        # jprint("t = {}",t)
         
         key, log_weights, states,  = carry
         key, importance_keys = make_new_keys(key, n_particles)
@@ -435,7 +388,7 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
         #     jnp.less_equal(t, model_args[1][0] + 2),
         #     lambda: 1 * model_args[5],
         #     lambda: model_args[5]
-        # )
+        # )``
 
         modified_model_args = (*model_args[:5], variance, *model_args[6:])
 
@@ -484,7 +437,7 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
     rendered = particles.get_retval()[0]
     rendered_obj = particles.get_retval()[1]
     inferred_poses = particles.get_retval()[2]
-    print("SCAN finished")
+    # print("SCAN finished")
     return final_log_weight, rendered, rendered_obj, inferred_poses, particles, indices
 
 def reset_renderer():
@@ -493,79 +446,24 @@ def reset_renderer():
     for registered_obj in registered_objects:
         b.RENDERER.add_mesh(registered_obj['mesh'])
 
-def determine_plausibility(results, offset = 3, rend_fraction_thresh = 0.75):
-    # check to see if object is falling from top
 
-    T = results['resampled_indices'].shape[0] - offset
-    tsteps_before_start = results['inferred_poses'].shape[0] - T
-
-    height, width = results['intrinsics'].height, results['intrinsics'].width
-    starting_indices = results['all_obj_indices'][tsteps_before_start - offset]
-    if starting_indices is not []:
-        mean_i, mean_j = np.median(starting_indices[:,0]), np.median(starting_indices[:,1])
-        from_top = (mean_i < height/2) and (mean_j > mean_i) and (mean_j < width -mean_i)
-    else:
-        from_top = False
-
-    # first get base indices to reflect resampled particles
-    n_particles = results['resampled_indices'].shape[1]
-    resample_bools = np.all(results['resampled_indices'] == np.arange(n_particles), axis = 1)
-    base_indices = np.arange(n_particles)
-    for i in range(results['resampled_indices'].shape[0]):
-        base_indices = base_indices[results['resampled_indices'][i]]
-    # then get the rendering scores based on resampled_indices
-    rend = np.array(results["rend_ll"][offset:,base_indices])
-    # get the worst rendered scores (object-less)
-    WR = results["worst_rend"][offset:]
-    # flatten rend to get the best vector across time
-    rend = np.max(rend, axis = 1)
-
-    max_rend_possible = height * width * jax.scipy.stats.norm.pdf(
-        0.,
-        loc=0.0, 
-        scale=results["variance"]
-    ) * 0.01
-
-    t_violation = None
-    plausibility_list = [True for _ in range(tsteps_before_start)]
-    plausible = True
-    for t in range(T):
-        if WR[t] > rend[t]:
-            plausible = False
-            if t_violation is None:
-                t_violation = tsteps_before_start + t
-        if WR[t] < max_rend_possible and WR[t] == rend[t]:
-            plausible = False
-            if t_violation is None:
-                t_violation = tsteps_before_start + t
-        if from_top and rend[t] > WR[t] and WR[t] >= WR[t-1] and t > T/2:
-            WR_gap = max_rend_possible - WR[t]
-            rend_gap = max_rend_possible - rend[t]
-            rend_likelihood_fraction = (WR_gap - rend_gap)/WR_gap
-            if rend_likelihood_fraction < rend_fraction_thresh:
-                plausible = False
-                if t_violation is None:
-                    t_violation = tsteps_before_start + t
-
-        plausibility_list.append(plausible)
-    return plausible, t_violation, plausibility_list, from_top
-
-scene_name = sys.argv[1]
-print(f"Running {scene_name}")
-
+scene_ID = sys.argv[1]
+print(f"Running {scene_ID}")
 SCALE = 0.2
-# observations = load_observations_npz(scene_name)
+# observations = load_observations_npz(scene_ID)
 
-observations = np.load('/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/val7_physics_npzs' + "/{}.npz".format(scene_name),allow_pickle=True)["arr_0"]
+# observations = np.load('/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/val7_physics_npzs' + "/{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
+observations = np.load("{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
 
 preprocessed_data = preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH=0.6, scale=SCALE)
-# with open(f"/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/pickled_data/{scene_name}.pkl", 'rb') as file:
+# with open(f"/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/pickled_data/{scene_ID}.pkl", 'rb') as file:
 #     preprocessed_data = pickle.load(file)
-cam_pose = CAM_POSE_CV2
-inverse_cam_pose = jnp.linalg.inv(CAM_POSE_CV2)
+
 (gt_images, gt_images_bg, gt_images_obj, intrinsics),\
 (gt_images_orig, gt_images_bg_orig, gt_images_obj_orig, intrinsics_orig),\
-registered_objects, obj_pixels, is_gravity, poses = preprocessed_data
+registered_objects, obj_pixels, is_gravity, poses, cam_pose = preprocessed_data
+
+inverse_cam_pose = jnp.linalg.inv(cam_pose)
 
 # get obj indices padded
 all_obj_indices = [np.argwhere(gt_images_obj[i,...,2] != intrinsics.far) for i in range(gt_images.shape[0])]
@@ -641,8 +539,8 @@ n_particles = 30
 model = mcs_model
 
 if is_gravity:
-    print(f"{scene_name} is a gravity scene")
-    plausible = gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrinsics_orig)
+    print(f"{scene_ID} is a gravity scene")
+    plausible, plausibility_list, _ = gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrinsics_orig)
 else:
     start = time.time()
     lw, rendered, rendered_obj, inferred_poses, trace, indices = inference_approach_G2(model, gt_images, 
@@ -653,117 +551,28 @@ else:
 
     worst_rend = outlier_gaussian_double_vmap(gt_images[t_start:], gt_images_bg[t_start:], variance,None)
 
-    w = trace.project(genjax.select("depth"))
-    offst = 3
-    start = t_start +offst
-    gap = w[offst:].max()-w[offst:].min()
-
-    max_rend_ll = gt_images.shape[1] * gt_images.shape[2]*jax.scipy.stats.norm.pdf(
-            0.,
-            loc=0.0, 
-            scale=variance
-        ) * 0.01
-
-    rendering_ll_images = []
-
-    fig, ax = plt.subplots()  # Using subplots to directly access the figure object
-    lines = []
-    for p_id in range(n_particles):
-        line = ax.plot(np.array([start]),w[offst,p_id], label = f"Particle {p_id+1}")[0]
-        lines.append(line)
-    line = ax.plot(np.array([start]),worst_rend[offst], label = "Worst", linestyle = "--")[0]
-    lines.append(line)
-    ax.set_xlim([start,T])
-    ax.set_ylim([worst_rend[offst:].min(),max_rend_ll + 0.1*(max_rend_ll - worst_rend[offst:].min())])
-    # ax.set_ylim([w[offst:].min()-0.1*gap,w[offst:].max()+0.1*gap])
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Log Likelihood")
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    fig.subplots_adjust(right=0.75)
-    fig.canvas.draw()
-    rendering_ll_img = b.pil_image_from_matplotlib(fig)
-
-    for _ in tqdm(range(0,start)):
-        rendering_ll_images.append(rendering_ll_img.copy().resize((600,400)))
-
-    for t in tqdm(range(start,T)):
-        for p_id in range(n_particles):
-            lines[p_id].set_data(np.arange(start,t+1),w[:,p_id][offst:offst+t+1-start])
-        lines[-1].set_data(np.arange(start,t+1),worst_rend[offst:offst+t+1-start])
-        fig.canvas.draw()
-        rendering_ll_img = b.pil_image_from_matplotlib(fig)
-        rendering_ll_images.append(rendering_ll_img.resize((600,400)))
-        plt.close()
-
-    w = trace.project(genjax.select("pose_0"))
-    offst = 3
-    start = t_start+offst
-    gap = w[offst:].max()-w[offst:].min()
-
-    physics_ll_images = []
-
-    fig, ax = plt.subplots()  # Using subplots to directly access the figure object
-    lines = []
-    for p_id in range(n_particles):
-        line = ax.plot(np.array([start]),w[offst,p_id], label = f"Particle {p_id+1}")[0]
-        lines.append(line)
-        
-    ax.set_xlim([start,T]) 
-    ax.set_ylim([-4.66,-4.57])
-    # ax.set_ylim([w[offst:].min()-0.1*gap, w[offst:].max()+0.1*gap])
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Log Likelihood")
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    fig.subplots_adjust(right=0.75)
-    fig.canvas.draw()
-    physics_ll_img = b.pil_image_from_matplotlib(fig)
-
-    for _ in tqdm(range(0,start)):
-        physics_ll_images.append(physics_ll_img.copy().resize((600,400)))
-
-    for t in tqdm(range(start,T)):
-        for p_id in range(n_particles):
-            lines[p_id].set_data(np.arange(start,t+1),w[:,p_id][offst:offst+t+1-start])
-        fig.canvas.draw()
-        physics_ll_img = b.pil_image_from_matplotlib(fig)
-        physics_ll_images.append(physics_ll_img.resize((600,400)))
-        plt.close()
-
     dummy_poses = np.tile(jnp.eye(4).at[2,3].set(-1e5)[None,None,None,...], (t_start,n_particles,num_registered_objects,1,1))
     concat_inferred_poses = np.concatenate([dummy_poses, inferred_poses])
-
-    p_images = get_particle_images(intrinsics_orig, concat_inferred_poses, T = T)
-    blended_images = [b.overlay_image(p_images[i],b.get_depth_image(gt_images_orig[i][...,2])) for i in range(len(p_images))]
-    images = []
-    for t in tqdm(range(T)):
-        images.append(b.scale_image(b.multi_panel([
-                    b.get_depth_image(gt_images_orig[t,...,2]),
-                    # b.scale_image(b.get_depth_image(rendered[t,particle_id,...,2]),scale),
-                    blended_images[t],
-                    physics_ll_images[t],
-                    rendering_ll_images[t]
-                    # b.scale_image(b.get_depth_image(rendered_obj[t,particle_id,...,2]),3)
-                    ],labels = ['gt/observed', 'particles',
-                                "physics likelihood", "rendering likelihood"]), 0.4))
-    display_video(images, framerate=30)
-
 
     rend_ll = trace.project(genjax.select(("depth")))
     phy_ll = [trace.project(genjax.select((f"pose_{i}"))) for i in range(num_registered_objects)]
 
-    data = {"viz":images,"rend_ll":rend_ll, "phy_ll":phy_ll, "all_obj_indices" :all_obj_indices,
-            "rendered_obj" : rendered_obj, "rendered" : rendered, "inferred_poses" : concat_inferred_poses,
+    data = {"rend_ll":rend_ll, "phy_ll":phy_ll, "all_obj_indices" :all_obj_indices,
+            "inferred_poses" : concat_inferred_poses,
             "resampled_indices" : indices, "heuristic_poses" : poses, "worst_rend":worst_rend,
             "intrinsics" : intrinsics, "variance" : variance}
-    with open(f'/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/results_6/results_{scene_name}.pkl', 'wb') as file:
-        pickle.dump(data, file)
 
-with open(f'/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/results_6/results_{scene_name}.pkl', 'rb') as file:
-    data = pickle.load(file)
-
-plausible, t_violation, plausibility_list, from_top = determine_plausibility(data)
+    plausible, t_violation, plausibility_list, _ = determine_plausibility(data)
 
 
-with open('/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/results_6/results.csv', 'a', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow([scene_name, plausible, gt_dict[scene_name], plausible == gt_dict[scene_name]])
+report = {}
+for i,plausibility in enumerate(plausibility_list):
+    report[i+1] = {
+        "rating": int(plausibility),
+        "score" : float(plausibility),
+    }
+
+final_result = {"rating": int(plausible), "score" : float(plausible), "report" : report }
+
+with open(f'final_result_{scene_ID}.pkl', 'wb') as file:
+    pickle.dump(final_result, file)

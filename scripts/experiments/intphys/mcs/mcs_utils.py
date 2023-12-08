@@ -46,7 +46,12 @@ class MCS_Observation:
 load_observations_npz = lambda x : np.load('val7_physics_npzs' + "/{}.npz".format(x),allow_pickle=True)["arr_0"]
 
 def observations_to_data_by_frame(observations, frame_idx, scale = 0.5):
-    intrinsics_data = observations[0].intrinsics
+    intrinsics_data = observations[frame_idx].intrinsics
+    if 'cam_pose' in dir(observations[frame_idx]):
+        cam_pose = observations[frame_idx].cam_pose
+    else:
+        cam_pose = CAM_POSE_CV2
+
     intrinsics = b.scale_camera_parameters(b.Intrinsics(intrinsics_data["height"],intrinsics_data["width"],
                             intrinsics_data["fx"], intrinsics_data["fy"],
                             intrinsics_data["cx"],intrinsics_data["cy"],
@@ -61,7 +66,7 @@ def observations_to_data_by_frame(observations, frame_idx, scale = 0.5):
                         int(obs.rgb.shape[1] * scale), 3), 'nearest'))
     gt_image = np.asarray(b.unproject_depth_jit(depth, intrinsics))
 
-    return gt_image, depth, seg, rgb, intrinsics
+    return gt_image, depth, seg, rgb, intrinsics, cam_pose
 
 def observations_to_data(observations, scale = 0.5):
     intrinsics_data = observations[0].intrinsics
@@ -214,7 +219,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
 
     for t in tqdm(range(T)):
     # for t in range(T):
-        gt_image, depth, seg, rgb, intrinsics = observations_to_data_by_frame(observations, t, scale = 1)
+        gt_image, depth, seg, rgb, intrinsics, cam_pose = observations_to_data_by_frame(observations, t, scale = 1)
         gt_image = np.asarray(gt_image)
         gt_images.append(gt_image)
         # print("t = ",t)
@@ -391,7 +396,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
     # hack to determine gravity scene
     is_gravity = len(init_queue) > 0
 
-    return (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects, obj_pixels, is_gravity, poses
+    return (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects, obj_pixels, is_gravity, poses, cam_pose
 
 
 def multiview(gt_images, gt_images_bg, gt_images_obj, tr,t):
