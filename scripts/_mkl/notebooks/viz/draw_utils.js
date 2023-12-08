@@ -184,38 +184,26 @@ export function update_instanced_sphere_mesh(instanced_mesh, centers, colorsRGBA
 // END OF update_instanced_sphere_mesh
 
 
-export function create_sphere_meshes(centers, colorsRGB, scales) {
+export function create_sphere_meshes(positionsNx3, colorsRGBA, scales) {
+    const N = positionsNx3.shape[0]; 
+    const geometry = new THREE.SphereGeometry(1, 5, 5); // Radius set to 1, which will be scaled
+    let meshes = [];
+    for (let i = 0; i < N; i++) {
+        const pos  = new Float32Array(arrays.strided_slice(positionsNx3, i, arrays.ALL).values)
+        const rgba = new Float32Array(arrays.strided_slice(colorsRGBA ,  i, arrays.ALL).values)
+        const material = new THREE.MeshBasicMaterial({
+            color: new THREE.Color(rgba[0], rgba[1], rgba[2]), // RGB
+            transparent: true,
+            opacity: rgba[3] 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
 
-    const instanceCount = centers.shape[0]; // Number of instances
+        mesh.position.set(pos[0], pos[1], pos[2]);
+        mesh.scale.set(scales[i], scales[i], scales[i]);
 
-    const geometry = new THREE.SphereGeometry(1.0);
-    const material = new THREE.MeshLambertMaterial({ vertexColors: true });
-    const instancedMesh = new THREE.InstancedMesh(geometry, material, instanceCount);
-    instancedMesh.castShadow    = true; // Enable casting shadows
-    instancedMesh.receiveShadow = true; // Enable receiving shadows
-
-    const matrix   = new THREE.Matrix4();
-    const position = new THREE.Vector3();
-    const rotation = new THREE.Quaternion(0,0,0,1);
-    const scale    = new THREE.Vector3(1., 1., 1.);
-    const colors   = new Float32Array(instanceCount * 3); // RGB for each instance
-    // const transparency = new Float32Array(instanceCount)
-
-    for (let i = 0; i < instanceCount; i++) {
-        const center = new Float32Array(arrays.strided_slice(centers, i, arrays.ALL).values)
-        const rgba   = new Float32Array(arrays.strided_slice(colorsRGB,  i, arrays.ALL).values)
-        const color  = new THREE.Color(rgba[0], rgba[1],rgba[2]);
-        position.set(center[0], center[1], center[2]);
-        scale.set(scales.values[i], scales.values[i], scales.values[i])
-
-        matrix.compose(position, rotation, scale);
-        instancedMesh.setMatrixAt(i, matrix);
-
-        color.toArray(colors, i * 3);
+        // Add mesh to the array
+        meshes.push(mesh);
     }
 
-    instancedMesh.geometry.setAttribute('color', new THREE.InstancedBufferAttribute(colors, 3));
-    
-    
-    return instancedMesh;
+    return meshes;
 }

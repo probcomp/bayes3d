@@ -21,7 +21,7 @@ function initialize_interface(shared_data) {
     camera.position.y = 1;
     camera.position.z = 5;
 
-    const grid = new THREE.GridHelper(50, 50, 0x888888, 0x555555);
+    const grid = new THREE.GridHelper(2, 2, 0x888888, 0x555555);
 
     const origin = new THREE.Vector3(0, 0, 0);
     const axes = [
@@ -304,7 +304,7 @@ function handle_payload(payload, ui, shared_data) {
 
 
         case "spheres":
-            console.log("case 'spheres'")
+            console.log("case 'spheres'", data.centers.shape)
 
             var instanced_mesh = draw_utils.create_instanced_sphere_mesh(data.centers, data.colors, data.scales)
             ui.scene.add(instanced_mesh);
@@ -313,10 +313,19 @@ function handle_payload(payload, ui, shared_data) {
 
             break;
 
+        case "spheres rgba":
+                console.log("case 'spheres rgba'", data.centers.shape)
+                var meshes = draw_utils.create_sphere_meshes(data.centers, data.colors, data.scales)
+                // ui.scene.add(draw_utils.combine_meshes(meshes));
+                meshes.forEach(mesh => ui.scene.add(mesh));
+                shared_data.num_frames = data.centers.shape[0]
+                shared_data.animation_frame_controller._max = shared_data.num_frames - 1
+    
+                break;
+
 
         case "animated spheres":
-            console.log("case 'animated spheres'")
-            console.log(data.centers.shape)
+            console.log("case 'animated spheres'", data.centers.shape)
 
             var T = data.centers.shape[0]
             var N = data.centers.shape[1]
