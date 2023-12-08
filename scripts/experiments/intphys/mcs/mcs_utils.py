@@ -109,8 +109,8 @@ def masker_f(point_cloud_image, segmentation, object_mask, object_ids, id, iter)
     is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
                     (bbox_dims[0] < 0.1),
                     (bbox_dims[1] < 0.1)),
-                (bbox_dims[1] > 1.1)),
-            (bbox_dims[0] > 1.1)),
+                (bbox_dims[1] > 2.1)),
+            (bbox_dims[0] > 2.1)),
         (bbox_dims[2] > 2.1)
     )
     return jax.lax.cond(is_occluder, inner_fake, inner_add_mask,*(object_mask, object_ids, segmentation, id, iter))
@@ -224,7 +224,6 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
         gt_images.append(gt_image)
         # print("t = ",t)
         seg_ids = np.unique(seg)
-        print(t)
         obj_ids_fixed_shape, obj_mask = get_object_mask(gt_image, seg)
         # remove all the -1 indices
         obj_ids = np.delete(np.sort(np.unique(obj_ids_fixed_shape)),0) # This will not be jittable
@@ -568,21 +567,20 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
 
         poses = new_poses
 
+
     idx = 0
     while len(poses[idx]) < 2:
         idx += 1
-    while len(poses[idx]) > 1:
+
+    while True:
+        distances = []
+        for next_pose in poses[idx+1]:
+            for cur_pose in poses[idx]:
+                distances.append(np.linalg.norm(next_pose[:3,3] - cur_pose[:3,3]))
+        if 0.0 in distances:
+            break
         idx += 1
 
-    first_checkpt = idx
-
-    while len(poses[idx]) < 2:
-        diff = np.linalg.norm(poses[idx+1][0][:3,3] - poses[idx][0][:3,3])
-        if diff == 0.0:
-            break
-        idx+=1
-
-    second_checkpt = idx
 
     ref_pose = poses[idx][0]
     ref_depth_obj = gt_images_obj_orig[idx,...,2]
@@ -627,10 +625,10 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
     t_violation = 1e+20
     if stable and fell:
         plausible = False
-        t_violation = second_checkpt
+        t_violation = idx
     elif not stable and not fell:
         plausible = False
-        t_violation = first_checkpt
+        t_violation = idx
     else:
         plausible = True
 
