@@ -109,9 +109,9 @@ def masker_f(point_cloud_image, segmentation, object_mask, object_ids, id, iter)
     is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
                     (bbox_dims[0] < 0.1),
                     (bbox_dims[1] < 0.1)),
-                (bbox_dims[1] > 2.1)),
-            (bbox_dims[0] > 2.1)),
-        (bbox_dims[2] > 2.1)
+                (bbox_dims[1] + bbox_dims[0] > 2.4)),
+            False),
+        (bbox_dims[2] > 1.1)
     )
     return jax.lax.cond(is_occluder, inner_fake, inner_add_mask,*(object_mask, object_ids, segmentation, id, iter))
 
