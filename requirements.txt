@@ -18,7 +18,6 @@ gdown
 pytest
 zmq
 plyfile
-tqdm
 jupyterlab
 imageio
 timm
@@ -34,4 +33,7 @@ submitit
 wget
 mkdocs
 mkdocs-material
-natsorted
+natsort
+pyliblzfse
+pypng
+tyro
