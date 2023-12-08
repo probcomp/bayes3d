@@ -251,8 +251,12 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                 init_object_model_metadata = {
                     't_init' : t,
                     'pose' : pose,
-                    't_fully_in_scene' : t
+                    't_full' : t,
+                    'full_pose' : pose,
+                    'num_pixels' : num_pixels,
+                    'mask' : seg == obj_id
                 }
+                # init_object_model = False
             else:
                 init_object_model = False
 
@@ -545,7 +549,24 @@ def visualize_rotation_matrices(rot_matrices):
 
     plt.show()
 
-def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrinsics):
+def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrinsics, registered_objects):
+
+    # account for case where support is identified as an object
+    max_poses_detected = 0
+    for i in range(len(poses)):
+        if len(poses[i]) > max_poses_detected:
+            max_poses_detected = len(poses[i])
+    new_poses = [[] for _ in range(len(poses))]
+    if max_poses_detected > 2:
+        support_pose = poses[0][0]
+        for i in range(len(poses)):
+            for j in range(len(poses[i])):
+                diff = np.linalg.norm(support_pose[:3,3] - poses[i][j][:3,3])
+                if diff > 0.01:
+                    new_poses[i].append(poses[i][j])
+
+        poses = new_poses
+
     idx = 0
     while len(poses[idx]) < 2:
         idx += 1
@@ -566,30 +587,41 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
     ref_depth_obj = gt_images_obj_orig[idx,...,2]
     ref_depth_bg = gt_images_bg_orig[idx,...,2]
 
+    if max_poses_detected > 2:
+        ref_depth_bg  = np.where(registered_objects[0]['mask'], ref_depth_obj, ref_depth_bg)
+        ref_depth_obj = np.where(registered_objects[0]['mask'], intrinsics.far, ref_depth_obj)
+
     obj_indices = np.argwhere(ref_depth_obj != intrinsics.far)
     bottom_i = np.max(obj_indices[:,0])
 
     base_pixel_offset = 20
     base_depth_delta_thresh = 1
     line = ref_depth_bg[bottom_i+base_pixel_offset]
-    base_j = None
+    base_j_min = None
+    base_j_max = None
+    on_support = False
     for j in range(len(line)-1):
-        if line[j+1] > line[j] + base_depth_delta_thresh:
-            base_j = j
+        if not on_support and line[j+1] < line[j] - base_depth_delta_thresh:
+            base_j_min = j
+            on_support = True
+        if on_support and line[j+1] > line[j] + base_depth_delta_thresh:
+            base_j_max = j
             break
         if j == len(line) - 2:
-            raise ValueError("There is no base for support")
-
-    pixels_stable = np.sum(obj_indices[:,1] <= base_j)
-    pixels_unstable = np.sum(obj_indices[:,1] > base_j)
+            print("Error: There is no base for support")
+            return True, [True for _ in range(len(poses))], 1e+20
+        
+    pixels_stable = np.sum(np.logical_and(obj_indices[:,1] <= base_j_max , obj_indices[:,1] >= base_j_min))
+    pixels_unstable = np.sum(np.logical_or(obj_indices[:,1] > base_j_max , obj_indices[:,1] < base_j_min))
     stable = pixels_stable >= pixels_unstable
     ref_height = (cam_pose @ ref_pose)[2,3]
     end_height = (cam_pose @ poses[-1][0])[2,3]
     # fell = ref_height > end_height + 0.2
     fell = np.linalg.norm(ref_pose[:3,3] - poses[-1][0][:3,3]) > 0.1
     perc = 100*(np.abs(pixels_unstable - pixels_stable)/(pixels_stable+pixels_unstable))
+
     if perc < 5: # any outcome should be plausible
-        return True
+        return True, [True for _ in range(len(poses))], 1e+20
 
     t_violation = 1e+20
     if stable and fell:
@@ -607,8 +639,10 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
             plausibility_list.append(False)
         else:
             plausibility_list.append(True)
+
             
     return plausible, plausibility_list, t_violation
+
 
 def determine_plausibility(results, offset = 3, rend_fraction_thresh = 0.75):
     # check to see if object is falling from top

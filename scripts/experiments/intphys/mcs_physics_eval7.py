@@ -1,5 +1,5 @@
 import os
-os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
+os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'False'
 import bayes3d as b
 from tqdm import tqdm
 import numpy as np

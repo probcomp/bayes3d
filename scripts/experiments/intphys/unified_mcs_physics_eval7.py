@@ -540,7 +540,7 @@ model = mcs_model
 
 if is_gravity:
     print(f"{scene_ID} is a gravity scene")
-    plausible, plausibility_list, _ = gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrinsics_orig)
+    plausible, plausibility_list, _ = gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrinsics_orig, registered_objects)
 else:
     start = time.time()
     lw, rendered, rendered_obj, inferred_poses, trace, indices = inference_approach_G2(model, gt_images, 
