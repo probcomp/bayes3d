@@ -168,15 +168,53 @@ function initialize_interface(shared_data) {
 // END OF initialize_interface
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<
 
+function pytree_msg_to_js(pytree_msg) {
+    function _rec(obj) {
+      if (obj.array !== undefined) {
+        var values;
+        if (obj.array.boolData !== undefined) {
+          values = new Uint8Array(obj.array.boolData.dataList);
+        } else if (obj.array.int32Data !== undefined) {
+          values = new Int32Array(obj.array.int32Data.dataList);
+        } else if (obj.array.int64Data !== undefined) {
+          console.log('WARNING: downcasting int64 data to int32.');
+          values = new Int32Array(obj.array.int64Data.dataList);
+        } else if (obj.array.floatData !== undefined) {
+          values = new Float32Array(obj.array.floatData.dataList);
+        } else if (obj.array.doubleData !== undefined) {
+          values = new Float64Array(obj.array.doubleData.dataList);
+        }
+        return {shape: obj.array.shapeList, values: values};
+      } else if (obj.list !== undefined) {
+        const result = [];
+        obj.list.dataList.forEach(
+          v => {result.push(_rec(v))}
+        );
+        return result;
+      } else if (obj.map !== undefined) {
+        const result = {}
+        obj.map.dataMap.forEach(
+          entry => {result[entry[0]] = _rec(entry[1])}
+        );
+        return result;
+      } else if (obj.str !== undefined) {
+        return obj.str;
+      }
+    }
+    return _rec(pytree_msg.toObject());
+  }
+
 
 function handle_message(rpc_message) {
     console.log("Handling message of type:", rpc_message.getTypeCase())
     switch (rpc_message.getTypeCase()) {
 
-        case viz_pb.Message.TypeCase.PAYLOAD:
-            console.log("Handling 'Payload'...")
-            var payload = rpc_message.getPayload() 
-            handle_payload(payload, ui, shared_data)
+        case viz_pb.Message.TypeCase.PYTREE:
+            console.log("Handling 'PYTREE' ...")
+            var pytree =  pytree_msg_to_js(rpc_message.getPytree())
+            console.log("type:", pytree.type)
+            console.log("data:", pytree.data)
+            handle_pytree_message(pytree, ui, shared_data)
             break;
 
         case viz_pb.Message.TypeCase.PARTICLE_SWARM:
@@ -273,17 +311,16 @@ function handle_dynamic_gaussians(transformsTxNx4x4, colors, ui, shared_data) {
 }
 
 
-function handle_payload(payload, ui, shared_data) {
-    var meta = JSON.parse(payload.getJson())
-    var data = arrays.pytree_msg_to_js(payload.getData());
-    console.log("Metadata:", meta)
-    console.log("Type:", meta['type'], meta.type)
+function handle_pytree_message(pytree, ui, shared_data) {
 
     shared_data.animation_update_handler(t => {
         console.log("t:", t)
     })
+    var type = pytree.type
+    var data = pytree.data
 
-    switch(meta['type']) {
+
+    switch(type) {
         
         case "setup":
             console.log("case 'setup'")
@@ -312,6 +349,7 @@ function handle_payload(payload, ui, shared_data) {
             shared_data.animation_frame_controller._max = shared_data.num_frames - 1
 
             break;
+
 
         case "spheres rgba":
                 console.log("case 'spheres rgba'", data.centers.shape)
@@ -357,6 +395,7 @@ function handle_payload(payload, ui, shared_data) {
 
             break;
 
+            
         case "animated gaussians":
             console.log("animated gaussians", data.transforms.shape)
             var T = data.transforms.shape[0]
@@ -396,7 +435,7 @@ function handle_payload(payload, ui, shared_data) {
 
 
         default:
-            console.log("UKNOWN TYPE:", meta['type'])
+            console.log("UKNOWN TYPE:", type)
     }
 }
 // END OF handle_payload
