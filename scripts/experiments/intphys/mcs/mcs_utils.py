@@ -106,14 +106,14 @@ def masker_f(point_cloud_image, segmentation, object_mask, object_ids, id, iter,
     masked_point_cloud_segment = jnp.where(mask[..., None], point_cloud_image, jnp.nan)
 
     bbox_dims = custom_aabb(masked_point_cloud_segment)
-    is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
+    not_object = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
                     (bbox_dims[0] < 0.1),
                     (bbox_dims[1] < 0.1)),
                 (jnp.greater(bbox_dims[1] + bbox_dims[0],size_thresh))),
             False),
         (bbox_dims[2] > 1.1)
     )
-    return jax.lax.cond(is_occluder, inner_fake, inner_add_mask,*(object_mask, object_ids, segmentation, id, iter))
+    return jax.lax.cond(not_object, inner_fake, inner_add_mask,*(object_mask, object_ids, segmentation, id, iter))
 
 def custom_aabb(object_points):
     maxs = jnp.nanmax(object_points, axis = (0,1))
@@ -556,7 +556,7 @@ def visualize_rotation_matrices(rot_matrices):
 
     plt.show()
 
-def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrinsics, registered_objects):
+def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
 
     # account for case where support is identified as an object
     max_poses_detected = 0
@@ -588,14 +588,31 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
             break
         idx += 1
 
+    correct_id = 0
+    min_height = np.inf
+    for obj_id in range(len(poses[idx])):
+        if (cam_pose @ poses[idx][obj_id])[2,3] < min_height:
+            min_height = (cam_pose @ poses[idx][obj_id])[2,3]
+            correct_id = obj_id
 
-    ref_pose = poses[idx][0]
-    ref_depth_obj = gt_images_obj_orig[idx,...,2]
-    ref_depth_bg = gt_images_bg_orig[idx,...,2]
+    ref_pose = poses[idx][correct_id]
+
+
+    gt_image, depth, seg, *_= observations_to_data_by_frame(observations, idx, scale = 1)
+    obj_seg = None
+    unique_ids = np.unique(seg)
+    min_dist = np.inf
+    for u_id in unique_ids:
+        point_cloud_segment = gt_image[seg == u_id]
+        _, pose = b.utils.aabb(point_cloud_segment)
+        dist = np.linalg.norm(pose[:3,3] - ref_pose[:3,3])
+        if dist < min_dist:
+            min_dist = dist
+            obj_seg = u_id
 
     if max_poses_detected > 2:
-        ref_depth_bg  = np.where(registered_objects[0]['mask'], ref_depth_obj, ref_depth_bg)
-        ref_depth_obj = np.where(registered_objects[0]['mask'], intrinsics.far, ref_depth_obj)
+        ref_depth_obj = np.where(seg != obj_seg, intrinsics.far, depth)
+        ref_depth_bg  = np.where(seg != obj_seg, depth, intrinsics.far)
 
     obj_indices = np.argwhere(ref_depth_obj != intrinsics.far)
     bottom_i = np.max(obj_indices[:,0])
@@ -606,17 +623,20 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
     base_j_min = None
     base_j_max = None
     on_support = False
+    found_base = False
     for j in range(len(line)-1):
+        # print(j, on_support, line[j], line[j+1])
         if not on_support and line[j+1] < line[j] - base_depth_delta_thresh:
             base_j_min = j
             on_support = True
         if on_support and line[j+1] > line[j] + base_depth_delta_thresh:
             base_j_max = j
-            break
-        if j == len(line) - 2:
+            on_support = False
+            found_base = True
+        if j == len(line) - 2 and not found_base:
             print("Error: There is no base for support")
             return True, [True for _ in range(len(poses))], 1e+20
-        
+                
     pixels_stable = np.sum(np.logical_and(obj_indices[:,1] <= base_j_max , obj_indices[:,1] >= base_j_min))
     pixels_unstable = np.sum(np.logical_or(obj_indices[:,1] > base_j_max , obj_indices[:,1] < base_j_min))
     stable = pixels_stable >= pixels_unstable
@@ -625,6 +645,10 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
     # fell = ref_height > end_height + 0.2
     fell = np.linalg.norm(ref_pose[:3,3] - poses[-1][0][:3,3]) > 0.1
     perc = 100*(np.abs(pixels_unstable - pixels_stable)/(pixels_stable+pixels_unstable))
+
+    print(f"Unstable: {pixels_unstable}")
+    print(f"Stable: {pixels_stable}")
+    print(f"Perc diff: {perc}")
 
     if perc < 5: # any outcome should be plausible
         return True, [True for _ in range(len(poses))], 1e+20
@@ -648,6 +672,7 @@ def gravity_scene_plausible(poses, gt_images_obj_orig, gt_images_bg_orig, intrin
 
             
     return plausible, plausibility_list, t_violation
+
 
 
 def determine_plausibility(results, offset = 3, rend_fraction_thresh = 0.75):
