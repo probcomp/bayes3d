@@ -86,7 +86,7 @@ def observations_to_data(observations, scale = 0.5):
 
     return gt_images, depths, segs, rgbs, intrinsics
 
-def fake_masker(point_cloud_image, segmentation, object_mask, object_ids, id, iter):
+def fake_masker(point_cloud_image, segmentation, object_mask, object_ids, id, iter,size_thresh):
     object_ids = object_ids.at[iter].set(-1)
     return object_ids, object_mask
 
@@ -99,7 +99,7 @@ def inner_fake(object_mask, object_ids, segmentation, id,iter):
     object_ids = object_ids.at[iter].set(-1)
     return object_ids, object_mask
 
-def masker_f(point_cloud_image, segmentation, object_mask, object_ids, id, iter):
+def masker_f(point_cloud_image, segmentation, object_mask, object_ids, id, iter,size_thresh):
 
     mask = segmentation == id
     # Use the mask to select elements, keeping the original shape
@@ -109,7 +109,7 @@ def masker_f(point_cloud_image, segmentation, object_mask, object_ids, id, iter)
     is_occluder = jnp.logical_or(jnp.logical_or(jnp.logical_or(jnp.logical_or(
                     (bbox_dims[0] < 0.1),
                     (bbox_dims[1] < 0.1)),
-                (bbox_dims[1] + bbox_dims[0] > 2.4)),
+                (jnp.greater(bbox_dims[1] + bbox_dims[0],size_thresh))),
             False),
         (bbox_dims[2] > 1.1)
     )
@@ -123,13 +123,13 @@ def custom_aabb(object_points):
     return dims
 
 @jax.jit
-def get_object_mask(point_cloud_image, segmentation):
+def get_object_mask(point_cloud_image, segmentation, size_thresh):
     segmentation_ids = jnp.unique(segmentation, size = 10, fill_value = -1)
     object_mask = jnp.zeros(point_cloud_image.shape[:2])
     object_ids = jnp.zeros(10)
     def scan_fn(carry, id):
         object_mask, object_ids, iter = carry
-        object_ids, object_mask = jax.lax.cond(id == -1, fake_masker, masker_f,*(point_cloud_image, segmentation, object_mask, object_ids, id, iter))
+        object_ids, object_mask = jax.lax.cond(id == -1, fake_masker, masker_f,*(point_cloud_image, segmentation, object_mask, object_ids, id, iter,size_thresh))
         return (object_mask, object_ids, iter + 1), None
     
     (object_mask, object_ids, _), _ = jax.lax.scan(scan_fn, (object_mask, object_ids, 0), segmentation_ids)
@@ -201,6 +201,12 @@ OBJECT MASKING is wrong for frames where object is entering from the top
 def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.1):
     # preprocess object information before running it through model by using the gt_images
     T = len(observations)
+    if T < 120: # gravity hack
+        size_thresh = 10
+        is_gravity = True
+    else:
+        size_thresh = 2.4
+        is_gravity = False
     review_stack = []
     init_queue = []
     review_id = 0
@@ -224,7 +230,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
         gt_images.append(gt_image)
         # print("t = ",t)
         seg_ids = np.unique(seg)
-        obj_ids_fixed_shape, obj_mask = get_object_mask(gt_image, seg)
+        obj_ids_fixed_shape, obj_mask = get_object_mask(gt_image, seg, size_thresh)
         # remove all the -1 indices
         obj_ids = np.delete(np.sort(np.unique(obj_ids_fixed_shape)),0) # This will not be jittable
         # print(obj_ids)
@@ -397,8 +403,9 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
     gt_images_bg_downsampled = jnp.stack([b.t3d.unproject_depth(x, intrinsics_downsampled) for x in depths_bg])
     gt_images_obj_downsampled = jnp.stack([b.t3d.unproject_depth(x, intrinsics_downsampled) for x in depths_obj])
 
-    # hack to determine gravity scene
-    is_gravity = len(init_queue) > 0
+    # # hack to determine gravity scene
+    # is_gravity = len(init_queue) > 0
+
 
     return (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects, obj_pixels, is_gravity, poses, cam_pose
 
