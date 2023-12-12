@@ -4,6 +4,7 @@
 _unstaged/
 unstaged/
 data/
+outputs/
 
 # _files are private, helps keeping the repo clean
 # while prototyping
