@@ -587,8 +587,8 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
 
 
     idx = 0
-    while len(poses[idx]) < 2:
-        idx += 1
+    # while len(poses[idx]) < 2:
+    #     idx += 1
 
     while True:
         distances = []
