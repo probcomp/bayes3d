@@ -10,9 +10,11 @@ fi
 input1=$1
 input2=$2
 
+conda activate physics_conda
+
 # Run python scripts in parallel
-python ../run_mcs_full.py $input1 &
-python ../run_mcs_full.py $input2 &
+python ../unified_mcs_physics_eval7.py $input1 &
+python ../unified_mcs_physics_eval7.py $input2 &
 
 # Wait for all background processes to finish
 wait

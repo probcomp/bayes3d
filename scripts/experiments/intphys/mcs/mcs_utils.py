@@ -563,16 +563,27 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
     for i in range(len(poses)):
         if len(poses[i]) > max_poses_detected:
             max_poses_detected = len(poses[i])
-    new_poses = [[] for _ in range(len(poses))]
+    
     if max_poses_detected > 2:
+        new_poses = [[] for _ in range(len(poses))]
         support_pose = poses[0][0]
         for i in range(len(poses)):
+            support_j = None
+            min_dist = np.inf
             for j in range(len(poses[i])):
                 diff = np.linalg.norm(support_pose[:3,3] - poses[i][j][:3,3])
-                if diff > 0.01:
+                if diff < min_dist:
+                    min_dist = diff
+                    support_j = j
+            support_pose = poses[i][support_j]
+            for j in range(len(poses[i])):
+                if j != support_j:
                     new_poses[i].append(poses[i][j])
 
         poses = new_poses
+
+    # for i,x in enumerate(poses):
+    #     print(i,len(x))
 
 
     idx = 0
@@ -584,9 +595,10 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
         for next_pose in poses[idx+1]:
             for cur_pose in poses[idx]:
                 distances.append(np.linalg.norm(next_pose[:3,3] - cur_pose[:3,3]))
-        if 0.0 in distances:
+        if (len([True for x in distances if x == 0.0]) == 2 and len(distances) == 4) or (0.0 in distances and len(distances)==1):
             break
         idx += 1
+
 
     correct_id = 0
     min_height = np.inf
@@ -596,7 +608,8 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
             correct_id = obj_id
 
     ref_pose = poses[idx][correct_id]
-
+    # print(idx)
+    # print((cam_pose @ ref_pose)[:3,3])
 
     gt_image, depth, seg, *_= observations_to_data_by_frame(observations, idx, scale = 1)
     obj_seg = None
@@ -625,7 +638,6 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
     on_support = False
     found_base = False
     for j in range(len(line)-1):
-        # print(j, on_support, line[j], line[j+1])
         if not on_support and line[j+1] < line[j] - base_depth_delta_thresh:
             base_j_min = j
             on_support = True
@@ -636,9 +648,9 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
         if j == len(line) - 2 and not found_base:
             print("Error: There is no base for support")
             return True, [True for _ in range(len(poses))], 1e+20
-                
-    pixels_stable = np.sum(np.logical_and(obj_indices[:,1] <= base_j_max , obj_indices[:,1] >= base_j_min))
-    pixels_unstable = np.sum(np.logical_or(obj_indices[:,1] > base_j_max , obj_indices[:,1] < base_j_min))
+                        
+    pixels_stable = np.sum(np.logical_and(obj_indices[:,1] <= base_j_max , obj_indices[:,1] > base_j_min))
+    pixels_unstable = np.sum(np.logical_or(obj_indices[:,1] > base_j_max , obj_indices[:,1] <= base_j_min))
     stable = pixels_stable >= pixels_unstable
     ref_height = (cam_pose @ ref_pose)[2,3]
     end_height = (cam_pose @ poses[-1][0])[2,3]
@@ -648,10 +660,11 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
 
     print(f"Unstable: {pixels_unstable}")
     print(f"Stable: {pixels_stable}")
+    print(f"Fell? ", fell)
     print(f"Perc diff: {perc}")
 
-    if perc < 5: # any outcome should be plausible
-        return True, [True for _ in range(len(poses))], 1e+20
+    # if perc < 5: # any outcome should be plausible
+    #     return True, [True for _ in range(len(poses))], 1e+20
 
     t_violation = 1e+20
     if stable and fell:
@@ -672,7 +685,6 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
 
             
     return plausible, plausibility_list, t_violation
-
 
 
 def determine_plausibility(results, offset = 3, rend_fraction_thresh = 0.75):
@@ -711,16 +723,18 @@ def determine_plausibility(results, offset = 3, rend_fraction_thresh = 0.75):
     t_violation = None
     plausibility_list = [True for _ in range(tsteps_before_start)]
     plausible = True
+    count_violation = 0
     for t in range(T):
         if WR[t] > rend[t]:
             plausible = False
             if t_violation is None:
                 t_violation = tsteps_before_start + t
         if WR[t] < max_rend_possible and WR[t] == rend[t]:
-            plausible = False
+            print(t, WR[t], rend[t])
+            count_violation +=1
             if t_violation is None:
                 t_violation = tsteps_before_start + t
-        if from_top and rend[t] > WR[t] and WR[t] >= WR[t-1] and t > T/2:
+        if from_top and rend[t] > WR[t] and WR[t] >= WR[t-1] and t > T/2 and results['inferred_poses'].shape[0] < 220: # CONSIDER REMOVING THIS HACK
             WR_gap = max_rend_possible - WR[t]
             rend_gap = max_rend_possible - rend[t]
             rend_likelihood_fraction = (WR_gap - rend_gap)/WR_gap
@@ -730,4 +744,9 @@ def determine_plausibility(results, offset = 3, rend_fraction_thresh = 0.75):
                     t_violation = tsteps_before_start + t
 
         plausibility_list.append(plausible)
+
+    if count_violation > 3:
+        plausible = False
+        plausibility_list = [t < t_violation for t in range(T)]
+        
     return plausible, t_violation, plausibility_list, from_top

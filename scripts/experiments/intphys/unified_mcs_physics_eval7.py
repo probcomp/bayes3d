@@ -60,8 +60,8 @@ def get_height_bounds(i, world_pose):
     center_to_bottom_dist = center[2] - bottom_most_point_z
     return bottom_most_point_z,top_most_point_z, center_to_bottom_dist
 
-def get_translation_direction(all_poses, t_full, t):
-    direction = all_poses[t-1][:3,3] - all_poses[t_full+1][:3,3]
+def get_translation_direction(all_poses, t_init,t_full, t):
+    direction = all_poses[t-1][:3,3] - all_poses[t_full][:3,3]
     direction = cam_pose[:3,:3] @ direction
     direction_xy = direction.at[2].set(0)
 
@@ -73,7 +73,7 @@ def get_translation_direction(all_poses, t_full, t):
 
 # This model has to be recompiled for different # objects for now this is okay
 @genjax.gen
-def physics_stepper(all_poses, t, t_full, i, friction, gravity):
+def physics_stepper(all_poses, t, t_init, t_full, i, friction, gravity):
     # TODO: SAMPLING FRICTION SCHEME --> can be of a hmm style
 
     #################################################################
@@ -102,7 +102,7 @@ def physics_stepper(all_poses, t, t_full, i, friction, gravity):
     
     mag_xy, gravity = jax.lax.cond(already_on_floor,lambda:(mag_xy_friction,gravity),lambda:(mag_xy, gravity))
 
-    dir_xy_world = get_translation_direction(all_poses, t_full, t)
+    dir_xy_world = get_translation_direction(all_poses, t_init, t_full, t)
 
     # Step 7: Determine mag and gravity
 
@@ -164,6 +164,7 @@ def outlier_gaussian(
     return average_probability
 
 outlier_gaussian_double_vmap = jax.vmap(outlier_gaussian, in_axes=(0,0,None,None))
+outlier_gaussian_vmap = jax.vmap(outlier_gaussian, in_axes=(None,0,None,None))
 
 def outlier_gaussian_per_pixel(
     observed_xyz: jnp.ndarray,
@@ -227,7 +228,7 @@ def mcs_model(prev_state, t_inits, t_fulls, init_poses, full_poses, pose_update_
             lambda:poses[i]))
 
         physics_prob = jnp.asarray(jax.lax.cond(jnp.greater_equal(t,t_fulls[i]+2),lambda:1,lambda:0), dtype=int)
-        physics_pose = physics_stepper(all_poses[:,i,...], t, t_fulls[i], i, friction, gravity) @ f"physics_{i}"
+        physics_pose = physics_stepper(all_poses[:,i,...], t, t_inits[i], t_fulls[i], i, friction, gravity) @ f"physics_{i}"
         final_pose, update_params = jax.lax.cond(physics_prob, lambda:(physics_pose, pose_update_params), lambda:(poses[i], (jnp.array([1e20,1e20,1e20]), 0.)))
                 
         updated_pose = b.gaussian_vmf_pose(final_pose, *update_params)  @ f"pose_{i}"
@@ -264,8 +265,7 @@ def pose_update_v5(key, trace_, pose_grid, enumerator):
 pose_update_v5_jit = jax.jit(pose_update_v5, static_argnames=("enumerator",))
 
 
-def c2f_pose_update_v5(key, trace_, reference, gridding_schedule, enumerator, obj_id):
-    # for each object (TODO: gibbs sampling)
+def c2f_pose_update_v5(key, trace_, reference, gridding_schedule, enumerator, obj_id,):
     for i in range(len(gridding_schedule)):
         updated_grid = jnp.einsum("ij,ajk->aik", reference, gridding_schedule[i])
         # Time to check valid poses that dont intersect with the floor
@@ -281,6 +281,28 @@ def c2f_pose_update_v5(key, trace_, reference, gridding_schedule, enumerator, ob
         # jprint("ref position is {}", reference[:3,3])
 
     return weight, trace_
+
+# def c2f_pose_update_v5(key, trace_, reference, gridding_schedule, enumerator, obj_id,):
+
+#     def c2f_body(carry, grid):
+#         trace_, reference = carry
+#         updated_grid = jnp.einsum("ij,ajk->aik", reference, grid)
+#         # Time to check valid poses that dont intersect with the floor
+#         valid = jnp.logical_not(are_bboxes_intersecting_many_jit(
+#                             (100,100,20),
+#                             b.RENDERER.model_box_dims[obj_id],
+#                             jnp.eye(4).at[:3,3].set([0,0,-10.1]),
+#                             jnp.einsum("ij,ajk->aik",cam_pose,updated_grid)
+#                             ))
+#         # if pose is not valid, use the reference pose
+#         valid_grid = jnp.where(valid[:,None,None], updated_grid, reference[None,...])
+#         weight, trace_, reference = pose_update_v5_jit(key, trace_, valid_grid, enumerator)
+#         # jprint("ref position is {}", reference[:3,3])
+#         return  (trace_, reference), weight
+
+#     (trace_, _), weights = jax.lax.scan(c2f_body, (trace_, reference),gridding_schedule)
+
+#     return weights[-1], trace_
 
 c2f_pose_update_v5_vmap_jit = jax.jit(jax.vmap(c2f_pose_update_v5, in_axes=(0,0,None,None,None)),
                                     static_argnames=("enumerator", "obj_id"))
@@ -298,7 +320,6 @@ def update_choice_map_no_unfold(gt_depths, constant_choices, t):
                 constant_choices
             )
 
-
 def argdiffs_modelv7(trace):
     """
     Argdiffs specific to mcs_single_obejct model with no unfold
@@ -309,8 +330,6 @@ def argdiffs_modelv7(trace):
         *jtu.tree_map(lambda v: Diff(v, NoChange), args[1:]),
     )
     return argdiffs
-
-
 
 def proposal_choice_map_no_unfold(addresses, args, chm_args):
     addr = addresses[0] # custom defined
@@ -344,7 +363,7 @@ def resampling_priority_fn(particles, all_padded_idxs, t, outlier_variance=0.1):
 
     return eff_ss, log_probs
 
-def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state, key, t_start, constant_choices, T, addr, n_particles):
+def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state, key, t_start, constant_choices, friction_params, T, addr, n_particles):
     """
     Sequential Importance Sampling on the non-unfolded HMM model
     with 3D pose enumeration proposal
@@ -363,7 +382,8 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
     # frictions = jax.vmap(genjax.normal.sample, in_axes = (0,None,None))(friction_keys,*friction_params)
     # frictions = jnp.linspace(-0.03,0.07,n_particles)
     qs = jnp.linspace(0.05,0.95,n_particles)
-    frictions = tfp.distributions.Normal(0.02,0.05).quantile(qs)
+    frictions = tfp.distributions.Normal(*friction_params).quantile(qs)
+    # frictions = frictions.at[n_particles-1].set(0.5)
     gravities = jnp.linspace(0.5,2,n_particles)
     # broadcast init_state to number of particles
     init_states = jax.vmap(lambda f,g:(*init_state[:4], f, init_state[4], g), in_axes=(0,0))(frictions, gravities)
@@ -375,20 +395,20 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
 
     def smc_body(carry, t):
         # get new keys
-        # print("jit compiling")
+        print("jit compiling")
         # initialize particle based on last time step
-        # jprint("t = {}",t)
+        jprint("t = {}",t)
         
         key, log_weights, states,  = carry
         key, importance_keys = make_new_keys(key, n_particles)
         key, resample_key = jax.random.split(key)
         key, proposal_key = jax.random.split(key)
 
-        # variance = jax.lax.cond(
-        #     jnp.less_equal(t, model_args[1][0] + 2),
-        #     lambda: 1 * model_args[5],
-        #     lambda: model_args[5]
-        # )``
+        variance = jax.lax.cond(
+            jnp.less_equal(t, model_args[1][0] + 2),
+            lambda: 1 * model_args[5],
+            lambda: model_args[5]
+        )
 
         modified_model_args = (*model_args[:5], variance, *model_args[6:])
 
@@ -408,7 +428,7 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
                                         ) for i in range(num_objects)] 
             for obj_id in range(num_objects):
                 key, new_key = jax.random.split(key)
-                reference = jax.lax.cond(jnp.equal(t,t_start),
+                reference = jax.lax.cond(jnp.equal(t,model_args[1][obj_id]),
                                          lambda:model_args[3][obj_id],
                                          lambda:states[2][idx][obj_id])
                 w, p = proposal_fn(new_key, p, reference, gridding_schedules[obj_id], enumerators[obj_id], obj_id)
@@ -437,14 +457,8 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
     rendered = particles.get_retval()[0]
     rendered_obj = particles.get_retval()[1]
     inferred_poses = particles.get_retval()[2]
-    # print("SCAN finished")
+    print("SCAN finished")
     return final_log_weight, rendered, rendered_obj, inferred_poses, particles, indices
-
-def reset_renderer():
-    b.RENDERER = None
-    b.setup_renderer(intrinsics)
-    for registered_obj in registered_objects:
-        b.RENDERER.add_mesh(registered_obj['mesh'])
 
 
 scene_ID = sys.argv[1]
@@ -452,12 +466,12 @@ print(f"Running {scene_ID}")
 SCALE = 0.2
 # observations = load_observations_npz(scene_ID)
 
-# observations = np.load('/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/val7_physics_npzs' + "/{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
-observations = np.load("{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
+## NOTE: NOTE: NOTE: CHANGE LINE BELOW FOR FINAL EVAL
+observations = np.load('/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/eval_7_npzs' + "/{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
+print(len(observations))
+# observations = np.load("{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
 
 preprocessed_data = preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH=0.6, scale=SCALE)
-# with open(f"/home/arijitdasgupta/bayes3d/scripts/experiments/intphys/mcs/pickled_data/{scene_ID}.pkl", 'rb') as file:
-#     preprocessed_data = pickle.load(file)
 
 (gt_images, gt_images_bg, gt_images_obj, intrinsics),\
 (gt_images_orig, gt_images_bg_orig, gt_images_obj_orig, intrinsics_orig),\
@@ -480,14 +494,23 @@ for i,registered_obj in enumerate(registered_objects):
     # f_p = registered_objects[i]["full_pose"]
     # registered_objects[i]["full_pose"] = f_p.at[2,3].set(f_p[2,3] + 0.5*b.RENDERER.model_box_dims[i][2])
 if len(registered_objects) == 0:
-    t_start = int(np.abs(gt_images.shape[0]-100))
-    registered_objects.append({'t_init' : t_start,
+    t_start = gt_images.shape[0]-100
+    registered_objects.append({'t_init' : gt_images.shape[0]-100,
                             'pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
                             'full_pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
-                            't_full' : t_start})
+                            't_full' : gt_images.shape[0]-100})
     b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"), scaling_factor = 0.1)
 else:
     t_start = np.min([x["t_full"] for x in registered_objects])
+# video_from_rendered(gt_images, scale = int(1/SCALE), framerate=30)
+
+height, width = intrinsics.height, intrinsics.width
+starting_indices = all_obj_indices[t_start]
+if starting_indices is not []:
+    mean_i, mean_j = np.median(starting_indices[:,0]), np.median(starting_indices[:,1])
+    from_top = (mean_i < height/2) and (mean_j > mean_i) and (mean_j < width -mean_i)
+else:
+    from_top = False
 
 gridding_schedules = []
 for box_dims in b.RENDERER.model_box_dims:
@@ -501,13 +524,12 @@ for box_dims in b.RENDERER.model_box_dims:
     c2f5 = 0.2 * c2f4
     c2f6 = 0.2 * c2f5
 
-    c2fs = [c2f0,c2f1,c2f2,c2f3,c2f4]#,c2f5,c2f6] #c2fm1
-
+    c2fs = [c2f0,c2f1,c2f2,c2f3,c2f4]
 
     x,y,z = box_dims
     grid_widths = [[c2f*x, c2f*y, c2f*z] for c2f in c2fs]
 
-    grid_nums = [(13,13,7),(7,7,7),(7,7,7),(7,7,7),(7,7,7)]#,(7,7,7),(7,7,7)]
+    grid_nums = [(13,13,13),(7,7,7),(7,7,7),(7,7,7), (7,7,7)]
     gridding_schedule_trans = make_schedule_translation_3d_variable_grid(grid_widths, grid_nums)
     gridding_schedules.append(gridding_schedule_trans)
 
@@ -527,24 +549,32 @@ MODEL_ARGS = (
      jnp.array([r['t_full'] for r in registered_objects]),
      jnp.array([r['pose'] for r in registered_objects]),
      jnp.array([r['full_pose'] for r in registered_objects]),
-    #  jnp.array([5e-0, 5e-1]),
      (jnp.array([1e-0,1e-0,5e-1]), 5e-1),
      variance,
      None
 )
 CONSTANT_CHOICES = {}
 
+if from_top:
+    friction_params = (0.7,0.1)
+else:
+    friction_params = (0.02,0.05)
+
 key = jax.random.PRNGKey(np.random.randint(0,2332423432))
-n_particles = 30
+if from_top:
+    n_particles = 3
+else:
+    n_particles = 30
 model = mcs_model
 
 if is_gravity:
     print(f"{scene_ID} is a gravity scene")
-    plausible, plausibility_list, _ = gravity_scene_plausible(poses, intrinsics_orig, registered_objects, cam_pose, observations)
+    plausible, plausibility_list, _ = gravity_scene_plausible(poses, intrinsics_orig, cam_pose, observations)
+    print(f"{scene_ID} --> {plausible}")
 else:
     start = time.time()
     lw, rendered, rendered_obj, inferred_poses, trace, indices = inference_approach_G2(model, gt_images, 
-        gridding_schedules, MODEL_ARGS, INIT_STATE, key, t_start, CONSTANT_CHOICES, T, "pose", n_particles)
+    gridding_schedules, MODEL_ARGS, INIT_STATE, key, t_start, CONSTANT_CHOICES,friction_params, T, "pose", n_particles)
     print ("FPS:", rendered.shape[0] / (time.time() - start))
 
     print("finished run")
@@ -573,6 +603,8 @@ for i,plausibility in enumerate(plausibility_list):
     }
 
 final_result = {"rating": int(plausible), "score" : float(plausible), "report" : report }
+
+print(final_result['score'])
 
 with open(f'final_result_{scene_ID}.pkl', 'wb') as file:
     pickle.dump(final_result, file)
