@@ -727,6 +727,7 @@ def determine_shape_constancy_plausibility(num_objects, last_gt_image, last_gt_i
         xx2 = threedp3_likelihood_arijit(last_gt_image,last_rend[best_p_index],var,None)
         xx3 = threedp3_likelihood_arijit(last_gt_image,last_gt_image_bg,var,None)
         frac = (xx2-xx3)/(xx1-xx3)
+        print(f"{num_objects} objects, frac : {frac}")
         if frac < 0.7291686:
         # if frac < 0.38143346:
             return 0
@@ -740,6 +741,7 @@ def determine_shape_constancy_plausibility(num_objects, last_gt_image, last_gt_i
         xx3 = threedp3_likelihood_arijit(last_gt_image,last_gt_image_bg,var,None)
         frac = (xx2-xx3)/(xx1-xx3)
         # if frac < 0.4827912:
+        print(f"{num_objects} objects, frac : {frac}")
         if frac < 0.74286604:
             return 0
         else:
