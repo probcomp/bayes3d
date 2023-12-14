@@ -2,6 +2,7 @@ import os
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
 import sys
 import jax
+import json
 import csv
 import time
 import pickle
@@ -460,8 +461,163 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
     print("SCAN finished")
     return final_log_weight, rendered, rendered_obj, inferred_poses, particles, indices
 
+def determine_plausibility_shape(results, offset = 3, rend_fraction_thresh = 0.75):
+    # check to see if object is falling from top
+
+    T = results['resampled_indices'].shape[0] - offset
+    tsteps_before_start = results['inferred_poses'].shape[0] - T
+
+    height, width = results['intrinsics'].height, results['intrinsics'].width
+    starting_indices = results['all_obj_indices'][tsteps_before_start - offset]
+    if starting_indices is not []:
+        mean_i, mean_j = np.median(starting_indices[:,0]), np.median(starting_indices[:,1])
+        from_top = (mean_i < height/2) and (mean_j > mean_i) and (mean_j < width -mean_i)
+    else:
+        from_top = False
+
+    # first get base indices to reflect resampled particles
+    n_particles = results['resampled_indices'].shape[1]
+    resample_bools = np.all(results['resampled_indices'] == np.arange(n_particles), axis = 1)
+    base_indices = np.arange(n_particles)
+    for i in range(results['resampled_indices'].shape[0]):
+        base_indices = base_indices[results['resampled_indices'][i]]
+    # then get the rendering scores based on resampled_indices
+    rend = np.array(results["rend_ll"][offset:,base_indices])
+    # get the worst rendered scores (object-less)
+    WR = results["worst_rend"][offset:]
+    # flatten rend to get the best vector across time
+    rend = np.max(rend, axis = 1)
+
+    max_rend_possible = height * width * jax.scipy.stats.norm.pdf(
+        0.,
+        loc=0.0, 
+        scale=results["variance"]
+    ) * 0.01
+
+    t_violation = None
+    plausibility_list = [True for _ in range(tsteps_before_start)]
+    plausible = True
+    count_violation = 0
+    for t in range(T):
+        if WR[t] > rend[t]:
+            plausible = False
+            if t_violation is None:
+                t_violation = tsteps_before_start + t
+        if WR[t] < max_rend_possible and WR[t] == rend[t]:
+            print(t, WR[t], rend[t])
+            count_violation +=1
+            if t_violation is None:
+                t_violation = tsteps_before_start + t
+        # if from_top and rend[t] > WR[t] and WR[t] >= WR[t-1] and t > T/2 and results['inferred_poses'].shape[0] < 220: # CONSIDER REMOVING THIS HACK
+        #     WR_gap = max_rend_possible - WR[t]
+        #     rend_gap = max_rend_possible - rend[t]
+        #     rend_likelihood_fraction = (WR_gap - rend_gap)/WR_gap
+        #     if rend_likelihood_fraction < rend_fraction_thresh:
+        #         plausible = False
+        #         if t_violation is None:
+        #             t_violation = tsteps_before_start + t
+
+        plausibility_list.append(plausible)
+
+    if count_violation > 3:
+        plausible = False
+        plausibility_list = [t < t_violation for t in range(T)]
+        
+    return plausible, t_violation, plausibility_list, from_top
 
 scene_ID = sys.argv[1]
+
+import subprocess
+import zlib
+import sys
+import machine_common_sense as mcs
+import glob
+
+
+class MCS_Observation:
+    def __init__(self, rgb, depth, intrinsics, segmentation, cam_pose):
+        """RGBD Image
+        
+        Args:
+            rgb (np.array): RGB image
+            depth (np.array): Depth image
+            camera_pose (np.array): Camera pose. 4x4 matrix
+            intrinsics (b.camera.Intrinsics): Camera intrinsics
+            segmentation (np.array): Segmentation image
+        """
+        self.rgb = rgb
+        self.depth = depth
+        self.intrinsics = intrinsics
+        self.segmentation  = segmentation
+        self.cam_pose = cam_pose
+
+def get_obs_from_step_metadata(step_metadata, intrinsics, cam_pose):
+    rgb = np.array(list(step_metadata.image_list)[-1])
+    depth = np.array(list(step_metadata.depth_map_list)[-1])
+    seg = np.array(list(step_metadata.object_mask_list)[-1])
+    colors, seg_final_flat = np.unique(seg.reshape(-1,3), axis=0, return_inverse=True)
+    seg_final = seg_final_flat.reshape(seg.shape[:2])
+    observation = MCS_Observation(rgb, depth, intrinsics, seg_final, cam_pose)
+    return observation
+
+def cam_pose_from_step_metadata(step_metadata):
+    cam_pose_diff_orientation = np.array([
+        [ 1,0,0,0],
+        [0,0,-1,-4.5], # 4.5 is an arbitrary value
+        [ 0,1,0,step_metadata.camera_height],
+        [ 0,0,0,1]
+    ])
+    inv_cam_pose = np.linalg.inv(cam_pose_diff_orientation)
+    inv_cam_pose[1:3] *= -1
+    cam_pose = np.linalg.inv(inv_cam_pose)
+    return cam_pose
+
+def intrinsics_from_step_metadata(step_metadata):
+    width, height = step_metadata.camera_aspect_ratio
+    aspect_ratio = width / height
+    cx, cy = width / 2.0, height / 2.0
+    fov_y = np.deg2rad(step_metadata.camera_field_of_view)
+    fov_x = 2 * np.arctan(aspect_ratio * np.tan(fov_y / 2.0))
+    fx = cx / np.tan(fov_x / 2.0)
+    fy = cy / np.tan(fov_y / 2.0)
+    clipping_near, clipping_far = step_metadata.camera_clipping_planes
+    intrinsics = {
+        'width' : width,
+        'height' : height,
+        'cx' : cx,
+        'cy' : cy,
+        'fx' : fx,
+        'fy' : fy,
+        'near' : clipping_near,
+        'far' : clipping_far
+    }
+    return intrinsics
+
+file = "/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/eval_7/" + f"{scene_ID}.json"
+controller = mcs.create_controller("/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/config_level2.ini")
+scene_data = mcs.load_scene_json_file(file)
+step_metadata = controller.start_scene(scene_data)
+scene_intrinsics = intrinsics_from_step_metadata(step_metadata)
+scene_cam_pose = cam_pose_from_step_metadata(step_metadata)
+MCS_Observations = [get_obs_from_step_metadata(step_metadata, scene_intrinsics, scene_cam_pose)]
+
+def MCS_stepper():
+    while True:
+        yield
+
+for _ in tqdm(MCS_stepper()):
+    step_metadata = controller.step("Pass")
+    if len(step_metadata.action_list) == 0:
+        break
+    MCS_Observations.append(get_obs_from_step_metadata(step_metadata, scene_intrinsics, scene_cam_pose))  # Do stuff here
+
+print("Observations loaded")
+# scene_ID = np.random.randint(79384572398)
+print(f"Scene ID randomly generated as {scene_ID}")
+np.savez(f"/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_npzs/{scene_ID}.npz", MCS_Observations)
+
+
+
 print(f"Running {scene_ID}")
 SCALE = 0.2
 # observations = load_observations_npz(scene_ID)
@@ -592,19 +748,35 @@ else:
             "resampled_indices" : indices, "heuristic_poses" : poses, "worst_rend":worst_rend,
             "intrinsics" : intrinsics, "variance" : variance}
 
-    plausible, t_violation, plausibility_list, _ = determine_plausibility(data)
+    plausible, t_violation, plausibility_list, _ = determine_plausibility_shape(data)
 
 
-report = {}
-for i,plausibility in enumerate(plausibility_list):
-    report[i+1] = {
-        "rating": int(plausibility),
-        "score" : float(plausibility),
-    }
+shape_output = {}
+shape_output['plausibility'] = plausible
 
-final_result = {"rating": int(plausible), "score" : float(plausible), "report" : report }
+best_p_idx = np.argmax(rend_ll[-1])
+vars = []
+fracs = []
+for var in np.linspace(0.002,0.501,500):
+    xx1 = threedp3_likelihood_arijit(gt_images[-1],gt_images[-1],var,None)
+    xx2 = threedp3_likelihood_arijit(gt_images[-1],rendered[-1][best_p_idx],var,None)
+    xx3 = threedp3_likelihood_arijit(gt_images[-1],gt_images_bg[-1],var,None)
+    frac = (xx2-xx3)/(xx1-xx3)
+    vars.append(var)
+    fracs.append(frac)
+shape_output['vars'] = vars
+shape_output['fracs'] = fracs
+shape_output["num_objects"] = num_registered_objects
+shape_output['gt_image'] = gt_images[-1]
+shape_output['gt_image_bg'] = gt_images_bg[-1]
+shape_output['rendered'] = rendered[-1]
 
-print(final_result['score'])
+with open(file, 'r') as json_file:
+    data = json.load(json_file)
 
-with open(f'/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_results/final_result_{scene_ID}.pkl', 'wb') as file:
-    pickle.dump(final_result, file)
+shape_output['answer'] = data['goal']['answer']['choice']
+
+print("scene validity is ",plausible, " and the fraction is ", fracs[98], f"for {num_registered_objects} objects")
+
+with open(f'/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_results/shape_result_{scene_ID}.pkl', 'wb') as file:
+    pickle.dump(shape_output, file)
