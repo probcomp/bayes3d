@@ -686,7 +686,38 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
             
     return plausible, plausibility_list, t_violation
 
-
+def determine_shape_constancy_plausibility(num_objects, last_gt_image, last_gt_image_bg, last_rend):
+    # if not plausibility:
+    #     return 0
+    best_p_index = np.argmax([outlier_gaussian(last_gt_image, last_rend[i], 0.5, None) for i in range(3)])
+    # best_p_index = np.argmax([threedp3_likelihood_arijit(last_gt_image, last_rend[i], 0.5, None) for i in range(3)])
+    if num_objects == 2:
+        # var = 0.108
+        var = 1.0621818181818181
+        xx1 = threedp3_likelihood_arijit(last_gt_image,last_gt_image,var,None)
+        xx2 = threedp3_likelihood_arijit(last_gt_image,last_rend[best_p_index],var,None)
+        xx3 = threedp3_likelihood_arijit(last_gt_image,last_gt_image_bg,var,None)
+        frac = (xx2-xx3)/(xx1-xx3)
+        if frac < 0.7291686:
+        # if frac < 0.38143346:
+            return 0
+        else:
+            return 1
+    elif num_objects == 1:
+        var = 1.415
+        # var = 0.115
+        xx1 = threedp3_likelihood_arijit(last_gt_image,last_gt_image,var,None)
+        xx2 = threedp3_likelihood_arijit(last_gt_image,last_rend[best_p_index],var,None)
+        xx3 = threedp3_likelihood_arijit(last_gt_image,last_gt_image_bg,var,None)
+        frac = (xx2-xx3)/(xx1-xx3)
+        # if frac < 0.4827912:
+        if frac < 0.74286604:
+            return 0
+        else:
+            return 1
+    else:
+        return np.random.choice([0,1])
+    
 def determine_plausibility(results, offset = 3, rend_fraction_thresh = 0.75):
     # check to see if object is falling from top
 
@@ -730,23 +761,30 @@ def determine_plausibility(results, offset = 3, rend_fraction_thresh = 0.75):
             if t_violation is None:
                 t_violation = tsteps_before_start + t
         if WR[t] < max_rend_possible and WR[t] == rend[t]:
-            print(t, WR[t], rend[t])
             count_violation +=1
             if t_violation is None:
                 t_violation = tsteps_before_start + t
-        if from_top and rend[t] > WR[t] and WR[t] >= WR[t-1] and t > T/2 and results['inferred_poses'].shape[0] < 220: # CONSIDER REMOVING THIS HACK
-            WR_gap = max_rend_possible - WR[t]
-            rend_gap = max_rend_possible - rend[t]
-            rend_likelihood_fraction = (WR_gap - rend_gap)/WR_gap
-            if rend_likelihood_fraction < rend_fraction_thresh:
-                plausible = False
-                if t_violation is None:
-                    t_violation = tsteps_before_start + t
-
+        # if from_top and rend[t] > WR[t] and WR[t] >= WR[t-1] and t > T/2 and results['inferred_poses'].shape[0] < 220: # CONSIDER REMOVING THIS HACK
+        #     WR_gap = max_rend_possible - WR[t]
+        #     rend_gap = max_rend_possible - rend[t]
+        #     rend_likelihood_fraction = (WR_gap - rend_gap)/WR_gap
+        #     if rend_likelihood_fraction < rend_fraction_thresh:
+        #         plausible = False
+        #         if t_violation is None:
+        #             t_violation = tsteps_before_start + t
         plausibility_list.append(plausible)
+
+    if from_top and results['inferred_poses'].shape[0] < 220:
+        num_objects = results['inferred_poses'].shape[2]
+        plausible = determine_shape_constancy_plausibility(num_objects, results['gt_images'][-1], results['gt_images_bg'][-1], results['rendered'][-1])
+        t_violation = 100
+        plausibility_list = [t < t_violation for t in range(T)]
+
 
     if count_violation > 3:
         plausible = False
         plausibility_list = [t < t_violation for t in range(T)]
         
     return plausible, t_violation, plausibility_list, from_top
+
+

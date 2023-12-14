@@ -590,7 +590,8 @@ else:
     data = {"rend_ll":rend_ll, "phy_ll":phy_ll, "all_obj_indices" :all_obj_indices,
             "inferred_poses" : concat_inferred_poses,
             "resampled_indices" : indices, "heuristic_poses" : poses, "worst_rend":worst_rend,
-            "intrinsics" : intrinsics, "variance" : variance}
+            "intrinsics" : intrinsics, "variance" : variance, "gt_images":gt_images, "gt_images_bg":gt_images_bg,
+            "rendered":rendered}
 
     plausible, t_violation, plausibility_list, _ = determine_plausibility(data)
 
