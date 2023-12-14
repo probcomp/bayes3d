@@ -114,8 +114,13 @@ for i, file in enumerate(files):
         print("Error Output:")
         print(e.stderr)
     
-    with open(f"final_result_{scene_ID}.pkl", "rb") as file:
-        final_result = pickle.load(file)
+    try:
+        with open(f"final_result_{scene_ID}.pkl", "rb") as file:
+            final_result = pickle.load(file)
+    except:
+        print("SCENE FAILED --> RANDOM CHOICE ACTIVATED")
+        rand_ = np.random.choice([0,1])
+        final_result = {'rating':rand_, 'score':float(rand_)}
 
     print("The final rating for the {}th scene is ".format(i+1), final_result['rating'])
 
