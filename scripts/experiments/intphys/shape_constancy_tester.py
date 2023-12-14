@@ -593,190 +593,190 @@ def intrinsics_from_step_metadata(step_metadata):
     }
     return intrinsics
 
-file = "/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/eval_7/" + f"{scene_ID}.json"
-controller = mcs.create_controller("/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/config_level2.ini")
-scene_data = mcs.load_scene_json_file(file)
-step_metadata = controller.start_scene(scene_data)
-scene_intrinsics = intrinsics_from_step_metadata(step_metadata)
-scene_cam_pose = cam_pose_from_step_metadata(step_metadata)
-MCS_Observations = [get_obs_from_step_metadata(step_metadata, scene_intrinsics, scene_cam_pose)]
+# file = "/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/eval_7/" + f"{scene_ID}.json"
+# controller = mcs.create_controller("/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/config_level2.ini")
+# scene_data = mcs.load_scene_json_file(file)
+# step_metadata = controller.start_scene(scene_data)
+# scene_intrinsics = intrinsics_from_step_metadata(step_metadata)
+# scene_cam_pose = cam_pose_from_step_metadata(step_metadata)
+# MCS_Observations = [get_obs_from_step_metadata(step_metadata, scene_intrinsics, scene_cam_pose)]
 
-def MCS_stepper():
-    while True:
-        yield
+# def MCS_stepper():
+#     while True:
+#         yield
 
-for _ in tqdm(MCS_stepper()):
-    step_metadata = controller.step("Pass")
-    if len(step_metadata.action_list) == 0:
-        break
-    MCS_Observations.append(get_obs_from_step_metadata(step_metadata, scene_intrinsics, scene_cam_pose))  # Do stuff here
+# for _ in tqdm(MCS_stepper()):
+#     step_metadata = controller.step("Pass")
+#     if len(step_metadata.action_list) == 0:
+#         break
+#     MCS_Observations.append(get_obs_from_step_metadata(step_metadata, scene_intrinsics, scene_cam_pose))  # Do stuff here
 
-print("Observations loaded")
-# scene_ID = np.random.randint(79384572398)
-print(f"Scene ID randomly generated as {scene_ID}")
-np.savez(f"/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_npzs/{scene_ID}.npz", MCS_Observations)
-
-
-
-# print(f"Running {scene_ID}")
-# SCALE = 0.2
-# # observations = load_observations_npz(scene_ID)
-
-# ## NOTE: NOTE: NOTE: CHANGE LINE BELOW FOR FINAL EVAL
-# observations = np.load('/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_npzs' + "/{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
-# print(len(observations))
-# # observations = np.load("{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
-
-# preprocessed_data = preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH=0.6, scale=SCALE)
-
-# (gt_images, gt_images_bg, gt_images_obj, intrinsics),\
-# (gt_images_orig, gt_images_bg_orig, gt_images_obj_orig, intrinsics_orig),\
-# registered_objects, obj_pixels, is_gravity, poses, cam_pose = preprocessed_data
-
-# inverse_cam_pose = jnp.linalg.inv(cam_pose)
-
-# # get obj indices padded
-# all_obj_indices = [np.argwhere(gt_images_obj[i,...,2] != intrinsics.far) for i in range(gt_images.shape[0])]
-# max_rows = max(obj_indices.shape[0] for obj_indices in all_obj_indices)
-# def pad_array(array, max_rows):
-#     padding = ((0, max_rows - array.shape[0]), (0, 0))  # Pad rows, not columns
-#     return jnp.pad(array, padding, constant_values=-1)
-
-# padded_all_obj_indices = jnp.stack([pad_array(array, max_rows) for array in all_obj_indices])
-
-# b.setup_renderer(intrinsics, num_layers= 1024)
-# for i,registered_obj in enumerate(registered_objects):
-#     b.RENDERER.add_mesh(registered_obj['mesh'])
-#     # f_p = registered_objects[i]["full_pose"]
-#     # registered_objects[i]["full_pose"] = f_p.at[2,3].set(f_p[2,3] + 0.5*b.RENDERER.model_box_dims[i][2])
-# if len(registered_objects) == 0:
-#     t_start = gt_images.shape[0]-100
-#     registered_objects.append({'t_init' : gt_images.shape[0]-100,
-#                             'pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
-#                             'full_pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
-#                             't_full' : gt_images.shape[0]-100})
-#     b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"), scaling_factor = 0.1)
-# else:
-#     t_start = np.min([x["t_full"] for x in registered_objects])
-# # video_from_rendered(gt_images, scale = int(1/SCALE), framerate=30)
-
-# height, width = intrinsics.height, intrinsics.width
-# starting_indices = all_obj_indices[t_start]
-# if starting_indices is not []:
-#     mean_i, mean_j = np.median(starting_indices[:,0]), np.median(starting_indices[:,1])
-#     from_top = (mean_i < height/2) and (mean_j > mean_i) and (mean_j < width -mean_i)
-# else:
-#     from_top = False
-
-# gridding_schedules = []
-# for box_dims in b.RENDERER.model_box_dims:
-#     c2fm1 = 2
-#     c2f0 = 1
-#     c2f1 = 0.35 * c2f0
-#     # c2f1 = 0.7 * c2f0
-#     c2f2 = 0.7 * c2f1
-#     c2f3 = 0.2 * c2f2
-#     c2f4 = 0.2 * c2f3
-#     c2f5 = 0.2 * c2f4
-#     c2f6 = 0.2 * c2f5
-
-#     c2fs = [c2f0,c2f1,c2f2,c2f3,c2f4]
-
-#     x,y,z = box_dims
-#     grid_widths = [[c2f*x, c2f*y, c2f*z] for c2f in c2fs]
-
-#     grid_nums = [(13,13,13),(7,7,7),(7,7,7),(7,7,7), (7,7,7)]
-#     gridding_schedule_trans = make_schedule_translation_3d_variable_grid(grid_widths, grid_nums)
-#     gridding_schedules.append(gridding_schedule_trans)
-
-# # Setup for inference
-# T = gt_images.shape[0]
-# num_registered_objects = len(registered_objects)
-# variance = 0.1
-# INIT_STATE = (
-#         None,
-#         None,
-#         jnp.tile(jnp.eye(4).at[2,3].set(1e+5)[None,...],(num_registered_objects,1,1)),
-#         jnp.zeros((T,num_registered_objects,4,4)),
-#         t_start
-# )
-# MODEL_ARGS = (
-#      jnp.array([r['t_init'] for r in registered_objects]),
-#      jnp.array([r['t_full'] for r in registered_objects]),
-#      jnp.array([r['pose'] for r in registered_objects]),
-#      jnp.array([r['full_pose'] for r in registered_objects]),
-#      (jnp.array([1e-0,1e-0,5e-1]), 5e-1),
-#      variance,
-#      None
-# )
-# CONSTANT_CHOICES = {}
-
-# if from_top:
-#     friction_params = (0.7,0.1)
-# else:
-#     friction_params = (0.02,0.05)
-
-# key = jax.random.PRNGKey(np.random.randint(0,2332423432))
-# if from_top:
-#     n_particles = 3
-# else:
-#     n_particles = 30
-# model = mcs_model
-
-# if is_gravity:
-#     print(f"{scene_ID} is a gravity scene")
-#     plausible, plausibility_list, _ = gravity_scene_plausible(poses, intrinsics_orig, cam_pose, observations)
-#     print(f"{scene_ID} --> {plausible}")
-# else:
-#     start = time.time()
-#     lw, rendered, rendered_obj, inferred_poses, trace, indices = inference_approach_G2(model, gt_images, 
-#     gridding_schedules, MODEL_ARGS, INIT_STATE, key, t_start, CONSTANT_CHOICES,friction_params, T, "pose", n_particles)
-#     print ("FPS:", rendered.shape[0] / (time.time() - start))
-
-#     print("finished run")
-
-#     worst_rend = outlier_gaussian_double_vmap(gt_images[t_start:], gt_images_bg[t_start:], variance,None)
-
-#     dummy_poses = np.tile(jnp.eye(4).at[2,3].set(-1e5)[None,None,None,...], (t_start,n_particles,num_registered_objects,1,1))
-#     concat_inferred_poses = np.concatenate([dummy_poses, inferred_poses])
-
-#     rend_ll = trace.project(genjax.select(("depth")))
-#     phy_ll = [trace.project(genjax.select((f"pose_{i}"))) for i in range(num_registered_objects)]
-
-#     data = {"rend_ll":rend_ll, "phy_ll":phy_ll, "all_obj_indices" :all_obj_indices,
-#             "inferred_poses" : concat_inferred_poses,
-#             "resampled_indices" : indices, "heuristic_poses" : poses, "worst_rend":worst_rend,
-#             "intrinsics" : intrinsics, "variance" : variance}
-
-#     plausible, t_violation, plausibility_list, _ = determine_plausibility_shape(data)
+# print("Observations loaded")
+# # scene_ID = np.random.randint(79384572398)
+# print(f"Scene ID randomly generated as {scene_ID}")
+# np.savez(f"/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_npzs/{scene_ID}.npz", MCS_Observations)
 
 
-# shape_output = {}
-# shape_output['plausibility'] = plausible
 
-# best_p_idx = np.argmax(rend_ll[-1])
-# vars = []
-# fracs = []
-# for var in np.linspace(0.002,0.501,500):
-#     xx1 = threedp3_likelihood_arijit(gt_images[-1],gt_images[-1],var,None)
-#     xx2 = threedp3_likelihood_arijit(gt_images[-1],rendered[-1][best_p_idx],var,None)
-#     xx3 = threedp3_likelihood_arijit(gt_images[-1],gt_images_bg[-1],var,None)
-#     frac = (xx2-xx3)/(xx1-xx3)
-#     vars.append(var)
-#     fracs.append(frac)
-# shape_output['vars'] = vars
-# shape_output['fracs'] = fracs
-# shape_output["num_objects"] = num_registered_objects
-# shape_output['gt_image'] = gt_images[-1]
-# shape_output['gt_image_bg'] = gt_images_bg[-1]
-# shape_output['rendered'] = rendered[-1]
+print(f"Running {scene_ID}")
+SCALE = 0.2
+# observations = load_observations_npz(scene_ID)
 
-# with open(file, 'r') as json_file:
-#     data = json.load(json_file)
+## NOTE: NOTE: NOTE: CHANGE LINE BELOW FOR FINAL EVAL
+observations = np.load('/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_npzs' + "/{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
+print(len(observations))
+# observations = np.load("{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
 
-# shape_output['answer'] = data['goal']['answer']['choice']
+preprocessed_data = preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH=0.6, scale=SCALE)
 
-# print("scene validity is ",plausible, " and the fraction is ", fracs[98], f"for {num_registered_objects} objects")
+(gt_images, gt_images_bg, gt_images_obj, intrinsics),\
+(gt_images_orig, gt_images_bg_orig, gt_images_obj_orig, intrinsics_orig),\
+registered_objects, obj_pixels, is_gravity, poses, cam_pose = preprocessed_data
 
-# with open(f'/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_results/shape_result_{scene_ID}.pkl', 'wb') as file:
-#     pickle.dump(shape_output, file)
+inverse_cam_pose = jnp.linalg.inv(cam_pose)
+
+# get obj indices padded
+all_obj_indices = [np.argwhere(gt_images_obj[i,...,2] != intrinsics.far) for i in range(gt_images.shape[0])]
+max_rows = max(obj_indices.shape[0] for obj_indices in all_obj_indices)
+def pad_array(array, max_rows):
+    padding = ((0, max_rows - array.shape[0]), (0, 0))  # Pad rows, not columns
+    return jnp.pad(array, padding, constant_values=-1)
+
+padded_all_obj_indices = jnp.stack([pad_array(array, max_rows) for array in all_obj_indices])
+
+b.setup_renderer(intrinsics, num_layers= 1024)
+for i,registered_obj in enumerate(registered_objects):
+    b.RENDERER.add_mesh(registered_obj['mesh'])
+    # f_p = registered_objects[i]["full_pose"]
+    # registered_objects[i]["full_pose"] = f_p.at[2,3].set(f_p[2,3] + 0.5*b.RENDERER.model_box_dims[i][2])
+if len(registered_objects) == 0:
+    t_start = gt_images.shape[0]-100
+    registered_objects.append({'t_init' : gt_images.shape[0]-100,
+                            'pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
+                            'full_pose' : jnp.eye(4).at[:3,3].set([0,0,1e+5]),
+                            't_full' : gt_images.shape[0]-100})
+    b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"), scaling_factor = 0.1)
+else:
+    t_start = np.min([x["t_full"] for x in registered_objects])
+# video_from_rendered(gt_images, scale = int(1/SCALE), framerate=30)
+
+height, width = intrinsics.height, intrinsics.width
+starting_indices = all_obj_indices[t_start]
+if starting_indices is not []:
+    mean_i, mean_j = np.median(starting_indices[:,0]), np.median(starting_indices[:,1])
+    from_top = (mean_i < height/2) and (mean_j > mean_i) and (mean_j < width -mean_i)
+else:
+    from_top = False
+
+gridding_schedules = []
+for box_dims in b.RENDERER.model_box_dims:
+    c2fm1 = 2
+    c2f0 = 1
+    c2f1 = 0.35 * c2f0
+    # c2f1 = 0.7 * c2f0
+    c2f2 = 0.7 * c2f1
+    c2f3 = 0.2 * c2f2
+    c2f4 = 0.2 * c2f3
+    c2f5 = 0.2 * c2f4
+    c2f6 = 0.2 * c2f5
+
+    c2fs = [c2f0,c2f1,c2f2,c2f3,c2f4]
+
+    x,y,z = box_dims
+    grid_widths = [[c2f*x, c2f*y, c2f*z] for c2f in c2fs]
+
+    grid_nums = [(13,13,13),(7,7,7),(7,7,7),(7,7,7), (7,7,7)]
+    gridding_schedule_trans = make_schedule_translation_3d_variable_grid(grid_widths, grid_nums)
+    gridding_schedules.append(gridding_schedule_trans)
+
+# Setup for inference
+T = gt_images.shape[0]
+num_registered_objects = len(registered_objects)
+variance = 0.1
+INIT_STATE = (
+        None,
+        None,
+        jnp.tile(jnp.eye(4).at[2,3].set(1e+5)[None,...],(num_registered_objects,1,1)),
+        jnp.zeros((T,num_registered_objects,4,4)),
+        t_start
+)
+MODEL_ARGS = (
+     jnp.array([r['t_init'] for r in registered_objects]),
+     jnp.array([r['t_full'] for r in registered_objects]),
+     jnp.array([r['pose'] for r in registered_objects]),
+     jnp.array([r['full_pose'] for r in registered_objects]),
+     (jnp.array([1e-0,1e-0,5e-1]), 5e-1),
+     variance,
+     None
+)
+CONSTANT_CHOICES = {}
+
+if from_top:
+    friction_params = (0.7,0.1)
+else:
+    friction_params = (0.02,0.05)
+
+key = jax.random.PRNGKey(np.random.randint(0,2332423432))
+if from_top:
+    n_particles = 3
+else:
+    n_particles = 30
+model = mcs_model
+
+if is_gravity:
+    print(f"{scene_ID} is a gravity scene")
+    plausible, plausibility_list, _ = gravity_scene_plausible(poses, intrinsics_orig, cam_pose, observations)
+    print(f"{scene_ID} --> {plausible}")
+else:
+    start = time.time()
+    lw, rendered, rendered_obj, inferred_poses, trace, indices = inference_approach_G2(model, gt_images, 
+    gridding_schedules, MODEL_ARGS, INIT_STATE, key, t_start, CONSTANT_CHOICES,friction_params, T, "pose", n_particles)
+    print ("FPS:", rendered.shape[0] / (time.time() - start))
+
+    print("finished run")
+
+    worst_rend = outlier_gaussian_double_vmap(gt_images[t_start:], gt_images_bg[t_start:], variance,None)
+
+    dummy_poses = np.tile(jnp.eye(4).at[2,3].set(-1e5)[None,None,None,...], (t_start,n_particles,num_registered_objects,1,1))
+    concat_inferred_poses = np.concatenate([dummy_poses, inferred_poses])
+
+    rend_ll = trace.project(genjax.select(("depth")))
+    phy_ll = [trace.project(genjax.select((f"pose_{i}"))) for i in range(num_registered_objects)]
+
+    data = {"rend_ll":rend_ll, "phy_ll":phy_ll, "all_obj_indices" :all_obj_indices,
+            "inferred_poses" : concat_inferred_poses,
+            "resampled_indices" : indices, "heuristic_poses" : poses, "worst_rend":worst_rend,
+            "intrinsics" : intrinsics, "variance" : variance}
+
+    plausible, t_violation, plausibility_list, _ = determine_plausibility_shape(data)
+
+
+shape_output = {}
+shape_output['plausibility'] = plausible
+
+best_p_idx = np.argmax(rend_ll[-1])
+vars = []
+fracs = []
+for var in np.linspace(0.002,0.501,500):
+    xx1 = threedp3_likelihood_arijit(gt_images[-1],gt_images[-1],var,None)
+    xx2 = threedp3_likelihood_arijit(gt_images[-1],rendered[-1][best_p_idx],var,None)
+    xx3 = threedp3_likelihood_arijit(gt_images[-1],gt_images_bg[-1],var,None)
+    frac = (xx2-xx3)/(xx1-xx3)
+    vars.append(var)
+    fracs.append(frac)
+shape_output['vars'] = vars
+shape_output['fracs'] = fracs
+shape_output["num_objects"] = num_registered_objects
+shape_output['gt_image'] = gt_images[-1]
+shape_output['gt_image_bg'] = gt_images_bg[-1]
+shape_output['rendered'] = rendered[-1]
+
+with open(file, 'r') as json_file:
+    data = json.load(json_file)
+
+shape_output['answer'] = data['goal']['answer']['choice']
+
+print("scene validity is ",plausible, " and the fraction is ", fracs[98], f"for {num_registered_objects} objects")
+
+with open(f'/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_results/shape_result_{scene_ID}.pkl', 'wb') as file:
+    pickle.dump(shape_output, file)
