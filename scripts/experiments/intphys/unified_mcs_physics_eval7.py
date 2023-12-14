@@ -395,9 +395,9 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
 
     def smc_body(carry, t):
         # get new keys
-        print("jit compiling")
+        # print("jit compiling")
         # initialize particle based on last time step
-        jprint("t = {}",t)
+        # jprint("t = {}",t)
         
         key, log_weights, states,  = carry
         key, importance_keys = make_new_keys(key, n_particles)
@@ -457,7 +457,7 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
     rendered = particles.get_retval()[0]
     rendered_obj = particles.get_retval()[1]
     inferred_poses = particles.get_retval()[2]
-    print("SCAN finished")
+    # print("SCAN finished")
     return final_log_weight, rendered, rendered_obj, inferred_poses, particles, indices
 
 
@@ -466,10 +466,7 @@ print(f"Running {scene_ID}")
 SCALE = 0.2
 # observations = load_observations_npz(scene_ID)
 
-## NOTE: NOTE: NOTE: CHANGE LINE BELOW FOR FINAL EVAL
-observations = np.load('/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_npzs' + "/{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
-print(len(observations))
-# observations = np.load("{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
+observations = np.load("{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
 
 preprocessed_data = preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH=0.6, scale=SCALE)
 
@@ -607,5 +604,5 @@ final_result = {"rating": int(plausible), "score" : float(plausible), "report" :
 
 print(final_result['score'])
 
-with open(f'/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/shape_results/final_result_{scene_ID}.pkl', 'wb') as file:
+with open(f'final_result_{scene_ID}.pkl', 'wb') as file:
     pickle.dump(final_result, file)

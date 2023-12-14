@@ -75,8 +75,7 @@ def intrinsics_from_step_metadata(step_metadata):
 scene_folder = sys.argv[1]
 
 files = sorted(glob.glob(scene_folder + "/*.json"))
-controller = mcs.create_controller("/home/ubuntu/arijit/bayes3d/scripts/experiments/intphys/mcs/config_level2.ini")
-
+controller = mcs.create_controller("mcs/config_level2.ini")
 
 # NOTE: REMINDER TO PUT THIS WHOILE THING INTO A TRY EXCCEPT
 for i, file in enumerate(files):

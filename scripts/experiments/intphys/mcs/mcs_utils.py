@@ -686,6 +686,35 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
             
     return plausible, plausibility_list, t_violation
 
+def threedp3_likelihood_arijit(
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    variance,
+    outlier_prob,
+):
+    distances = jnp.linalg.norm(observed_xyz - rendered_xyz, axis=-1)
+    probabilities_per_pixel = (distances < variance/2) / variance
+    average_probability = 1 * probabilities_per_pixel.mean()
+    return average_probability
+
+threedp3_likelihood_arijit_vmap = jax.vmap(threedp3_likelihood_arijit, in_axes=(None,0,None,None))
+threedp3_likelihood_arijit_double_vmap = jax.vmap(threedp3_likelihood_arijit, in_axes=(0,0,None,None))
+
+def outlier_gaussian(
+    observed_xyz: jnp.ndarray,
+    rendered_xyz: jnp.ndarray,
+    variance,
+    outlier_prob,
+):
+    distances = jnp.linalg.norm(observed_xyz - rendered_xyz, axis=-1)
+    probabilities_per_pixel = jax.scipy.stats.norm.pdf(
+        distances,
+        loc=0.0, 
+        scale=variance
+    )
+    average_probability = 0.01 * probabilities_per_pixel.sum()
+    return average_probability
+
 def determine_shape_constancy_plausibility(num_objects, last_gt_image, last_gt_image_bg, last_rend):
     # if not plausibility:
     #     return 0
