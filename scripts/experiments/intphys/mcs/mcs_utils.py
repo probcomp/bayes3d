@@ -214,6 +214,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
     gt_images = []
     gt_images_bg = []
     gt_images_obj = []
+    rgbs = []
     # Rule, for first frame, process any object as object model
     # Afterwards, everything must come from the edges
 
@@ -228,6 +229,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
         gt_image, depth, seg, rgb, intrinsics, cam_pose = observations_to_data_by_frame(observations, t, scale = 1)
         gt_image = np.asarray(gt_image)
         gt_images.append(gt_image)
+        rgbs.append(np.asarray(rgb))
         # print("t = ",t)
         seg_ids = np.unique(seg)
         obj_ids_fixed_shape, obj_mask = get_object_mask(gt_image, seg, size_thresh)
@@ -389,6 +391,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
     gt_images = np.stack(gt_images)
     gt_images_bg = np.stack(gt_images_bg)
     gt_images_obj = np.stack(gt_images_obj)
+    rgbs = np.stack(rgbs)
 
     # now extract the data at low resolution
     print("Extracting downsampled data")
@@ -407,7 +410,7 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
     # is_gravity = len(init_queue) > 0
 
 
-    return (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects, obj_pixels, is_gravity, poses, cam_pose
+    return rgbs, (gt_images_downsampled,gt_images_bg_downsampled,gt_images_obj_downsampled,intrinsics_downsampled),(gt_images, gt_images_bg, gt_images_obj,intrinsics), registered_objects, obj_pixels, is_gravity, poses, cam_pose
 
 
 def multiview(gt_images, gt_images_bg, gt_images_obj, tr,t):
