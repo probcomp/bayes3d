@@ -28,7 +28,7 @@ def ess(log_normalized_weights):
 
 
 class MCS_Observation:
-    def __init__(self, rgb, depth, intrinsics, segmentation):
+    def __init__(self, rgb, depth, intrinsics, segmentation, cam_pose):
         """RGBD Image
         
         Args:
@@ -42,6 +42,49 @@ class MCS_Observation:
         self.depth = depth
         self.intrinsics = intrinsics
         self.segmentation  = segmentation
+        self.cam_pose = cam_pose
+
+def get_obs_from_step_metadata(step_metadata, intrinsics, cam_pose):
+    rgb = np.array(list(step_metadata.image_list)[-1])
+    depth = np.array(list(step_metadata.depth_map_list)[-1])
+    seg = np.array(list(step_metadata.object_mask_list)[-1])
+    colors, seg_final_flat = np.unique(seg.reshape(-1,3), axis=0, return_inverse=True)
+    seg_final = seg_final_flat.reshape(seg.shape[:2])
+    observation = MCS_Observation(rgb, depth, intrinsics, seg_final, cam_pose)
+    return observation
+
+def cam_pose_from_step_metadata(step_metadata):
+    cam_pose_diff_orientation = np.array([
+        [ 1,0,0,0],
+        [0,0,-1,-4.5], # 4.5 is an arbitrary value
+        [ 0,1,0,step_metadata.camera_height],
+        [ 0,0,0,1]
+    ])
+    inv_cam_pose = np.linalg.inv(cam_pose_diff_orientation)
+    inv_cam_pose[1:3] *= -1
+    cam_pose = np.linalg.inv(inv_cam_pose)
+    return cam_pose
+
+def intrinsics_from_step_metadata(step_metadata):
+    width, height = step_metadata.camera_aspect_ratio
+    aspect_ratio = width / height
+    cx, cy = width / 2.0, height / 2.0
+    fov_y = np.deg2rad(step_metadata.camera_field_of_view)
+    fov_x = 2 * np.arctan(aspect_ratio * np.tan(fov_y / 2.0))
+    fx = cx / np.tan(fov_x / 2.0)
+    fy = cy / np.tan(fov_y / 2.0)
+    clipping_near, clipping_far = step_metadata.camera_clipping_planes
+    intrinsics = {
+        'width' : width,
+        'height' : height,
+        'cx' : cx,
+        'cy' : cy,
+        'fx' : fx,
+        'fy' : fy,
+        'near' : clipping_near,
+        'far' : clipping_far
+    }
+    return intrinsics
 
 load_observations_npz = lambda x : np.load('val7_physics_npzs' + "/{}.npz".format(x),allow_pickle=True)["arr_0"]
 
@@ -230,12 +273,10 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
         gt_image = np.asarray(gt_image)
         gt_images.append(gt_image)
         rgbs.append(np.asarray(rgb))
-        # print("t = ",t)
         seg_ids = np.unique(seg)
         obj_ids_fixed_shape, obj_mask = get_object_mask(gt_image, seg, size_thresh)
         # remove all the -1 indices
         obj_ids = np.delete(np.sort(np.unique(obj_ids_fixed_shape)),0) # This will not be jittable
-        # print(obj_ids)
         depth_bg = depth * (1.0 - obj_mask) + intrinsics.far * (obj_mask)
         depth_obj = depth * (obj_mask) + intrinsics.far * (1.0 - obj_mask)
         gt_images_bg.append(np.asarray(b.t3d.unproject_depth(depth_bg, intrinsics)))
@@ -252,7 +293,6 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
             rows, cols = np.where(seg == obj_id)
             distance_to_edge_1 = min(np.abs(rows - 0).min(), np.abs(rows - intrinsics.height + 1).min())
             distance_to_edge_2 = min(np.abs(cols - 0).min(), np.abs(cols - intrinsics.width + 1).min())
-            # print(distance_to_edge_1, distance_to_edge_2)
 
             if t == 0:
                 init_object_model = True
@@ -332,7 +372,6 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                 if min_dist < MIN_DIST_THRESH:
                     if not (distance_to_edge_1 == 0 or distance_to_edge_2 == 0):
                         # object is now ready to be initialized
-                        # print("Obj init")
                         init_object_model = True
                         init_object_model_metadata = {
                             't_init' : init_queue[init_queue_idx]['t_init'],
@@ -364,13 +403,11 @@ def preprocess_mcs_physics_scene(observations, MIN_DIST_THRESH = 0.6, scale = 0.
                 full_shape = np.vstack(slices) * resolution
 
                 dims, pose = b.utils.aabb(full_shape)
-                # print("before making mesh object", get_gpu_mem())
 
                 mesh = b.utils.make_marching_cubes_mesh_from_point_cloud(
                     b.t3d.apply_transform(full_shape, b.t3d.inverse_pose(pose)),
                     0.075
                 )
-                # print("before adding", get_gpu_mem())
                 # renderer.add_mesh(mesh)
                 
                 init_object_model_metadata['mesh'] = mesh
@@ -611,8 +648,6 @@ def gravity_scene_plausible(poses, intrinsics, cam_pose, observations):
             correct_id = obj_id
 
     ref_pose = poses[idx][correct_id]
-    # print(idx)
-    # print((cam_pose @ ref_pose)[:3,3])
 
     gt_image, depth, seg, *_= observations_to_data_by_frame(observations, idx, scale = 1)
     obj_seg = None

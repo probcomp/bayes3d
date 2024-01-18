@@ -29,8 +29,6 @@ import pickle5
 import zlib
 console = genjax.pretty()
 
-# model time!
-
 def get_height_bounds(i, world_pose):
     # Half dimensions to get the corner points relative to the center
     rotation_matrix = world_pose[:3,:3]
@@ -74,56 +72,50 @@ def get_translation_direction(all_poses, t_init,t_full, t):
 # This model has to be recompiled for different # objects for now this is okay
 @genjax.gen
 def physics_stepper(all_poses, t, t_init, t_full, i, friction, gravity):
-    # TODO: SAMPLING FRICTION SCHEME --> can be of a hmm style
 
     #################################################################
     # First let us consider timestep t-1
     #################################################################
-    # Step 2: find world pose
+    # Step 1: find world pose
     pose_prev = all_poses[t-1]
     pose_prev_world = cam_pose @ pose_prev
 
-    # Step 3: check if we are already on the floor
+    # Step 2: check if we are already on the floor
     bottom_z, top_z, center_to_bottom = get_height_bounds(i, pose_prev_world)
     # within 20% of the object's height in world frame
     already_on_floor = jnp.less_equal(bottom_z,0.2 * (top_z - bottom_z))
     
-    # Step 1: Find world velocity
+    # Step 3: Find world velocity
     vel_pose_camera = jnp.linalg.solve(all_poses[t-2], all_poses[t-1])
     pre_vel_xyz_world = cam_pose[:3,:3] @ vel_pose_camera[:3,3]
     mag_xy = jnp.linalg.norm(pre_vel_xyz_world[:2])
     
     mag_xy_friction = mag_xy - friction * mag_xy
-
-    # mag_xy_friction = jax.lax.cond(
-    #     jnp.less_equal(jnp.abs(mag_xy_friction),3e-3),
-    #     lambda:0.0,
-    #     lambda:mag_xy_friction)
     
     mag_xy, gravity = jax.lax.cond(already_on_floor,lambda:(mag_xy_friction,gravity),lambda:(mag_xy, gravity))
 
     dir_xy_world = get_translation_direction(all_poses, t_init, t_full, t)
 
-    # Step 7: Determine mag and gravity
+    # Step 4: Determine mag and gravity
 
     vel_xyz_world = mag_xy * dir_xy_world
-    # Step 6: apply z axis change
+    # Step 5: apply z axis change
     vel_xyz_world = vel_xyz_world.at[2].set(pre_vel_xyz_world[2] - gravity * 1./20)
 
-    # Step 5: find peturbed velocity (equal to original norm) with random rotation
+    # Step 6: find peturbed velocity (equal to original norm) with random rotation
     perturbed_rot_pose = GaussianVMFPoseUntraced()(jnp.eye(4), *(1e-20, 10000.0))  @ "perturb"
 
     vel_xyz_world_perturbed = perturbed_rot_pose[:3,:3] @ vel_xyz_world # without friction
 
     vel_xyz_camera = inverse_cam_pose[:3,:3] @ vel_xyz_world_perturbed
 
-    # Step 8: Get velocity update in camera frame
+    # Step 7: Get velocity update in camera frame
     vel = pose_prev.at[:3,3].set(vel_xyz_camera)
 
-    # Step 9: Identify next pose
+    # Step 8: Identify next pose
     next_pose = pose_prev.at[:3,3].set(pose_prev[:3,3] + vel[:3,3]) # trans only, no rot
 
-    # Step 10: Ensure new bottom of object is above floor --> ground collision
+    # Step 9: Ensure new bottom of object is above floor --> ground collision
     next_pose_world = cam_pose @ next_pose
     bottom_z,_,center_to_bottom = get_height_bounds(i, next_pose_world)
     next_pose = jax.lax.cond(
@@ -131,7 +123,6 @@ def physics_stepper(all_poses, t, t_init, t_full, i, friction, gravity):
         lambda:inverse_cam_pose @ next_pose_world.at[2,3].set(center_to_bottom),
         lambda:next_pose
     )
-
     return next_pose
 
 def threedp3_likelihood_arijit(
@@ -187,10 +178,7 @@ class ImageLikelihoodArijit(ExactDensity):
     def sample(self, key, img, variance, outlier_prob):
         return img
 
-    def logpdf(self, observed_image, latent_image, variance, outlier_prob):
-        # return threedp3_likelihood_arijit(
-        #     observed_image, latent_image, variance, outlier_prob,
-        # )        
+    def logpdf(self, observed_image, latent_image, variance, outlier_prob):    
         return outlier_gaussian(
             observed_image, latent_image, variance, outlier_prob,
         )
@@ -211,7 +199,6 @@ def mcs_model(prev_state, t_inits, t_fulls, init_poses, full_poses, pose_update_
 
     (_, _, poses, all_poses, friction, t, gravity) = prev_state
 
-    # jprint("t = {}, f = {}",t, friction)
     num_objects = poses.shape[0]
     
     # for each object
@@ -242,7 +229,6 @@ def mcs_model(prev_state, t_inits, t_fulls, init_poses, full_poses, pose_update_
     rendered_image = splice_image(rendered_image_obj, gt_images_bg[t])
 
     sampled_image = ImageLikelihoodArijit()(rendered_image, variance, outlier_prob) @ "depth"
-    # sampled_image = b.old_image_likelihood(rendered_image, 0.1, 0.001,1000,None) @ "depth"
 
     return (rendered_image, rendered_image_obj, poses, all_poses, friction, t+1, gravity)
 
@@ -253,9 +239,6 @@ def pose_update_v5(key, trace_, pose_grid, enumerator):
         weights = enumerator.enumerate_choices_get_scores(trace_, key, split_pose_grid)
         all_weights = jnp.hstack([all_weights, weights])
     sampled_idx = all_weights.argmax() # jax.random.categorical(key, weights)
-    # jprint("weights = {}",all_weights)
-    # jprint("weight mix:{}",jnp.unique(jnp.sort(all_weights), size = 10))
-    # jprint("idx chosen = {}",sampled_idx)
     return *enumerator.update_choices_with_weight(
         trace_, key,
         pose_grid[sampled_idx]
@@ -278,31 +261,9 @@ def c2f_pose_update_v5(key, trace_, reference, gridding_schedule, enumerator, ob
         # if pose is not valid, use the reference pose
         valid_grid = jnp.where(valid[:,None,None], updated_grid, reference[None,...])
         weight, trace_, reference = pose_update_v5_jit(key, trace_, valid_grid, enumerator)
-        # jprint("ref position is {}", reference[:3,3])
 
     return weight, trace_
 
-# def c2f_pose_update_v5(key, trace_, reference, gridding_schedule, enumerator, obj_id,):
-
-#     def c2f_body(carry, grid):
-#         trace_, reference = carry
-#         updated_grid = jnp.einsum("ij,ajk->aik", reference, grid)
-#         # Time to check valid poses that dont intersect with the floor
-#         valid = jnp.logical_not(are_bboxes_intersecting_many_jit(
-#                             (100,100,20),
-#                             b.RENDERER.model_box_dims[obj_id],
-#                             jnp.eye(4).at[:3,3].set([0,0,-10.1]),
-#                             jnp.einsum("ij,ajk->aik",cam_pose,updated_grid)
-#                             ))
-#         # if pose is not valid, use the reference pose
-#         valid_grid = jnp.where(valid[:,None,None], updated_grid, reference[None,...])
-#         weight, trace_, reference = pose_update_v5_jit(key, trace_, valid_grid, enumerator)
-#         # jprint("ref position is {}", reference[:3,3])
-#         return  (trace_, reference), weight
-
-#     (trace_, _), weights = jax.lax.scan(c2f_body, (trace_, reference),gridding_schedule)
-
-#     return weights[-1], trace_
 
 c2f_pose_update_v5_vmap_jit = jax.jit(jax.vmap(c2f_pose_update_v5, in_axes=(0,0,None,None,None)),
                                     static_argnames=("enumerator", "obj_id"))
@@ -379,11 +340,8 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
 
     # sample friction
     key, friction_keys = make_new_keys(key, n_particles)
-    # frictions = jax.vmap(genjax.normal.sample, in_axes = (0,None,None))(friction_keys,*friction_params)
-    # frictions = jnp.linspace(-0.03,0.07,n_particles)
     qs = jnp.linspace(0.05,0.95,n_particles)
     frictions = tfp.distributions.Normal(*friction_params).quantile(qs)
-    # frictions = frictions.at[n_particles-1].set(0.5)
     gravities = jnp.linspace(0.5,2,n_particles)
     # broadcast init_state to number of particles
     init_states = jax.vmap(lambda f,g:(*init_state[:4], f, init_state[4], g), in_axes=(0,0))(frictions, gravities)
@@ -395,9 +353,6 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
 
     def smc_body(carry, t):
         # get new keys
-        # print("jit compiling")
-        # initialize particle based on last time step
-        # jprint("t = {}",t)
         
         key, log_weights, states,  = carry
         key, importance_keys = make_new_keys(key, n_particles)
@@ -438,9 +393,7 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
 
         eff_ss, priority_fn_log_probs = resampling_priority_fn(particles, padded_all_obj_indices, t)
 
-        # jprint("t = {}, ess = {}", t, eff_ss)
-
-        # # Resampling when ess is below threshold
+        # Resampling when ess is below threshold
         indices = jax.lax.cond(eff_ss <= 0.9*n_particles,
                                lambda: jax.random.categorical(resample_key, priority_fn_log_probs, shape=(n_particles,)),
                                lambda: jnp.arange(n_particles))
@@ -457,14 +410,12 @@ def inference_approach_G2(model, gt, gridding_schedules, model_args, init_state,
     rendered = particles.get_retval()[0]
     rendered_obj = particles.get_retval()[1]
     inferred_poses = particles.get_retval()[2]
-    # print("SCAN finished")
     return final_log_weight, rendered, rendered_obj, inferred_poses, particles, indices
 
 
 scene_ID = sys.argv[1]
 print(f"Running {scene_ID}")
 SCALE = 0.2
-# observations = load_observations_npz(scene_ID)
 
 observations = np.load("{}.npz".format(scene_ID),allow_pickle=True)["arr_0"]
 
@@ -488,8 +439,6 @@ padded_all_obj_indices = jnp.stack([pad_array(array, max_rows) for array in all_
 b.setup_renderer(intrinsics, num_layers= 1024)
 for i,registered_obj in enumerate(registered_objects):
     b.RENDERER.add_mesh(registered_obj['mesh'])
-    # f_p = registered_objects[i]["full_pose"]
-    # registered_objects[i]["full_pose"] = f_p.at[2,3].set(f_p[2,3] + 0.5*b.RENDERER.model_box_dims[i][2])
 if len(registered_objects) == 0:
     t_start = gt_images.shape[0]-100
     registered_objects.append({'t_init' : gt_images.shape[0]-100,
@@ -499,7 +448,6 @@ if len(registered_objects) == 0:
     b.RENDERER.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"), scaling_factor = 0.1)
 else:
     t_start = np.min([x["t_full"] for x in registered_objects])
-# video_from_rendered(gt_images, scale = int(1/SCALE), framerate=30)
 
 height, width = intrinsics.height, intrinsics.width
 starting_indices = all_obj_indices[t_start]
@@ -514,12 +462,9 @@ for box_dims in b.RENDERER.model_box_dims:
     c2fm1 = 2
     c2f0 = 1
     c2f1 = 0.35 * c2f0
-    # c2f1 = 0.7 * c2f0
     c2f2 = 0.7 * c2f1
     c2f3 = 0.2 * c2f2
     c2f4 = 0.2 * c2f3
-    c2f5 = 0.2 * c2f4
-    c2f6 = 0.2 * c2f5
 
     c2fs = [c2f0,c2f1,c2f2,c2f3,c2f4]
 
