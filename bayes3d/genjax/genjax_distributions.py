@@ -1,20 +1,20 @@
 import jax
 from dataclasses import dataclass
+from genjax.core.datatypes import JAXGenerativeFunction
 from genjax.generative_functions.distributions import ExactDensity
 import jax.numpy as jnp
 import bayes3d as b
 
 @dataclass
-class GaussianVMFPose(ExactDensity):
+class GaussianVMFPose(ExactDensity, JAXGenerativeFunction):
     def sample(self, key, pose_mean, var, concentration, **kwargs):
         return b.distributions.gaussian_vmf(key, pose_mean, var, concentration)
 
     def logpdf(self, pose, pose_mean, var, concentration, **kwargs):
-
         return b.distributions.gaussian_vmf_logpdf(pose, pose_mean, var, concentration)
 
 @dataclass
-class UniformPose(ExactDensity):
+class UniformPose(ExactDensity, JAXGenerativeFunction):
     def sample(self, key, low, high, **kwargs):
         position = jax.random.uniform(key, shape=(3,)) * (high - low) + low
         orientation = b.quaternion_to_rotation_matrix(jax.random.normal(key, shape=(4,)))
@@ -27,7 +27,7 @@ class UniformPose(ExactDensity):
         return position_score.sum() + jnp.pi**2
 
 @dataclass
-class ImageLikelihood(ExactDensity):
+class ImageLikelihood(ExactDensity, JAXGenerativeFunction):
     def sample(self, key, img, variance, outlier_prob):
         return img
 
@@ -37,7 +37,7 @@ class ImageLikelihood(ExactDensity):
         )
 
 @dataclass
-class ContactParamsUniform(ExactDensity):
+class ContactParamsUniform(ExactDensity, JAXGenerativeFunction):
     def sample(self, key, low, high):
         return jax.random.uniform(key, shape=(3,)) * (high - low) + low
 
@@ -47,7 +47,7 @@ class ContactParamsUniform(ExactDensity):
         return log_probs.sum()
 
 @dataclass
-class UniformDiscreteArray(ExactDensity):
+class UniformDiscreteArray(ExactDensity, JAXGenerativeFunction):
     def sample(self, key, vals, arr):
         return jax.random.choice(key, vals, shape=arr.shape)
 
@@ -56,13 +56,12 @@ class UniformDiscreteArray(ExactDensity):
 
 
 @dataclass
-class UniformDiscrete(ExactDensity):
+class UniformDiscrete(ExactDensity, JAXGenerativeFunction):
     def sample(self, key, vals):
         return jax.random.choice(key, vals)
 
     def logpdf(self, sampled_val, vals,**kwargs):
         return jnp.log(1.0 / (vals.shape[0]))
-
 
 gaussian_vmf_pose = GaussianVMFPose()
 image_likelihood = ImageLikelihood()

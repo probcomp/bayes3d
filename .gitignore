@@ -30,3 +30,4 @@ assets/*
 *.txt
 *.pdf
 *.pkl
+.DS_Store
