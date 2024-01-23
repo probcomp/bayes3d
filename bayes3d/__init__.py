@@ -21,4 +21,4 @@ except ImportError as e:
 
 
 
-RENDERER = None
+RENDERER: Renderer = None
