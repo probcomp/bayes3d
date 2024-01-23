@@ -34,11 +34,18 @@ normal_cdf = jax.scipy.stats.norm.cdf
 normal_pdf = jax.scipy.stats.norm.pdf
 normal_logpdf = jax.scipy.stats.norm.logpdf
 inv = jnp.linalg.inv
+from bayes3d._mkl.types import (
+    Array,
+    CholeskyMatrix,
+    CovarianceMatrix,
+    Direction,
+    Float,
+    Matrix,
+    PrecisionMatrix,
+    Vector,
+)
 
 key = jax.random.PRNGKey(0)
-
-# %% ../../scripts/_mkl/notebooks/06a - Gaussian Renderer.ipynb 5
-from bayes3d._mkl.types import *
 
 
 # %% ../../scripts/_mkl/notebooks/06a - Gaussian Renderer.ipynb 6

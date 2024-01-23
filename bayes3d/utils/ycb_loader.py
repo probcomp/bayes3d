@@ -80,7 +80,7 @@ def get_test_img(scene_id, img_id, ycb_dir):
     cam_depth_scale = image_cam_data["depth_scale"]
 
     # get {visible mask, ID, pose} for each object in the scene
-    anno = dict()
+    # anno = dict()
 
     # get GT object model ID+poses
     objects_gt_data = scene_imgs_gt_data[remove_zero_pad(img_id)]

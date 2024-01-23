@@ -137,10 +137,9 @@ def load_r3d(r3d_path):
 
     color_paths = natsorted(glob.glob(os.path.join(datapath, "rgbd", "*.jpg")))
     depth_paths = natsorted(glob.glob(os.path.join(datapath, "rgbd", "*.depth")))
-    conf_paths = natsorted(glob.glob(os.path.join(datapath, "rgbd", "*.conf")))
 
     colors = np.array([load_color(color_paths[i]) for i in range(len(color_paths))])
-    depths = np.array([load_depth(depth_paths[i]) for i in range(len(color_paths))])
+    depths = np.array([load_depth(depth_paths[i]) for i in range(len(depth_paths))])
     depths[np.isnan(depths)] = 0.0
 
     poses = get_poses(metadata)

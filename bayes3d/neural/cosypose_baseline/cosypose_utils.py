@@ -2,18 +2,17 @@ import os
 import signal
 import subprocess
 import sys
+import time
 
 import numpy as np
+import torch
+import yaml
 
 cosypose_path = (
     f"{os.path.dirname(os.path.abspath(__file__))}/cosypose_baseline/cosypose"
 )
 sys.path.append(cosypose_path)  # TODO cleaner import / add to path
 
-import time
-
-import torch
-import yaml
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -211,7 +210,7 @@ if __name__ == "__main__":
 
         pred_poses = np.asarray(pred.poses.cpu())
         pred_ids = [
-            int(l[-3:]) - 1 for l in pred.infos.label
+            int(label[-3:]) - 1 for label in pred.infos.label
         ]  # ex) 'obj_000014' for GT_IDX 13
         pred_scores = [pred.infos.iloc[i].score for i in range(len(pred.infos))]
 

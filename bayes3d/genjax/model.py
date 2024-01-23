@@ -8,7 +8,12 @@ from genjax.incremental import Diff, NoChange, UnknownChange
 
 import bayes3d as b
 
-from .genjax_distributions import *
+from .genjax_distributions import (
+    contact_params_uniform,
+    image_likelihood,
+    uniform_discrete,
+    uniform_pose,
+)
 
 
 @genjax.static
@@ -64,7 +69,7 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
 
     variance = genjax.uniform(0.00000000001, 10000.0) @ "variance"
     outlier_prob = genjax.uniform(-0.01, 10000.0) @ "outlier_prob"
-    image = image_likelihood(rendered, variance, outlier_prob) @ "image"
+    _image = image_likelihood(rendered, variance, outlier_prob) @ "image"
     return (
         rendered,
         indices,

@@ -86,7 +86,7 @@ def pybullet_render(scene):
     return image, depth
 
 
-def create_box(
+def create_box_from_pose(
     pose,
     scale=[1, 1, 1],
     restitution=1,
@@ -500,7 +500,7 @@ class Scene:
         return pyb
 
     def close(self):
-        if self.pyb_sim == None:
+        if self.pyb_sim is None:
             raise ValueError("No pybullet simulation to close")
         else:
             p.disconnect(self.pyb_sim.client)

@@ -159,7 +159,7 @@ def read_points3D_binary(path_to_model_file):
             track_length = read_next_bytes(fid, num_bytes=8, format_char_sequence="Q")[
                 0
             ]
-            track_elems = read_next_bytes(
+            _track_elems = read_next_bytes(
                 fid,
                 num_bytes=8 * track_length,
                 format_char_sequence="ii" * track_length,

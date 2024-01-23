@@ -112,7 +112,6 @@ def add_edge_scene_graph(
     scene_graph, parent, child, face_parent, face_child, contact_params
 ):
     print(parent, child, face_parent, face_child)
-    N = scene_graph.get_poses().shape[0]
     sg_parents = jnp.array(scene_graph.parents)
     sg_parents = sg_parents.at[child].set(parent)
     sg_contact_params = jnp.array(scene_graph.contact_params)

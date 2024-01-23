@@ -1,6 +1,8 @@
 import kubric as kb
 import numpy as np
 
+rng = np.random.default_rng(2021)
+
 
 def get_linear_camera_motion_start_end(
     movement_speed: float,

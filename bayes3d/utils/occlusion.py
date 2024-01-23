@@ -21,7 +21,7 @@ def voxel_occupied_occluded_free(camera_pose, depth_image, grid, intrinsics, tol
     occupied = jnp.abs(real_depth_vals - projected_depth_vals) < tolerance
     occluded = real_depth_vals < projected_depth_vals
     occluded = occluded * (1.0 - occupied)
-    free = (1.0 - occluded) * (1.0 - occupied)
+    _free = (1.0 - occluded) * (1.0 - occupied)
     return 1.0 * occupied + 0.5 * occluded
 
 

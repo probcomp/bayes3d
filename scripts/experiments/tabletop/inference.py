@@ -3,13 +3,13 @@ import os
 import genjax
 import jax
 import jax.numpy as jnp
+import joblib
 from tqdm import tqdm
 
 import bayes3d as b
 import bayes3d.genjax
 
 console = genjax.pretty(show_locals=False)
-import joblib
 
 intrinsics = b.Intrinsics(
     height=100, width=100, fx=500.0, fy=500.0, cx=50.0, cy=50.0, near=0.01, far=20.0

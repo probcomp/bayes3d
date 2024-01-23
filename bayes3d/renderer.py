@@ -382,10 +382,10 @@ def build_load_vertices_primitive(r: "Renderer"):
         # Extract the numpy type of the inputs
         vertices_aval, triangles_aval = ctx.avals_in
 
-        if np.dtype(vertices_aval.dtype) != np.float32:
-            raise NotImplementedError(f"Unsupported vertices dtype {np_dtype}")
-        if np.dtype(triangles_aval.dtype) != np.int32:
-            raise NotImplementedError(f"Unsupported triangles dtype {np_dtype}")
+        if (dt := np.dtype(vertices_aval.dtype)) != np.float32:
+            raise NotImplementedError(f"Unsupported vertices dtype {dt}")
+        if (dt := np.dtype(triangles_aval.dtype)) != np.int32:
+            raise NotImplementedError(f"Unsupported triangles dtype {dt}")
 
         opaque = dr._get_plugin(gl=True).build_load_vertices_descriptor(
             r.renderer_env.cpp_wrapper, vertices_aval.shape[0], triangles_aval.shape[0]

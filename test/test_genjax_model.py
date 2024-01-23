@@ -72,7 +72,7 @@ def test_genjax_trace_contains_right_info():
         ),
     )
 
-    scores = enumerators.enumerate_choices_get_scores(trace, key, jnp.zeros((100, 3)))
+    _scores = enumerators.enumerate_choices_get_scores(trace, key, jnp.zeros((100, 3)))
 
     assert trace["parent_0"] == -1
     assert (trace["camera_pose"] == jnp.eye(4)).all()

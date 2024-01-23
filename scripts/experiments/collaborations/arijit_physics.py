@@ -24,7 +24,7 @@ def body_fun(prev):
 def model(T):
     pose = b.uniform_pose(jnp.ones(3) * -1.0, jnp.ones(3) * 1.0) @ "init_pose"
     velocity = b.gaussian_vmf_pose(jnp.eye(4), 0.01, 10000.0) @ "init_velocity"
-    evolve = (
+    _evolve = (
         genjax.UnfoldCombinator.new(body_fun, 100)(50, (0, pose, velocity)) @ "dynamics"
     )
     return 1.0

@@ -78,8 +78,7 @@ def physics_prior_v1(prev_pose, prev_prev_pose, bbox_dims, camera_pose, world2ca
 
     # I1 -> Integrate X-Y-Z forward to current time step
     # jprint("pred pos: {}", camera_pose[:3,:] @ jnp.concatenate([pred_pos, 1], axis = None))
-    physics_estimated_pose = jnp.copy(prev_pose)  # orientation is the same
-    physics_estimated_pose = physics_estimated_pose.at[:3, 3].set(pred_pos)
+    physics_estimated_pose = prev_pose.at[:3, 3].set(pred_pos)
 
     return physics_estimated_pose
 
@@ -152,8 +151,9 @@ def physics_prior_v2(
 
     # I1 -> Integrate X-Y-Z forward to current time step
     # jprint("pred pos: {}", camera_pose[:3,:] @ jnp.concatenate([pred_pos, 1], axis = None))
-    physics_estimated_pose = jnp.copy(prev_pose)  # orientation is the same
-    physics_estimated_pose = physics_estimated_pose.at[:3, 3].set(pred_pos)
+    # NOTE @sritchie and @colin modified this line in response to a Ruff error;
+    # we'll flag this in code review but this could be buggy.
+    physics_estimated_pose = prev_poses[T].at[:3, 3].set(pred_pos)
 
     return physics_estimated_pose
 
