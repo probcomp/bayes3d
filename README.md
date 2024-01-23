@@ -26,7 +26,7 @@ pip install -e .
 
 Install GenJAX (optional):
 ```
-pip install git+https://github.com/probcomp/genjax.git
+pip install git+https://github.com/probcomp/genjax.git@v0.1.0
 ```
 
 Install JAX and Torch:
