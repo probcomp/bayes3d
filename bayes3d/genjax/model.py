@@ -8,14 +8,12 @@ import jax
 import os
 import jax.tree_util as jtu
 from tqdm import tqdm
-from genjax._src.core.transforms.incremental import NoChange
-from genjax._src.core.transforms.incremental import UnknownChange
-from genjax._src.core.transforms.incremental import Diff
+from genjax.incremental import UnknownChange, NoChange, Diff
 from collections import namedtuple
 import inspect
 from .genjax_distributions import *
 
-@genjax.gen
+@genjax.static
 def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_dims):
     indices = jnp.array([], dtype=jnp.int32)
     root_poses = jnp.zeros((0,4,4))
@@ -60,8 +58,8 @@ def model(array, possible_object_indices, pose_bounds, contact_bounds, all_box_d
         jnp.linalg.inv(camera_pose) @ poses , indices
     )[...,:3]
 
-    variance = genjax.distributions.tfp_uniform(0.00000000001, 10000.0) @ "variance"
-    outlier_prob  = genjax.distributions.tfp_uniform(-0.01, 10000.0) @ "outlier_prob"
+    variance = genjax.uniform(0.00000000001, 10000.0) @ "variance"
+    outlier_prob  = genjax.uniform(-0.01, 10000.0) @ "outlier_prob"
     image = image_likelihood(rendered, variance, outlier_prob) @ "image"
     return rendered, indices, poses, parents, contact_params, faces_parents, faces_child, root_poses
 

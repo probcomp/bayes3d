@@ -15,8 +15,10 @@ from . import colmap
 try:
     import genjax
     from .genjax import *
-except ImportError:
+except ImportError as e:
     print("GenJAX not installed. Importing bayes3d without genjax dependencies.")
+    print(e)
+
 
 
 RENDERER = None
