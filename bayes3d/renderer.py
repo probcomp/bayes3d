@@ -1,46 +1,47 @@
-from typing import Tuple
-import gc
 import functools
-import bayes3d.rendering.nvdiffrast.common as dr
-import bayes3d.camera
-import bayes3d as j
-import bayes3d as b
-import bayes3d.transforms_3d as t3d
-import trimesh
-import jax.numpy as jnp
+import gc
+
 import jax
+import jax.numpy as jnp
+import numpy as np
+import trimesh
 from jax import core, dtypes
 from jax.core import ShapedArray
 from jax.interpreters import batching, mlir, xla
 from jax.lib import xla_client
-import numpy as np
 from jaxlib.hlo_helpers import custom_call
-from tqdm import tqdm
+
+import bayes3d as b
+import bayes3d as j
+import bayes3d.camera
+import bayes3d.rendering.nvdiffrast.common as dr
+
 
 def _transform_image_zeros(image_jnp, intrinsics):
     image_jnp_2 = jnp.concatenate(
-        [
-            j.t3d.unproject_depth(image_jnp[:,:,2], intrinsics),
-            image_jnp[:,:,3:]
-        ],
-        axis=-1
+        [j.t3d.unproject_depth(image_jnp[:, :, 2], intrinsics), image_jnp[:, :, 3:]],
+        axis=-1,
     )
     return image_jnp_2
+
+
 _transform_image_zeros_jit = jax.jit(_transform_image_zeros)
-_transform_image_zeros_parallel = jax.vmap(_transform_image_zeros, in_axes=(0,None))
+_transform_image_zeros_parallel = jax.vmap(_transform_image_zeros, in_axes=(0, None))
 _transform_image_zeros_parallel_jit = jax.jit(_transform_image_zeros_parallel)
+
 
 def setup_renderer(intrinsics, num_layers=1024):
     """Setup the renderer.
     Args:
-        intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.    
+        intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
     """
     b.RENDERER = Renderer(intrinsics, num_layers=num_layers)
+
 
 class Renderer(object):
     def __init__(self, intrinsics, num_layers=1024):
         """A renderer for rendering meshes.
-        
+
         Args:
             intrinsics (bayes3d.camera.Intrinsics): The camera intrinsics.
             num_layers (int, optional): The number of scenes to render in parallel. Defaults to 1024.
@@ -50,18 +51,24 @@ class Renderer(object):
         self.intrinsics = intrinsics
 
         self.proj_matrix = b.camera._open_gl_projection_matrix(
-            intrinsics.height, intrinsics.width, 
-            intrinsics.fx, intrinsics.fy, 
-            intrinsics.cx, intrinsics.cy, 
-            intrinsics.near, intrinsics.far
+            intrinsics.height,
+            intrinsics.width,
+            intrinsics.fx,
+            intrinsics.fy,
+            intrinsics.cx,
+            intrinsics.cy,
+            intrinsics.near,
+            intrinsics.far,
         )
-                
-        self.renderer_env = dr.RasterizeGLContext(self.height, self.width, output_db=False)
+
+        self.renderer_env = dr.RasterizeGLContext(
+            self.height, self.width, output_db=False
+        )
         build_setup_primitive(self, self.height, self.width, num_layers).bind()
 
-        self.meshes =[]
-        self.mesh_names =[]
-        self.model_box_dims = jnp.zeros((0,3))
+        self.meshes = []
+        self.mesh_names = []
+        self.model_box_dims = jnp.zeros((0, 3))
 
     def clear_gpu_meshmem(self):
         """
@@ -77,9 +84,16 @@ class Renderer(object):
         # Force the garbage collector to run to reclaim memory
         gc.collect()
 
-    def add_mesh_from_file(self, mesh_filename, mesh_name=None, scaling_factor=1.0, force=None, center_mesh=True):
+    def add_mesh_from_file(
+        self,
+        mesh_filename,
+        mesh_name=None,
+        scaling_factor=1.0,
+        force=None,
+        center_mesh=True,
+    ):
         """Add a mesh to the renderer from a file.
-        
+
         Args:
             mesh_filename (str): The filename of the mesh.
             mesh_name (str, optional): The name of the mesh. Defaults to None.
@@ -88,11 +102,16 @@ class Renderer(object):
             center_mesh (bool, optional): Whether to center the mesh. Defaults to True.
         """
         mesh = trimesh.load(mesh_filename, force=force)
-        self.add_mesh(mesh, mesh_name=mesh_name, scaling_factor=scaling_factor, center_mesh=center_mesh)
+        self.add_mesh(
+            mesh,
+            mesh_name=mesh_name,
+            scaling_factor=scaling_factor,
+            center_mesh=center_mesh,
+        )
 
     def add_mesh(self, mesh, mesh_name=None, scaling_factor=1.0, center_mesh=True):
         """Add a mesh to the renderer.
-        
+
         Args:
             mesh (trimesh.Trimesh): The mesh to add.
             mesh_name (str, optional): The name of the mesh. Defaults to None.
@@ -101,47 +120,45 @@ class Renderer(object):
         """
         if mesh_name is None:
             mesh_name = f"object_{len(self.meshes)}"
-        
+
         mesh.vertices = mesh.vertices * scaling_factor
-        
+
         bounding_box_dims, bounding_box_pose = bayes3d.utils.aabb(mesh.vertices)
         if center_mesh:
-            if not jnp.isclose(bounding_box_pose[:3,3], 0.0).all():
+            if not jnp.isclose(bounding_box_pose[:3, 3], 0.0).all():
                 print(f"Centering mesh with translation {bounding_box_pose[:3,3]}")
-            mesh.vertices = mesh.vertices - bounding_box_pose[:3,3]
+            mesh.vertices = mesh.vertices - bounding_box_pose[:3, 3]
 
         self.meshes.append(mesh)
         self.mesh_names.append(mesh_name)
 
-        self.model_box_dims = jnp.vstack(
-            [
-                self.model_box_dims,
-                bounding_box_dims
-            ]
-        )
+        self.model_box_dims = jnp.vstack([self.model_box_dims, bounding_box_dims])
 
         vertices = np.array(mesh.vertices)
-        vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1],1))],axis=-1)
+        vertices = np.concatenate(
+            [vertices, np.ones((*vertices.shape[:-1], 1))], axis=-1
+        )
         triangles = np.array(mesh.faces)
         prim = build_load_vertices_primitive(self)
         prim.bind(jnp.float32(vertices), jnp.int32(triangles))
 
-
-    
-
     def render_many_custom_intrinsics(self, poses, indices, intrinsics):
         proj_matrix = b.camera._open_gl_projection_matrix(
-            intrinsics.height, intrinsics.width, 
-            intrinsics.fx, intrinsics.fy, 
-            intrinsics.cx, intrinsics.cy, 
-            intrinsics.near, intrinsics.far
+            intrinsics.height,
+            intrinsics.width,
+            intrinsics.fx,
+            intrinsics.fy,
+            intrinsics.cx,
+            intrinsics.cy,
+            intrinsics.near,
+            intrinsics.far,
         )
         images_jnp = _render_custom_call(self, poses, indices, proj_matrix)[0]
         return _transform_image_zeros_parallel(images_jnp, intrinsics)
 
     def render_many(self, poses, indices):
         """Render many scenes in parallel.
-        
+
         Args:
             poses (jnp.ndarray): The poses of the objects in the scene. Shape (N, M, 4, 4)
                                  where N is the number of scenes and M is the number of objects.
@@ -155,18 +172,23 @@ class Renderer(object):
         return self.render_many_custom_intrinsics(poses, indices, self.intrinsics)
 
     def render(self, poses, indices):
-        return self.render_many(poses[None,...], indices)[0]
+        return self.render_many(poses[None, ...], indices)[0]
 
     def render_custom_intrinsics(self, poses, indices, intrinsics):
-        return self.render_many_custom_intrinsics(poses[None,...], indices, intrinsics)[0]
+        return self.render_many_custom_intrinsics(
+            poses[None, ...], indices, intrinsics
+        )[0]
+
 
 # Useful reference for understanding the custom calls setup:
 #   https://github.com/dfm/extending-jax
+
 
 @functools.lru_cache
 def _register_custom_calls():
     for _name, _value in dr._get_plugin(gl=True).registrations().items():
         xla_client.register_custom_call_target(_name, _value, platform="gpu")
+
 
 @functools.partial(jax.jit, static_argnums=(0,))
 def _render_custom_call(r: "Renderer", poses, indices, intrinsics_matrix):
@@ -176,25 +198,33 @@ def _render_custom_call(r: "Renderer", poses, indices, intrinsics_matrix):
 @functools.lru_cache(maxsize=None)
 def _build_render_primitive(r: "Renderer"):
     _register_custom_calls()
+
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _render_abstract(poses, indices, intrinsics_matrix):
         num_images = poses.shape[0]
         if poses.shape[1] != indices.shape[0]:
-            raise ValueError(f"Poses Shape:  {poses.shape} Indices Shape: {indices.shape}")
+            raise ValueError(
+                f"Poses Shape:  {poses.shape} Indices Shape: {indices.shape}"
+            )
         dtype = dtypes.canonicalize_dtype(poses.dtype)
-        return [ShapedArray((num_images, r.height, r.width, 4), dtype),
-                ShapedArray((), dtype)]
+        return [
+            ShapedArray((num_images, r.height, r.width, 4), dtype),
+            ShapedArray((), dtype),
+        ]
 
     # Provide an MLIR "lowering" of the render primitive.
     def _render_lowering(ctx, poses, indices, intrinsics_matrix):
-
         # Extract the numpy type of the inputs
         poses_aval, indices_aval, intrinsics_matrix_aval = ctx.avals_in
         if poses_aval.ndim != 4:
-            raise NotImplementedError(f"Only 4D inputs supported: got {poses_aval.shape}")
+            raise NotImplementedError(
+                f"Only 4D inputs supported: got {poses_aval.shape}"
+            )
         if indices_aval.ndim != 1:
-            raise NotImplementedError(f"Only 1D inputs supported: got {indices_aval.shape}")
+            raise NotImplementedError(
+                f"Only 1D inputs supported: got {indices_aval.shape}"
+            )
 
         np_dtype = np.dtype(poses_aval.dtype)
         if np_dtype != np.float32:
@@ -204,15 +234,20 @@ def _build_render_primitive(r: "Renderer"):
 
         num_images, num_objects = poses_aval.shape[:2]
         out_shp_dtype = mlir.ir.RankedTensorType.get(
-            [num_images, r.height, r.width, 4],
-            mlir.dtype_to_ir_type(poses_aval.dtype))
+            [num_images, r.height, r.width, 4], mlir.dtype_to_ir_type(poses_aval.dtype)
+        )
 
         if num_objects != indices_aval.shape[0]:
-            raise ValueError(f"Poses Shape:  {poses_aval.shape} Indices Shape: {indices_aval.shape}")
-        opaque = dr._get_plugin(gl=True).build_rasterize_descriptor(r.renderer_env.cpp_wrapper,
-                                                                    [num_objects, num_images])
+            raise ValueError(
+                f"Poses Shape:  {poses_aval.shape} Indices Shape: {indices_aval.shape}"
+            )
+        opaque = dr._get_plugin(gl=True).build_rasterize_descriptor(
+            r.renderer_env.cpp_wrapper, [num_objects, num_images]
+        )
 
-        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(poses_aval.dtype))
+        scalar_dummy = mlir.ir.RankedTensorType.get(
+            [], mlir.dtype_to_ir_type(poses_aval.dtype)
+        )
         op_name = "jax_rasterize_fwd_gl"
         return custom_call(
             op_name,
@@ -221,20 +256,26 @@ def _build_render_primitive(r: "Renderer"):
             # The inputs:
             operands=[poses, indices, intrinsics_matrix],
             # Layout specification:
-            operand_layouts=[(3, 2, 0, 1), (0,), (1,0,)],
+            operand_layouts=[
+                (3, 2, 0, 1),
+                (0,),
+                (
+                    1,
+                    0,
+                ),
+            ],
             result_layouts=[(3, 2, 1, 0), ()],
             # GPU specific additional data
-            backend_config=opaque
+            backend_config=opaque,
         ).results
-
 
     # ************************************
     # *  SUPPORT FOR BATCHING WITH VMAP  *
     # ************************************
     def _render_batch(args, axes):
-        poses, indices, intrinsics_matrix = args 
+        poses, indices, intrinsics_matrix = args
         if poses.ndim != 5:
-            raise NotImplementedError("Underlying primitive must operate on 4D poses.")  
+            raise NotImplementedError("Underlying primitive must operate on 4D poses.")
 
         original_shape = poses.shape
         poses = jnp.moveaxis(poses, axes[0], 0)
@@ -244,15 +285,18 @@ def _build_render_primitive(r: "Renderer"):
         poses = poses.reshape(size_1 * size_2, num_objects, 4, 4)
 
         if poses.shape[1] != indices.shape[0]:
-            raise ValueError(f"Poses Original Shape: {original_shape} Poses Shape:  {poses.shape} Indices Shape: {indices.shape}")
+            raise ValueError(
+                f"Poses Original Shape: {original_shape} Poses Shape:  {poses.shape} Indices Shape: {indices.shape}"
+            )
         if poses.shape[-2:] != (4, 4):
-            raise ValueError(f"Poses Original Shape: {original_shape} Poses Shape:  {poses.shape} Indices Shape: {indices.shape}")
+            raise ValueError(
+                f"Poses Original Shape: {original_shape} Poses Shape:  {poses.shape} Indices Shape: {indices.shape}"
+            )
         renders, dummy = _render_custom_call(r, poses, indices, intrinsics_matrix)
 
         renders = renders.reshape(size_1, size_2, *renders.shape[1:])
         out_axes = 0, None
         return (renders, dummy), out_axes
-
 
     # *********************************************
     # *  BOILERPLATE TO REGISTER THE OP WITH JAX  *
@@ -265,17 +309,15 @@ def _build_render_primitive(r: "Renderer"):
     # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_render_prim, _render_lowering, platform="gpu")
     batching.primitive_batchers[_render_prim] = _render_batch
-    
+
     return _render_prim
-
-
 
 
 @functools.lru_cache(maxsize=None)
 def build_setup_primitive(r: "Renderer", h, w, num_layers):
     _register_custom_calls()
     # print('build_setup_primitive')
-    
+
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _setup_abstract():
@@ -288,9 +330,12 @@ def build_setup_primitive(r: "Renderer", h, w, num_layers):
         # print('lowering setup!')
 
         opaque = dr._get_plugin(gl=True).build_setup_descriptor(
-            r.renderer_env.cpp_wrapper, h, w, num_layers)
+            r.renderer_env.cpp_wrapper, h, w, num_layers
+        )
 
-        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(np.dtype(np.float32)))
+        scalar_dummy = mlir.ir.RankedTensorType.get(
+            [], mlir.dtype_to_ir_type(np.dtype(np.float32))
+        )
         op_name = "jax_setup"
         return custom_call(
             op_name,
@@ -302,7 +347,7 @@ def build_setup_primitive(r: "Renderer", h, w, num_layers):
             operand_layouts=[],
             result_layouts=[(), ()],
             # GPU specific additional data
-            backend_config=opaque
+            backend_config=opaque,
         ).results
 
     # *********************************************
@@ -315,7 +360,7 @@ def build_setup_primitive(r: "Renderer", h, w, num_layers):
 
     # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_prim, _setup_lowering, platform="gpu")
-    
+
     return _prim
 
 
@@ -323,7 +368,7 @@ def build_setup_primitive(r: "Renderer", h, w, num_layers):
 def build_load_vertices_primitive(r: "Renderer"):
     _register_custom_calls()
     # print('build_load_vertices_primitive')
-    
+
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
     def _load_vertices_abstract(vertices, triangles):
@@ -343,9 +388,12 @@ def build_load_vertices_primitive(r: "Renderer"):
             raise NotImplementedError(f"Unsupported triangles dtype {np_dtype}")
 
         opaque = dr._get_plugin(gl=True).build_load_vertices_descriptor(
-            r.renderer_env.cpp_wrapper, vertices_aval.shape[0], triangles_aval.shape[0])
+            r.renderer_env.cpp_wrapper, vertices_aval.shape[0], triangles_aval.shape[0]
+        )
 
-        scalar_dummy = mlir.ir.RankedTensorType.get([], mlir.dtype_to_ir_type(np.dtype(np.float32)))
+        scalar_dummy = mlir.ir.RankedTensorType.get(
+            [], mlir.dtype_to_ir_type(np.dtype(np.float32))
+        )
         op_name = "jax_load_vertices"
         return custom_call(
             op_name,
@@ -357,7 +405,7 @@ def build_load_vertices_primitive(r: "Renderer"):
             operand_layouts=[(1, 0), (1, 0)],
             result_layouts=[(), ()],
             # GPU specific additional data
-            backend_config=opaque
+            backend_config=opaque,
         ).results
 
     # *********************************************
@@ -370,7 +418,5 @@ def build_load_vertices_primitive(r: "Renderer"):
 
     # Connect the XLA translation rules for JIT compilation
     mlir.register_lowering(_prim, _load_vertices_lowering, platform="gpu")
-    
+
     return _prim
-
-

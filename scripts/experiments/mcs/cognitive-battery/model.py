@@ -1,5 +1,6 @@
 import json
 import os
+from collections import deque
 
 import cog_utils as utils
 import jax
@@ -11,9 +12,6 @@ from tqdm import tqdm
 import bayes3d
 from bayes3d.transforms_3d import transform_from_pos, unproject_depth
 from bayes3d.viz import get_depth_image, make_gif_from_pil_images, multi_panel
-
-from collections import deque
-
 
 SCENE = "swap"
 
@@ -123,6 +121,7 @@ init_poses = jnp.array(init_poses)
 
 ## Defining inference helper functions
 
+
 # Enumerating proposals
 def make_unfiform_grid(n, d):
     # d: number of enumerated proposals on each dimension (x, y, z).
@@ -145,6 +144,7 @@ def prior(new_pose, prev_poses):
 
 
 prior_parallel = jax.jit(jax.vmap(prior, in_axes=(0, None)))
+
 
 # Liklelihood model
 def scorer(rendered_image, gt, r=0.1, op=0.005, ov=0.5):
@@ -246,7 +246,7 @@ for t in tqdm(range(start_t, start_t + num_steps)):
         multi_panel(
             [rgb_viz, gt_depth_1, rendered_image, *rendered_apple],
             [
-                f"\nRGB Image",
+                "\nRGB Image",
                 f"   Frame: {t}\nActual Depth",
                 "\nReconstructed Depth",
                 *(["\nApple Only"] * len(rendered_apple)),

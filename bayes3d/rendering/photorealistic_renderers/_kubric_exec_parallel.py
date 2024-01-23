@@ -13,13 +13,14 @@
 # limitations under the License.
 
 import logging
+
 import kubric as kb
 import numpy as np
 from kubric.renderer.blender import Blender as KubricRenderer
-from kubric.core.color import get_color
-# import kubric.core.color as color 
 
-#unpacking the data from the npz file
+# import kubric.core.color as color
+
+# unpacking the data from the npz file
 data_file = "/tmp/blenderproc_kubric.npz"
 data = np.load(data_file, allow_pickle=True)
 mesh_paths = data["mesh_paths"]
@@ -42,7 +43,7 @@ background_color = data["background"]
 
 logging.basicConfig(level="INFO")
 
-#convert intrinsics to focal_length, sensor_width
+# convert intrinsics to focal_length, sensor_width
 focal_length = float(fx)
 sensor_width = float(width)
 
@@ -51,19 +52,24 @@ for scene_number in range(len(poses)):
     scene = kb.Scene(resolution=(width.item(), height.item()))
     scene.background = kb.Color(*background_color)
     renderer = KubricRenderer(scene)
-    # --- create perspective camera 
-    scene += kb.PerspectiveCamera(name="camera",
-        position =camera_pose[0],quaternion=camera_pose[1], focal_length=focal_length, sensor_width=sensor_width)
-    scene += kb.PointLight(name='sun', position=camera_pose[0], intensity=intensity)
+    # --- create perspective camera
+    scene += kb.PerspectiveCamera(
+        name="camera",
+        position=camera_pose[0],
+        quaternion=camera_pose[1],
+        focal_length=focal_length,
+        sensor_width=sensor_width,
+    )
+    scene += kb.PointLight(name="sun", position=camera_pose[0], intensity=intensity)
 
     for obj_number in range(len(poses[scene_number])):
         mesh_scales = [e * scaling_factor for e in mesh_scales]
         rng = np.random.default_rng()
         obj_mat = kb.FlatMaterial(color=kb.Color(*mesh_colors[obj_number]))
         obj = kb.FileBasedObject(
-            asset_id=f"1", 
+            asset_id="1",
             render_filename=mesh_paths[obj_number],
-            material=obj_mat, 
+            material=obj_mat,
             simulation_filename=None,
             scale=mesh_scales[obj_number],
             position=poses[scene_number][obj_number][0],
@@ -73,7 +79,9 @@ for scene_number in range(len(poses)):
         scene += obj
 
     frame = renderer.render_still()
-    np.savez(f"/tmp/{scene_number}.npz", rgba=frame["rgba"], segmentation=frame["segmentation"], depth=frame["depth"])
-
-
-
+    np.savez(
+        f"/tmp/{scene_number}.npz",
+        rgba=frame["rgba"],
+        segmentation=frame["segmentation"],
+        depth=frame["depth"],
+    )

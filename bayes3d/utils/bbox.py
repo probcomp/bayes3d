@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 
+
 def separating_axis_test(axis, box1, box2):
     """
     Projects both boxes onto the given axis and checks for overlap.
@@ -8,11 +9,14 @@ def separating_axis_test(axis, box1, box2):
     min1, max1 = project_box(axis, box1)
     min2, max2 = project_box(axis, box2)
 
-    return jax.lax.cond(jnp.logical_or(max1 < min2, max2 < min1), lambda: False, lambda: True)
+    return jax.lax.cond(
+        jnp.logical_or(max1 < min2, max2 < min1), lambda: False, lambda: True
+    )
 
     # if max1 < min2 or max2 < min1:
     #     return False
     # return True
+
 
 def project_box(axis, box):
     """
@@ -22,23 +26,25 @@ def project_box(axis, box):
     projections = jnp.array([jnp.dot(corner, axis) for corner in corners])
     return jnp.min(projections), jnp.max(projections)
 
+
 def get_transformed_box_corners(box):
     """
     Returns the 8 corners of the box based on its dimensions and pose.
     """
     dim, pose = box
     corners = []
-    for dx in [-dim[0]/2, dim[0]/2]:
-        for dy in [-dim[1]/2, dim[1]/2]:
-            for dz in [-dim[2]/2, dim[2]/2]:
+    for dx in [-dim[0] / 2, dim[0] / 2]:
+        for dy in [-dim[1] / 2, dim[1] / 2]:
+            for dz in [-dim[2] / 2, dim[2] / 2]:
                 corner = jnp.array([dx, dy, dz, 1])
                 transformed_corner = pose @ corner
                 corners.append(transformed_corner[:3])
     return corners
 
+
 def are_bboxes_intersecting(dim1, dim2, pose1, pose2):
     """
-    Checks if two oriented bounding boxes (OBBs), which are AABBs with poses, are intersecting using the Separating 
+    Checks if two oriented bounding boxes (OBBs), which are AABBs with poses, are intersecting using the Separating
     Axis Theorem (SAT).
 
     Args:
@@ -62,9 +68,14 @@ def are_bboxes_intersecting(dim1, dim2, pose1, pose2):
     # Perform SAT on each axis
     count_ = 0
     for axis in axes_to_test:
-        count_+= jax.lax.cond(separating_axis_test(axis, box1, box2), lambda:0,lambda:-1)
+        count_ += jax.lax.cond(
+            separating_axis_test(axis, box1, box2), lambda: 0, lambda: -1
+        )
 
-    return jax.lax.cond(count_ < 0, lambda:False,lambda:True)
+    return jax.lax.cond(count_ < 0, lambda: False, lambda: True)
+
 
 # For one reference pose (object 1) and many possible poses for the second object
-are_bboxes_intersecting_many = jax.vmap(are_bboxes_intersecting, in_axes = (None, None, None, 0))
+are_bboxes_intersecting_many = jax.vmap(
+    are_bboxes_intersecting, in_axes=(None, None, None, 0)
+)
