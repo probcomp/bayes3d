@@ -5,5 +5,3 @@ cd jax3dp3/cosypose_baseline
 bash cosypose_setup.sh
 ```
 To test setup, run `test/test_cosypose.py`.
-
-

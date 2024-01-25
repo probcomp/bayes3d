@@ -419,14 +419,14 @@ void setup(RasterizeGLStateWrapper& stateWrapper, int height, int width, int num
 void jax_setup(cudaStream_t stream,
                void **buffers,
                const char *opaque, std::size_t opaque_len) {
-    const SetUpCustomCallDescriptor &d = 
+    const SetUpCustomCallDescriptor &d =
         *UnpackDescriptor<SetUpCustomCallDescriptor>(opaque, opaque_len);
     RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
     _setup(stream, stateWrapper, d.height, d.width, d.num_layers);
 }
 
 
-void _load_vertices_fwd(cudaStream_t stream, 
+void _load_vertices_fwd(cudaStream_t stream,
                         RasterizeGLStateWrapper& stateWrapper, const float * pos, uint num_vertices, const int * tri, uint num_triangles)
 {
     // const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
@@ -515,7 +515,7 @@ void jax_load_vertices(cudaStream_t stream,
                        void **buffers,
                        const char *opaque, std::size_t opaque_len)
 {
-    const LoadVerticesCustomCallDescriptor &d = 
+    const LoadVerticesCustomCallDescriptor &d =
         *UnpackDescriptor<LoadVerticesCustomCallDescriptor>(opaque, opaque_len);
     RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
     // std::cerr << "load_vertices: " << d.num_vertices << "," << d.num_triangles << "\n";
@@ -592,9 +592,9 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
                 poses_on_this_iter*16*sizeof(float), cudaMemcpyDeviceToDevice, stream));
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
             glUniform1f(1, object_idx+1.0);
-            
+
             NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], poses_on_this_iter, sizeof(GLDrawCmd)));
-        } 
+        }
 
 
 
@@ -632,7 +632,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
                           void **buffers,
                           const char *opaque, std::size_t opaque_len) {
 
-    const RasterizeCustomCallDescriptor &d = 
+    const RasterizeCustomCallDescriptor &d =
         *UnpackDescriptor<RasterizeCustomCallDescriptor>(opaque, opaque_len);
     RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
 
@@ -718,8 +718,3 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 }
 
 //------------------------------------------------------------------------
-
-
-
-
-

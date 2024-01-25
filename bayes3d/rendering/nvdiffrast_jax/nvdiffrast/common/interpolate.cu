@@ -94,9 +94,9 @@ static __forceinline__ __device__ void InterpolateFwdKernelTemplate(const Interp
     float dvdx = db.z;
     float dvdy = db.w;
 
-    // Calculate the pixel differentials of chosen attributes.    
+    // Calculate the pixel differentials of chosen attributes.
     for (int i=0; i < p.numDiffAttr; i++)
-    {   
+    {
         // Input attribute index.
         int j = p.diff_attrs_all ? i : p.diffAttrs[i];
         if (j < 0)
@@ -132,7 +132,7 @@ template <bool ENABLE_DA>
 static __forceinline__ __device__ void InterpolateGradKernelTemplate(const InterpolateKernelParams p)
 {
     // Temporary space for coalesced atomics.
-    CA_DECLARE_TEMP(IP_GRAD_MAX_KERNEL_BLOCK_WIDTH * IP_GRAD_MAX_KERNEL_BLOCK_HEIGHT);    
+    CA_DECLARE_TEMP(IP_GRAD_MAX_KERNEL_BLOCK_WIDTH * IP_GRAD_MAX_KERNEL_BLOCK_HEIGHT);
 
     // Calculate pixel position.
     int px = blockIdx.x * blockDim.x + threadIdx.x;

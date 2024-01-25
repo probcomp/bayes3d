@@ -42,12 +42,12 @@ static void set_diff_attrs(InterpolateKernelParams& p, bool diff_attrs_all, std:
 //------------------------------------------------------------------------
 // Forward op.
 
-void _interpolate_fwd_da(cudaStream_t stream, 
-                        const float* attr, const float* rast, const int* tri, 
-                        const float* rast_db, bool diff_attrs_all, 
+void _interpolate_fwd_da(cudaStream_t stream,
+                        const float* attr, const float* rast, const int* tri,
+                        const float* rast_db, bool diff_attrs_all,
                         std::vector<int>& diff_attrs_vec,
-                        std::vector<int> attr_shape, std::vector<int> rast_shape, 
-                        std::vector<int> tri_shape, 
+                        std::vector<int> attr_shape, std::vector<int> rast_shape,
+                        std::vector<int> tri_shape,
                         float* out, float* out_da)
 
 {
@@ -99,7 +99,7 @@ void jax_interpolate_fwd(cudaStream_t stream,
                           void **buffers,
                           const char *opaque, std::size_t opaque_len) {
 
-    const DiffInterpolateCustomCallDescriptor &d = 
+    const DiffInterpolateCustomCallDescriptor &d =
         *UnpackDescriptor<DiffInterpolateCustomCallDescriptor>(opaque, opaque_len);
 
     const float *attr = reinterpret_cast<const float *> (buffers[0]);
@@ -109,8 +109,8 @@ void jax_interpolate_fwd(cudaStream_t stream,
     const int *diff_attrs = reinterpret_cast<const int *> (buffers[4]);
 
     float *out = reinterpret_cast<float *> (buffers[5]);
-    float *out_da = reinterpret_cast<float *> (buffers[6]);  
-    
+    float *out_da = reinterpret_cast<float *> (buffers[6]);
+
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
 
     std::vector<int> attr_shape;
@@ -139,15 +139,15 @@ void jax_interpolate_fwd(cudaStream_t stream,
 
     cudaStreamSynchronize(stream);
     _interpolate_fwd_da(stream,
-                    attr, 
-                    rast_out, 
-                    tri, 
-                    rast_db, 
+                    attr,
+                    rast_out,
+                    tri,
+                    rast_db,
                     diff_attrs_all,
                     diff_attrs_vec,
-                    attr_shape, 
-                    rast_shape, 
-                    tri_shape, 
+                    attr_shape,
+                    rast_shape,
+                    tri_shape,
                     out,
                     out_da
                     );
@@ -157,10 +157,10 @@ void jax_interpolate_fwd(cudaStream_t stream,
 //------------------------------------------------------------------------
 // Gradient op.
 
-void _interpolate_grad_da(cudaStream_t stream, 
+void _interpolate_grad_da(cudaStream_t stream,
                         const float* attr, const float* rast, const int* tri, const float* dy,
                         const float* rast_db, const float* dda, bool diff_attrs_all, std::vector<int>& diff_attrs_vec,
-                        std::vector<int> attr_shape, std::vector<int> rast_shape, std::vector<int> tri_shape, 
+                        std::vector<int> attr_shape, std::vector<int> rast_shape, std::vector<int> tri_shape,
                         float* g_attr, float* g_rast, float* g_rast_db)
 {
     InterpolateKernelParams p = {}; // Initialize all fields to zero.
@@ -224,7 +224,7 @@ void jax_interpolate_bwd(cudaStream_t stream,
                           void **buffers,
                           const char *opaque, std::size_t opaque_len) {
 
-    const DiffInterpolateCustomCallDescriptor &d = 
+    const DiffInterpolateCustomCallDescriptor &d =
         *UnpackDescriptor<DiffInterpolateCustomCallDescriptor>(opaque, opaque_len);
 
     const float *attr = reinterpret_cast<const float *> (buffers[0]);
@@ -236,7 +236,7 @@ void jax_interpolate_bwd(cudaStream_t stream,
     const int *diff_attrs = reinterpret_cast<const int *> (buffers[6]);
 
     float *g_attr = reinterpret_cast<float *> (buffers[7]);
-    float *g_rast = reinterpret_cast<float *> (buffers[8]);  
+    float *g_rast = reinterpret_cast<float *> (buffers[8]);
     float* g_rast_db = reinterpret_cast<float *> (buffers[9]);
     cudaMemset(g_attr, 0, d.num_images*d.num_vertices*d.num_attributes*sizeof(float));
 
@@ -269,18 +269,18 @@ void jax_interpolate_bwd(cudaStream_t stream,
     cudaStreamSynchronize(stream);
     _interpolate_grad_da(stream,
                     attr,
-                    rast_out, 
-                    tri, 
+                    rast_out,
+                    tri,
                     dy,
                     rast_db, //
                     dda, //
-                    diff_attrs_all, // 
+                    diff_attrs_all, //
                     diff_attrs_vec, //
-                    attr_shape, 
-                    rast_shape, 
-                    tri_shape, 
+                    attr_shape,
+                    rast_shape,
+                    tri_shape,
                     g_attr,
-                    g_rast, 
+                    g_rast,
                     g_rast_db //
                     );
     cudaStreamSynchronize(stream);

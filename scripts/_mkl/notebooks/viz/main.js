@@ -2,8 +2,8 @@ const messaging = require('./lib/messaging.js');
 const arrays = require('./lib/arrays.js');
 const viz_pb = require('./lib/viz_pb.js');
 const THREE = require('three');
-import GUI from 'lil-gui'; 
-import Stats from 'stats-js'; 
+import GUI from 'lil-gui';
+import Stats from 'stats-js';
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils";
 import {MapControls} from         'three/examples/jsm/controls/MapControls';
 import { MeshDepthMaterial } from 'three';
@@ -164,7 +164,7 @@ function initialize_interface(shared_data) {
         fixed_scene_objs: fixed_scene_objs
     };
     return result;
-} 
+}
 // END OF initialize_interface
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -237,7 +237,7 @@ const shared_data = {
     mixers: [],
     actions: []
   };
-  
+
 
 const ui = initialize_interface(shared_data);
 
@@ -248,9 +248,9 @@ mc.add_handler(handle_message);
 
 
 /* * * * * * * * * * * * * * * * * * *
- *  
- *  
- *  
+ *
+ *
+ *
  * * * * * * * * * * * * * * * * * * */
 
 function linear_index(multiIndex, shape) {
@@ -280,7 +280,7 @@ function handle_dynamic_gaussians(transformsTxNx4x4, colors, ui, shared_data) {
 
     shared_data.num_frames = T
     shared_data.animation_frame_controller._max = shared_data.num_frames - 1
-    
+
 
     const meshes = []
     for (let i = 0; i < N; i++) {
@@ -294,7 +294,7 @@ function handle_dynamic_gaussians(transformsTxNx4x4, colors, ui, shared_data) {
         const transform4x4 = new Float32Array(arrays.strided_slice(transforms4x4,  i, arrays.ALL, arrays.ALL).values)
         const matrix       = new THREE.Matrix4();
         matrix.fromArray(transform4x4)
-        
+
         const geometry = new THREE.SphereGeometry(1.0);
         geometry.applyMatrix4(matrix);
 
@@ -321,7 +321,7 @@ function handle_pytree_message(pytree, ui, shared_data) {
 
 
     switch(type) {
-        
+
         case "setup":
             console.log("case 'setup'")
 
@@ -331,8 +331,8 @@ function handle_pytree_message(pytree, ui, shared_data) {
             // ui.scene.background = new THREE.Color( 0xd3d3d3 );
             ui.scene.background = new THREE.Color( 0xffffff );
             const dir_light = new THREE.DirectionalLight( 0xffffff, 2 );
-            dir_light.position.set( 0,  .1, 0); 
-            dir_light.castShadow = true; 
+            dir_light.position.set( 0,  .1, 0);
+            dir_light.castShadow = true;
             dir_light.shadow.camera.visible = true;
             const ambientLight = new THREE.AmbientLight(0x404040, 20); // soft white light
             ui.scene.add(dir_light);
@@ -358,7 +358,7 @@ function handle_pytree_message(pytree, ui, shared_data) {
                 meshes.forEach(mesh => ui.scene.add(mesh));
                 shared_data.num_frames = data.centers.shape[0]
                 shared_data.animation_frame_controller._max = shared_data.num_frames - 1
-    
+
                 break;
 
 
@@ -395,7 +395,7 @@ function handle_pytree_message(pytree, ui, shared_data) {
 
             break;
 
-            
+
         case "animated gaussians":
             console.log("animated gaussians", data.transforms.shape)
             var T = data.transforms.shape[0]
@@ -408,8 +408,8 @@ function handle_pytree_message(pytree, ui, shared_data) {
             var colors = arrays.strided_slice(data.colors,  t, arrays.ALL, arrays.ALL);
             var meshes = draw_utils.create_gaussian_meshes(transforms, colors);
             meshes.forEach(mesh => ui.scene.add(mesh));
-            
-            
+
+
             shared_data.animation_update_handler = t => {
                 const transforms = arrays.strided_slice(data.transforms, t, arrays.ALL, arrays.ALL, arrays.ALL)
                 const colors     = arrays.strided_slice(data.colors,  t, arrays.ALL, arrays.ALL)
@@ -418,11 +418,11 @@ function handle_pytree_message(pytree, ui, shared_data) {
 
             break;
 
-            
+
         case "gaussians":
             console.log("case 'gaussians'", data.transforms.shape, data.colors.shape)
 
-            
+
             // var transforms = arrays.strided_slice(data.transforms, 0, arrays.ALL, arrays.ALL, arrays.ALL);
             // var colors = arrays.strided_slice(data.colors,  0, arrays.ALL, arrays.ALL);
 
@@ -440,5 +440,3 @@ function handle_pytree_message(pytree, ui, shared_data) {
 }
 // END OF handle_payload
 // <<<<<<<<<<<<<<<<<<<<<
-
-

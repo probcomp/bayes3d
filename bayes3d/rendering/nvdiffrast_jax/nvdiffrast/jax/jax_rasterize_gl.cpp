@@ -51,13 +51,13 @@ void RasterizeGLStateWrapper::releaseContext(void)
 // Forward op (OpenGL).
 
 // void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int peeling_idx)
-void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, 
-                        const float* pos, const int* tri, 
+void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper,
+                        const float* pos, const int* tri,
                         std::vector<int> dims,
-                        std::vector<int> resolution, 
+                        std::vector<int> resolution,
                         float* out,
                         float* out_db)
-{ 
+{
     // const at::cuda::OptionalCUDAGuard device_guard(at::device_of(pos));
     RasterizeGLState& s = *stateWrapper.pState;
 
@@ -116,7 +116,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
                           void **buffers,
                           const char *opaque, std::size_t opaque_len) {
 
-    const DiffRasterizeCustomCallDescriptor &d = 
+    const DiffRasterizeCustomCallDescriptor &d =
         *UnpackDescriptor<DiffRasterizeCustomCallDescriptor>(opaque, opaque_len);
     RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
 
@@ -126,7 +126,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
 
     float *out = reinterpret_cast<float *> (buffers[3]);
     float *out_db = reinterpret_cast<float *> (buffers[4]);
-    
+
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
 
     std::vector<int> resolution;
@@ -145,7 +145,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
                       pos,
                       tri,
                       pos_dim,
-                      resolution, 
+                      resolution,
                       out,
                       out_db
                       );
@@ -163,10 +163,10 @@ void RasterizeGradKernelDb(const RasterizeGradParams p);
 //------------------------------------------------------------------------
 
 void _rasterize_grad_db(cudaStream_t stream,
-                        const float* pos, const int* tri, const float* rast_out, 
-                        const float* dy, const float* ddb, 
-                        std::vector<int> pos_shape,  
-                        std::vector<int> tri_shape,  
+                        const float* pos, const int* tri, const float* rast_out,
+                        const float* dy, const float* ddb,
+                        std::vector<int> pos_shape,
+                        std::vector<int> tri_shape,
                         std::vector<int> rast_out_shape,
                         float* grad)
 {
@@ -220,7 +220,7 @@ void jax_rasterize_bwd(cudaStream_t stream,
                         void **buffers,
                         const char *opaque, std::size_t opaque_len) {
 
-    const DiffRasterizeBwdCustomCallDescriptor &d = 
+    const DiffRasterizeBwdCustomCallDescriptor &d =
         *UnpackDescriptor<DiffRasterizeBwdCustomCallDescriptor>(opaque, opaque_len);
 
     const float *pos = reinterpret_cast<const float *> (buffers[0]);
@@ -231,7 +231,7 @@ void jax_rasterize_bwd(cudaStream_t stream,
 
     float *grad = reinterpret_cast<float *> (buffers[5]);  // output
     cudaMemset(grad, 0, d.num_images*d.num_vertices*4*sizeof(float));
-    
+
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
 
     std::vector<int> pos_shape;
@@ -252,11 +252,11 @@ void jax_rasterize_bwd(cudaStream_t stream,
     _rasterize_grad_db(stream,
                       pos,
                       tri,
-                      rast_out, 
-                      dy, 
+                      rast_out,
+                      dy,
                       ddb,
                       pos_shape,
-                      tri_shape, 
+                      tri_shape,
                       rast_out_shape,
                       grad
                       );
