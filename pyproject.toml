@@ -1,3 +1,31 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bayes3d"
+authors = [
+    {name = "Nishad Gothoskar", email = "nishadg@mit.edu"},
+]
+description = "Probabilistic inference in 3D."
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = [
+    "artificial-intelligence",
+    "probabilistic-programming",
+    "bayesian-inference",
+    "differentiable-programming"
+    ]
+license = {text = "Apache 2.0"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12"
+]
+dynamic = ["version"]
+
 [tool.ruff]
 exclude = [
     ".bzr",
