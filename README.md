@@ -86,6 +86,8 @@ sudo apt-get update
 sudo apt-get install ninja-build
 ```
 
+I did somethi!
+
 To check your CUDA version:
 ```
 nvcc --version
