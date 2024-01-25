@@ -62,7 +62,7 @@ class RasterizeGLStateWrapper;
 
 struct SetUpCustomCallDescriptor {
     RasterizeGLStateWrapper* gl_state_wrapper;
-    
+
     int height;
     int width;
     int num_layers;

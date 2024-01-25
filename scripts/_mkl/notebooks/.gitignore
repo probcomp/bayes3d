@@ -23,7 +23,7 @@ local/
 local
 # **/data/
 
-# tensorboard runs folder and 
+# tensorboard runs folder and
 # pytorch lightning stuff
 **/runs/
 **/lightning_logs/
@@ -183,4 +183,3 @@ checklink/cookies.txt
 
 # Quarto
 .quarto
-

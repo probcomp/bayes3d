@@ -4,28 +4,21 @@ Preprocess an unzipped .r3d file to the Record3DDataset format.
 import glob
 import json
 import os
-import yaml
-from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple, Union
 
 import cv2
+import jax.numpy as jnp
 import liblzfse  # https://pypi.org/project/pyliblzfse/
 import numpy as np
-import png  # pip install pypng
-import torch
-import tyro
 from natsort import natsorted
 from PIL import Image
 from scipy.spatial.transform import Rotation
-from tqdm import tqdm, trange
-import subprocess
 
 import bayes3d as b
-import jax.numpy as jnp
+
 
 def load_depth(filepath):
-    with open(filepath, 'rb') as depth_fh:
+    with open(filepath, "rb") as depth_fh:
         raw_bytes = depth_fh.read()
         decompressed_bytes = liblzfse.decompress(raw_bytes)
         depth_img = np.frombuffer(decompressed_bytes, dtype=np.float32)
@@ -37,7 +30,7 @@ def load_depth(filepath):
 
 
 def load_conf(filepath):
-    with open(filepath, 'rb') as conf_fh:
+    with open(filepath, "rb") as conf_fh:
         raw_bytes = conf_fh.read()
         decompressed_bytes = liblzfse.decompress(raw_bytes)
         conf_img = np.frombuffer(decompressed_bytes, dtype=np.uint8)
@@ -63,8 +56,10 @@ def write_depth(outpath, depth):
     depth = Image.fromarray(depth)
     depth.save(outpath)
 
+
 def write_conf(outpath, conf):
     np.save(outpath, conf)
+
 
 def write_pose(outpath, pose):
     np.save(outpath, pose.astype(np.float32))
@@ -124,11 +119,15 @@ def get_intrinsics(metadata_dict: dict):
 
     return intrinsics, intrinsics_depth
 
+
 def load_r3d(r3d_path):
     r3d_path = Path(r3d_path)
     import subprocess
+
     subprocess.run([f"cp {r3d_path} /tmp/{r3d_path.name}.zip"], shell=True)
-    subprocess.run([f"unzip -qq -o /tmp/{r3d_path.name}.zip -d /tmp/{r3d_path.name}"], shell=True)
+    subprocess.run(
+        [f"unzip -qq -o /tmp/{r3d_path.name}.zip -d /tmp/{r3d_path.name}"], shell=True
+    )
     datapath = f"/tmp/{r3d_path.name}"
 
     f = open(os.path.join(datapath, "metadata"), "r")
@@ -138,21 +137,19 @@ def load_r3d(r3d_path):
 
     color_paths = natsorted(glob.glob(os.path.join(datapath, "rgbd", "*.jpg")))
     depth_paths = natsorted(glob.glob(os.path.join(datapath, "rgbd", "*.depth")))
-    conf_paths = natsorted(glob.glob(os.path.join(datapath, "rgbd", "*.conf")))
 
     colors = np.array([load_color(color_paths[i]) for i in range(len(color_paths))])
-    depths = np.array([load_depth(depth_paths[i]) for i in range(len(color_paths))])
+    depths = np.array([load_depth(depth_paths[i]) for i in range(len(depth_paths))])
     depths[np.isnan(depths)] = 0.0
 
     poses = get_poses(metadata)
-    P = np.array(  
-        [
-            [1, 0, 0, 0],
-            [0, -1, 0, 0],
-            [0, 0, -1, 0],
-            [0, 0, 0, 1]
-        ]
-    )
-    poses = (P @ poses @ P.T)
+    P = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+    poses = P @ poses @ P.T
 
-    return jnp.array(colors), jnp.array(depths), jnp.array(poses), intrinsics, intrinsics_depth
+    return (
+        jnp.array(colors),
+        jnp.array(depths),
+        jnp.array(poses),
+        intrinsics,
+        intrinsics_depth,
+    )

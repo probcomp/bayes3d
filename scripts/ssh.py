@@ -1,6 +1,7 @@
 import paramiko
 from scp import SCPClient
 
+
 class SSHSender:
     def __init__(self, hostname, username, ssh_key_path, result_directory):
         self.ssh = paramiko.SSHClient()
@@ -10,5 +11,16 @@ class SSHSender:
 
         self.result_directory = result_directory
 
-sender = SSHSender('34.123.143.56', 'nishadgothoskar', '/Users/nishadgothoskar/.ssh/id_ed25519.pub', ".")
-sender = SSHSender('34.123.143.56', 'nishadgothoskar', '/Users/nishadgothoskar/.ssh/id_ed25519.pub', ".")
+
+sender = SSHSender(
+    "34.123.143.56",
+    "nishadgothoskar",
+    "/Users/nishadgothoskar/.ssh/id_ed25519.pub",
+    ".",
+)
+sender = SSHSender(
+    "34.123.143.56",
+    "nishadgothoskar",
+    "/Users/nishadgothoskar/.ssh/id_ed25519.pub",
+    ".",
+)

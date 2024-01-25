@@ -1,7 +1,7 @@
 const arrays = require('./lib/arrays.js');
 const THREE = require('three');
-import GUI from 'lil-gui'; 
-import Stats from 'stats-js'; 
+import GUI from 'lil-gui';
+import Stats from 'stats-js';
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils";
 
 
@@ -56,8 +56,8 @@ export function combine_meshes(meshes) {
 
 export function create_gaussian_meshes(transforms4x4, colorsRGBA) {
     const t = 0
-    const N = transforms4x4.shape[1]; 
-    
+    const N = transforms4x4.shape[1];
+
     const meshes = []
     for (let i = 0; i < N; i++) {
         const color    = new Float32Array(arrays.strided_slice(colorsRGBA, t,  i, arrays.ALL).values)
@@ -70,7 +70,7 @@ export function create_gaussian_meshes(transforms4x4, colorsRGBA) {
         const transform4x4 = new Float32Array(arrays.strided_slice(transforms4x4, t, i, arrays.ALL, arrays.ALL).values)
         const matrix       = new THREE.Matrix4();
         matrix.fromArray(transform4x4)
-        
+
         const geometry = new THREE.SphereGeometry(1.0);
         geometry.applyMatrix4(matrix);
 
@@ -97,7 +97,7 @@ export function update_gaussian_meshes(meshes, colorsRGBA, transforms4x4) {
         meshes[i].material.needsUpdate = true;
 
         // Update transform
-        meshes[i].matrixAutoUpdate = false; 
+        meshes[i].matrixAutoUpdate = false;
         const transform = new Float32Array(arrays.strided_slice(transforms4x4, t, i, arrays.ALL, arrays.ALL).values)
         const matrix    = new THREE.Matrix4();
         matrix.fromArray(transform)
@@ -135,7 +135,7 @@ export function create_instanced_sphere_mesh(centers, colorsRGBA, scales) {
     const rotation = new THREE.Quaternion(0,0,0,1);
     const scale    = new THREE.Vector3(1., 1., 1.);
     const colors   = new Float32Array(instanceCount * 3); // RGB for each instance
-    
+
 
     for (let i = 0; i < instanceCount; i++) {
         const center = new Float32Array(arrays.strided_slice(centers, i, arrays.ALL).values)
@@ -149,8 +149,8 @@ export function create_instanced_sphere_mesh(centers, colorsRGBA, scales) {
     }
 
     // instancedGeometry.setAttribute('color', colorAttribute);
-    
-    
+
+
     return instancedMesh;
 }
 // END OF create_instanced_sphere_mesh
@@ -177,15 +177,15 @@ export function update_instanced_sphere_mesh(instanced_mesh, centers, colorsRGBA
     instanced_mesh.geometry.setAttribute('color', colorAttribute);
     instanced_mesh.instanceMatrix.needsUpdate = true;
     colorAttribute.needsUpdate = true;
-    
-    
+
+
     return instanced_mesh;
 }
 // END OF update_instanced_sphere_mesh
 
 
 export function create_sphere_meshes(positionsNx3, colorsRGBA, scales) {
-    const N = positionsNx3.shape[0]; 
+    const N = positionsNx3.shape[0];
     const geometry = new THREE.SphereGeometry(1, 5, 5); // Radius set to 1, which will be scaled
     let meshes = [];
     for (let i = 0; i < N; i++) {
@@ -194,7 +194,7 @@ export function create_sphere_meshes(positionsNx3, colorsRGBA, scales) {
         const material = new THREE.MeshBasicMaterial({
             color: new THREE.Color(rgba[0], rgba[1], rgba[2]), // RGB
             transparent: true,
-            opacity: rgba[3] 
+            opacity: rgba[3]
         });
         const mesh = new THREE.Mesh(geometry, material);
 

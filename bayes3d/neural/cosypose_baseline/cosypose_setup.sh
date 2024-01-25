@@ -23,7 +23,7 @@ conda activate cosypose
 git lfs pull
 python setup.py install
 mkdir local_data
- 
+
 echo "Downloading data..."
 # it is required to download 'train_real', 'train_synt', but not 'train_all'
 python -m cosypose.scripts.download --bop_dataset=ycbv

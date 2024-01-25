@@ -240,7 +240,7 @@ static __forceinline__ __device__ void RasterizeGradKernelTemplate(const Rasteri
         float a1p0 = fx * p2.y - fy * p2.x;
         float a1p2 = fy * p0.x - fx * p0.y;
 
-        float wdudX = 2.f * b0 * datdX - da0dX; 
+        float wdudX = 2.f * b0 * datdX - da0dX;
         float wdudY = 2.f * b0 * datdY - da0dY;
         float wdvdX = 2.f * b1 * datdX - da1dX;
         float wdvdY = 2.f * b1 * datdY - da1dY;

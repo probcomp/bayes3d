@@ -1,22 +1,24 @@
+import cv2
 import jax
 import jax.numpy as jnp
 import numpy as np
-from typing import Tuple
-import cv2
+
 
 def identity_pose():
     """Creates an identity pose matrix."""
     return jnp.eye(4)
 
+
 def inverse_pose(pose):
     """Inverts a pose matrix.
-    
+
     Args:
         pose (jnp.ndarray): The pose matrix. Shape (4, 4)
     Returns:
         jnp.ndarray: The inverted pose matrix. Shape (4, 4)
     """
     return jnp.linalg.inv(pose)
+
 
 def transform_from_pos(translation):
     """Creates a pose matrix from a translation vector.
@@ -27,29 +29,38 @@ def transform_from_pos(translation):
         jnp.ndarray: The pose matrix. Shape (4, 4)
     """
     return jnp.vstack(
-        [jnp.hstack([jnp.eye(3), translation.reshape(3,1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
+        [
+            jnp.hstack([jnp.eye(3), translation.reshape(3, 1)]),
+            jnp.array([0.0, 0.0, 0.0, 1.0]),
+        ]
     )
+
 
 def transform_from_rot(rotation):
     """Creates a pose matrix from a rotation matrix.
-    
+
     Args:
         rotation (jnp.ndarray): The rotation matrix. Shape (3, 3)
     Returns:
         jnp.ndarray: The pose matrix. Shape (4, 4)
     """
     return jnp.vstack(
-        [jnp.hstack([rotation, jnp.zeros((3,1))]), jnp.array([0.0, 0.0, 0.0, 1.0])]
+        [jnp.hstack([rotation, jnp.zeros((3, 1))]), jnp.array([0.0, 0.0, 0.0, 1.0])]
     )
+
 
 def transform_from_rot_and_pos(rotation, translation):
     return jnp.vstack(
-        [jnp.hstack([rotation, translation.reshape(3,1)]), jnp.array([0.0, 0.0, 0.0, 1.0])]
+        [
+            jnp.hstack([rotation, translation.reshape(3, 1)]),
+            jnp.array([0.0, 0.0, 0.0, 1.0]),
+        ]
     )
+
 
 def rotation_from_axis_angle(axis, angle):
     """Creates a rotation matrix from an axis and angle.
-    
+
     Args:
         axis (jnp.ndarray): The axis vector. Shape (3,)
         angle (float): The angle in radians.
@@ -63,14 +74,19 @@ def rotation_from_axis_angle(axis, angle):
     R = jnp.diag(jnp.array([cosa, cosa, cosa]))
     R = R + jnp.outer(direction, direction) * (1.0 - cosa)
     direction = direction * sina
-    R = R + jnp.array([[0.0, -direction[2], direction[1]],
-                        [direction[2], 0.0, -direction[0]],
-                        [-direction[1], direction[0], 0.0]])
+    R = R + jnp.array(
+        [
+            [0.0, -direction[2], direction[1]],
+            [direction[2], 0.0, -direction[0]],
+            [-direction[1], direction[0], 0.0],
+        ]
+    )
     return R
+
 
 def transform_from_axis_angle(axis, angle):
     """Creates a pose matrix from an axis and angle.
-    
+
     Args:
         axis (jnp.ndarray): The axis vector. Shape (3,)
         angle (float): The angle in radians.
@@ -79,9 +95,10 @@ def transform_from_axis_angle(axis, angle):
     """
     return transform_from_rot(rotation_from_axis_angle(axis, angle))
 
+
 def rotation_from_rodrigues(rodrigues_vector):
     """Creates a rotation matrix from a rodrigues vector.
-    
+
     Args:
         rodrigues_vector (jnp.ndarray): The rodrigues vector. Shape (3,)
     Returns:
@@ -89,40 +106,45 @@ def rotation_from_rodrigues(rodrigues_vector):
     """
     r_flat = rodrigues_vector.reshape(-1)
     theta = jnp.linalg.norm(r_flat)
-    r = r_flat/theta
-    A = jnp.array([[0, -r[2], r[1]],[r[2], 0, -r[0]],[-r[1], r[0],  0]])
-    R = jnp.cos(theta) * jnp.eye(3) + (1 - jnp.cos(theta)) * r.reshape(-1,1) * r.transpose() + jnp.sin(theta) * A
+    r = r_flat / theta
+    A = jnp.array([[0, -r[2], r[1]], [r[2], 0, -r[0]], [-r[1], r[0], 0]])
+    R = (
+        jnp.cos(theta) * jnp.eye(3)
+        + (1 - jnp.cos(theta)) * r.reshape(-1, 1) * r.transpose()
+        + jnp.sin(theta) * A
+    )
     return jnp.where(theta < 0.0001, jnp.eye(3), R)
 
+
 def transform_to_posevec(transform):
-    rvec = jnp.array(cv2.Rodrigues(np.array(transform[:3,:3]))[0]).reshape(-1)
-    tvec = transform[:3,3].reshape(-1)
+    rvec = jnp.array(cv2.Rodrigues(np.array(transform[:3, :3]))[0]).reshape(-1)
+    tvec = transform[:3, 3].reshape(-1)
     posevec = jnp.concatenate([tvec, rvec])
     return posevec
+
 
 def transform_from_posevec(posevec):
     return transform_from_rot_and_pos(rotation_from_rodrigues(posevec[3:]), posevec[:3])
 
+
 def transform_from_rvec_tvec(rvec, tvec):
-    return transform_from_rot_and_pos(
-        rotation_from_rodrigues(rvec),
-        tvec.reshape(-1)
-    )
+    return transform_from_rot_and_pos(rotation_from_rodrigues(rvec), tvec.reshape(-1))
 
 
 def add_homogenous_ones(cloud):
     """Adds a column of ones to a point cloud.
-    
+
     Args:
         cloud (jnp.ndarray): The point cloud. Shape (N, 3)
     Returns:
         jnp.ndarray: The point cloud with a column of ones. Shape (N, 4)
     """
-    return jnp.concatenate([cloud, jnp.ones((*cloud.shape[:-1],1))],axis=-1)
+    return jnp.concatenate([cloud, jnp.ones((*cloud.shape[:-1], 1))], axis=-1)
+
 
 def apply_transform(coords, transform):
     """Applies a transform to a point cloud.
-    
+
     Args:
         coords (jnp.ndarray): The point cloud. Shape (N, 3)
         transform (jnp.ndarray): The transform matrix. Shape (4, 4)
@@ -130,16 +152,19 @@ def apply_transform(coords, transform):
         jnp.ndarray: The transformed point cloud. Shape (N, 3)
     """
     coords = jnp.einsum(
-        'ij,...j->...i',
+        "ij,...j->...i",
         transform,
         jnp.concatenate([coords, jnp.ones(coords.shape[:-1] + (1,))], axis=-1),
     )[..., :-1]
     return coords
+
+
 apply_transform_jit = jax.jit(apply_transform)
+
 
 def unproject_depth(depth, intrinsics):
     """Unprojects a depth image into a point cloud.
-    
+
     Args:
         depth (jnp.ndarray): The depth image. Shape (H, W)
         intrinsics (b.camera.Intrinsics): The camera intrinsics.
@@ -153,12 +178,15 @@ def unproject_depth(depth, intrinsics):
     y = (y - intrinsics.cy) / intrinsics.fy
     point_cloud_image = jnp.stack([x, y, jnp.ones_like(x)], axis=-1) * depth[:, :, None]
     return point_cloud_image
+
+
 unproject_depth_jit = jax.jit(unproject_depth)
-unproject_depth_vmap_jit = jax.jit(jax.vmap(unproject_depth, in_axes=(0,None)))
+unproject_depth_vmap_jit = jax.jit(jax.vmap(unproject_depth, in_axes=(0, None)))
+
 
 def transform_from_pos_target_up(translation_of_camera, target_point, up):
     """Creates a pose matrix from a translation_of_camera, target_point and up vector.
-    
+
     Args:
         translation_of_camera (jnp.ndarray): The position of the camera. Shape (3,)
         target_point (jnp.ndarray): The point at which the camera is looking at. Shape (3,)
@@ -166,25 +194,24 @@ def transform_from_pos_target_up(translation_of_camera, target_point, up):
     Returns:
         jnp.ndarray: The camera pose matrix. Shape (4, 4)
     """
-    z = target_point- translation_of_camera
+    z = target_point - translation_of_camera
     z = z / jnp.linalg.norm(z)
 
     x = jnp.cross(z, up)
     x = x / jnp.linalg.norm(x)
 
-    y = jnp.cross(z,x)
+    y = jnp.cross(z, x)
     y = y / jnp.linalg.norm(y)
 
-    R = jnp.hstack([
-        x.reshape(-1,1),y.reshape(-1,1),z.reshape(-1,1)
-    ])
+    R = jnp.hstack([x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)])
     return transform_from_rot_and_pos(R, translation_of_camera)
+
 
 def estimate_transform_between_clouds(c1, c2):
     """Estimates a transform between two point clouds.
 
     transform = estimate_transform_between_clouds(c1, c2)
-    
+
     `apply_transform(c1, transform)` should match `c2` as closely as possible.
 
     Args:
@@ -193,28 +220,30 @@ def estimate_transform_between_clouds(c1, c2):
     Returns:
         jnp.ndarray: The transform matrix. Shape (4, 4)
     """
-    
-    centroid1 = jnp.mean(c1, axis=0) 
+
+    centroid1 = jnp.mean(c1, axis=0)
     centroid2 = jnp.mean(c2, axis=0)
     c1_centered = c1 - centroid1
     c2_centered = c2 - centroid2
     H = jnp.transpose(c1_centered).dot(c2_centered)
 
-    U,_,V = jnp.linalg.svd(H)
-    rot = (jnp.transpose(V).dot(jnp.transpose(U)))
+    U, _, V = jnp.linalg.svd(H)
+    rot = jnp.transpose(V).dot(jnp.transpose(U))
 
-    modifier = jnp.array([
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, -1.0],
-    ])
+    modifier = jnp.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, -1.0],
+        ]
+    )
     V_mod = modifier.dot(V)
-    rot2 = (jnp.transpose(V_mod).dot(jnp.transpose(U)))
+    rot2 = jnp.transpose(V_mod).dot(jnp.transpose(U))
 
     rot_final = (jnp.linalg.det(rot) < 0) * rot2 + (jnp.linalg.det(rot) > 0) * rot
 
-    T = (centroid2 - rot_final.dot(centroid1))
-    transform =  transform_from_rot_and_pos(rot_final, T)
+    T = centroid2 - rot_final.dot(centroid1)
+    transform = transform_from_rot_and_pos(rot_final, T)
     return transform
 
 
@@ -226,6 +255,7 @@ def rotation_matrix_to_quaternion(matrix):
     Returns:
         jnp.ndarray: The quaternion. Shape (4,)
     """
+
     def case0(m):
         t = 1 + m[0, 0] - m[1, 1] - m[2, 2]
         q = jnp.array(
@@ -297,6 +327,7 @@ def rotation_matrix_to_quaternion(matrix):
     )
     return q * 0.5 / jnp.sqrt(t)
 
+
 def pose_matrix_to_translation_and_quaternion(pose_matrix):
     """Converts a pose matrix to a translation and quaternion.
 
@@ -307,6 +338,7 @@ def pose_matrix_to_translation_and_quaternion(pose_matrix):
             Translation shape (3,), quaternion shape (4,)
     """
     return pose_matrix[:3, 3], rotation_matrix_to_quaternion(pose_matrix[:3, :3])
+
 
 def translation_and_quaternion_to_pose_matrix(translation, quaternion):
     """Converts a translation and quaternion to a pose matrix.
@@ -321,16 +353,17 @@ def translation_and_quaternion_to_pose_matrix(translation, quaternion):
         quaternion_to_rotation_matrix(quaternion), translation
     )
 
+
 def quaternion_to_rotation_matrix(Q_in):
     """
     Covert a quaternion into a full three-dimensional rotation matrix.
- 
+
     Input
-    :param Q: A 4 element array representing the quaternion (q0,q1,q2,q3) 
- 
+    :param Q: A 4 element array representing the quaternion (q0,q1,q2,q3)
+
     Output
-    :return: A 3x3 element matrix representing the full 3D rotation matrix. 
-             This rotation matrix converts a point in the local reference 
+    :return: A 3x3 element matrix representing the full 3D rotation matrix.
+             This rotation matrix converts a point in the local reference
              frame to a point in the global reference frame.
     """
     # Extract the values from Q
@@ -339,45 +372,45 @@ def quaternion_to_rotation_matrix(Q_in):
     q1 = Q[1]
     q2 = Q[2]
     q3 = Q[3]
-     
+
     # First row of the rotation matrix
     r00 = 2 * (q0 * q0 + q1 * q1) - 1
     r01 = 2 * (q1 * q2 - q0 * q3)
     r02 = 2 * (q1 * q3 + q0 * q2)
-     
+
     # Second row of the rotation matrix
     r10 = 2 * (q1 * q2 + q0 * q3)
     r11 = 2 * (q0 * q0 + q2 * q2) - 1
     r12 = 2 * (q2 * q3 - q0 * q1)
-     
+
     # Third row of the rotation matrix
     r20 = 2 * (q1 * q3 - q0 * q2)
     r21 = 2 * (q2 * q3 + q0 * q1)
     r22 = 2 * (q0 * q0 + q3 * q3) - 1
-     
+
     # 3x3 rotation matrix
-    rot_matrix = jnp.array([[r00, r01, r02],
-                           [r10, r11, r12],
-                           [r20, r21, r22]])
-                            
+    rot_matrix = jnp.array([[r00, r01, r02], [r10, r11, r12], [r20, r21, r22]])
+
     return rot_matrix
+
 
 def rotation_matrix_to_xyzw(matrix):
     wxyz = rotation_matrix_to_quaternion(matrix)
     return jnp.array([*wxyz[1:], wxyz[0]])
 
+
 def xyzw_to_rotation_matrix(xyzw):
     return quaternion_to_rotation_matrix(jnp.array([xyzw[-1], *xyzw[:-1]]))
+
 
 def pybullet_pose_to_transform(pybullet_pose):
     translation = jnp.array(pybullet_pose[0])
     R = xyzw_to_rotation_matrix(pybullet_pose[1])
-    cam_pose = (
-        transform_from_rot_and_pos(R, translation)
-    )
+    cam_pose = transform_from_rot_and_pos(R, translation)
     return cam_pose
 
+
 def transform_to_pybullet_pose(pose):
-    translation = jnp.array(pose[:3,3])
-    quat = rotation_matrix_to_xyzw(pose[:3,:3])
+    translation = jnp.array(pose[:3, 3])
+    quat = rotation_matrix_to_xyzw(pose[:3, :3])
     return translation, quat

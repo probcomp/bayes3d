@@ -1,19 +1,12 @@
-import numpy as np
-import jax.numpy as jnp
-import jax
-import bayes3d as b
-import trimesh
 import os
-import time
 
+import jax
+import jax.numpy as jnp
+from IPython import embed
 
-intrinsics = b.Intrinsics(
-    300,
-    300,
-    200.0,200.0,
-    150.0,150.0,
-    0.001, 50.0
-)
+import bayes3d as b
+
+intrinsics = b.Intrinsics(300, 300, 200.0, 200.0, 150.0, 150.0, 0.001, 50.0)
 b.setup_renderer(intrinsics, num_layers=1)
 renderer = b.RENDERER
 
@@ -21,86 +14,106 @@ r = 0.1
 outlier_prob = 0.01
 max_depth = 15.0
 
-renderer.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/cube.obj"))
-renderer.add_mesh_from_file(os.path.join(b.utils.get_assets_dir(),"sample_objs/sphere.obj"))
-
+renderer.add_mesh_from_file(
+    os.path.join(b.utils.get_assets_dir(), "sample_objs/cube.obj")
+)
+renderer.add_mesh_from_file(
+    os.path.join(b.utils.get_assets_dir(), "sample_objs/sphere.obj")
+)
 
 
 num_parallel_frames = 20
-gt_poses_1 = jnp.tile(jnp.array([
-    [1.0, 0.0, 0.0, 0.0],   
-    [0.0, 1.0, 0.0, -1.0],   
-    [0.0, 0.0, 1.0, 8.0],   
-    [0.0, 0.0, 0.0, 1.0],   
-    ]
-)[None,...],(num_parallel_frames,1,1))
-gt_poses_1 = gt_poses_1.at[:,0,3].set(jnp.linspace(-2.0, 2.0, gt_poses_1.shape[0]))
-gt_poses_1 = gt_poses_1.at[:,2,3].set(jnp.linspace(10.0, 5.0, gt_poses_1.shape[0]))
+gt_poses_1 = jnp.tile(
+    jnp.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, -1.0],
+            [0.0, 0.0, 1.0, 8.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )[None, ...],
+    (num_parallel_frames, 1, 1),
+)
+gt_poses_1 = gt_poses_1.at[:, 0, 3].set(jnp.linspace(-2.0, 2.0, gt_poses_1.shape[0]))
+gt_poses_1 = gt_poses_1.at[:, 2, 3].set(jnp.linspace(10.0, 5.0, gt_poses_1.shape[0]))
 
-gt_poses_2 = jnp.tile(jnp.array([
-    [1.0, 0.0, 0.0, 0.0],   
-    [0.0, 1.0, 0.0, -1.0],   
-    [0.0, 0.0, 1.0, 8.0],   
-    [0.0, 0.0, 0.0, 1.0],   
-    ]
-)[None,...],(num_parallel_frames,1,1))
-gt_poses_2 = gt_poses_2.at[:,0,3].set(jnp.linspace(4.0, -3.0, gt_poses_2.shape[0]))
-gt_poses_2 = gt_poses_2.at[:,2,3].set(jnp.linspace(12.0, 5.0, gt_poses_2.shape[0]))
+gt_poses_2 = jnp.tile(
+    jnp.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, -1.0],
+            [0.0, 0.0, 1.0, 8.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )[None, ...],
+    (num_parallel_frames, 1, 1),
+)
+gt_poses_2 = gt_poses_2.at[:, 0, 3].set(jnp.linspace(4.0, -3.0, gt_poses_2.shape[0]))
+gt_poses_2 = gt_poses_2.at[:, 2, 3].set(jnp.linspace(12.0, 5.0, gt_poses_2.shape[0]))
 
-gt_poses_all = jnp.stack([gt_poses_1, gt_poses_2],axis=1)
+gt_poses_all = jnp.stack([gt_poses_1, gt_poses_2], axis=1)
 
-indices = jnp.array( [0, 1])
+indices = jnp.array([0, 1])
 
 
 multiobject_scene_img = renderer.render(gt_poses_all[-1, ...], jnp.array([0, 1]))
-multiobject_viz = b.get_depth_image(multiobject_scene_img[:,:,2])
+multiobject_viz = b.get_depth_image(multiobject_scene_img[:, :, 2])
 
 multiobject_scene_parallel_img = renderer.render_many(gt_poses_all, jnp.array([0, 1]))
-multiobject_parallel_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,:,:,2])
+multiobject_parallel_viz = b.get_depth_image(
+    multiobject_scene_parallel_img[-1, :, :, 2]
+)
 
-segmentation_viz = b.get_depth_image(multiobject_scene_parallel_img[-1,:,:,3])
+segmentation_viz = b.get_depth_image(multiobject_scene_parallel_img[-1, :, :, 3])
 
-images = [b.get_depth_image(multiobject_scene_parallel_img[i,:,:,2]) for i in range(num_parallel_frames)]
+images = [
+    b.get_depth_image(multiobject_scene_parallel_img[i, :, :, 2])
+    for i in range(num_parallel_frames)
+]
 b.multi_panel(
     [multiobject_viz, multiobject_parallel_viz, segmentation_viz] + images
 ).save("test_renderer.png")
 
 
 def test_segmentation_produces_sensical_outputs():
-    assert jnp.allclose(multiobject_scene_parallel_img[-1,:,:,3].max(), 2.0)
-    assert jnp.allclose(multiobject_scene_parallel_img[-1,:,:,3].min(), 0.0)
-    assert jnp.allclose(multiobject_scene_img[:,:,3].max(), 2.0)
-    assert jnp.allclose(multiobject_scene_img[:,:,3].min(), 0.0)
+    assert jnp.allclose(multiobject_scene_parallel_img[-1, :, :, 3].max(), 2.0)
+    assert jnp.allclose(multiobject_scene_parallel_img[-1, :, :, 3].min(), 0.0)
+    assert jnp.allclose(multiobject_scene_img[:, :, 3].max(), 2.0)
+    assert jnp.allclose(multiobject_scene_img[:, :, 3].min(), 0.0)
+
 
 def test_something_is_being_rendered():
-    assert not jnp.all(multiobject_scene_parallel_img[0,:,:,2] == intrinsics.far)
-    assert not jnp.all(multiobject_scene_parallel_img[-1,:,:,2] == intrinsics.far)
-    assert not jnp.all(multiobject_scene_img[:,:,2] == intrinsics.far)
+    assert not jnp.all(multiobject_scene_parallel_img[0, :, :, 2] == intrinsics.far)
+    assert not jnp.all(multiobject_scene_parallel_img[-1, :, :, 2] == intrinsics.far)
+    assert not jnp.all(multiobject_scene_img[:, :, 2] == intrinsics.far)
+
 
 def render(key):
     pose = b.distributions.vmf(key, 1.0)
     img = b.RENDERER.render(jnp.array([pose]), jnp.array([0]))
     return img
 
+
 render_parallel = jax.jit(jax.vmap(render))
 
 
 x = render_parallel(jax.random.split(jax.random.PRNGKey(10), 10))
 
-y = renderer.render_many_custom_intrinsics(gt_poses_all, jnp.array([0, 1]),intrinsics)
+y = renderer.render_many_custom_intrinsics(gt_poses_all, jnp.array([0, 1]), intrinsics)
 render_many_custom_intrinsics_jit = jax.jit(renderer.render_many_custom_intrinsics)
-z = render_many_custom_intrinsics_jit(gt_poses_all, jnp.array([0, 1]),intrinsics)
+z = render_many_custom_intrinsics_jit(gt_poses_all, jnp.array([0, 1]), intrinsics)
 
-render_parallel = jax.jit(jax.vmap(b.RENDERER.render, in_axes=(0,None)))
+render_parallel = jax.jit(jax.vmap(b.RENDERER.render, in_axes=(0, None)))
 render_parallel(gt_poses_all, jnp.array([0, 1])).shape
 
 
-render_many_custom_intrinsics_parallel = jax.vmap(renderer.render, in_axes=(0,None))
+render_many_custom_intrinsics_parallel = jax.vmap(renderer.render, in_axes=(0, None))
 render_many_custom_intrinsics_parallel(gt_poses_all, jnp.array([0, 1])).shape
 
-render_many_custom_intrinsics_parallel = jax.vmap(renderer.render_custom_intrinsics, in_axes=(0,None, None))
+render_many_custom_intrinsics_parallel = jax.vmap(
+    renderer.render_custom_intrinsics, in_axes=(0, None, None)
+)
 del render_many_custom_intrinsics_parallel
-render_many_custom_intrinsics_parallel(gt_
-poses_all, jnp.array([0, 1]), intrinsics).shape
+# render_many_custom_intrinsics_parallel(gt_poses_all, jnp.array([0, 1]), intrinsics).shape
 
-from IPython import embed; embed()
+embed()
