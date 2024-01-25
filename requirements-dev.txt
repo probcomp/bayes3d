@@ -1,0 +1,8 @@
+ipython
+jupyter
+jupterlab
+joblib
+flax
+mkdocs
+mkdocs-material
+pyliblzfse

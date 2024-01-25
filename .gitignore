@@ -27,7 +27,6 @@ assets/*
 *.ply
 *.zip
 *.npz
-*.txt
 *.pdf
 *.pkl
 .DS_Store

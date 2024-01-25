@@ -32,7 +32,7 @@ pip install git+https://github.com/probcomp/genjax.git@v0.1.0
 Install JAX and Torch:
 ```
 pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-pip install torch torchvision torchaudio --upgrade --index-url https://download.pytorch.org/whl/cu118
+pip install torch torchvision --upgrade --index-url https://download.pytorch.org/whl/cu118
 ```
 
 Download model and data assets:
