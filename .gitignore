@@ -30,3 +30,10 @@ assets/*
 *.pdf
 *.pkl
 .DS_Store
+
+# C++ extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
