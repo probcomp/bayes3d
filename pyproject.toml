@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bayes3d"
-version = "0.0.1"
 authors = [
     {name = "Nishad Gothoskar", email = "nishadg@mit.edu"},
 ]
@@ -25,6 +24,10 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12"
 ]
+dynamic = ["version"]
+
+[tool.setuptools_scm]
+
 
 [tool.ruff]
 exclude = [
