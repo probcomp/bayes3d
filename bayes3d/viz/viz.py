@@ -66,11 +66,11 @@ def get_depth_image(image, min_val=None, max_val=None, remove_max=True):
         depth = np.array(image)
 
     if max_val is None:
-        max_val = depth.max()
+        max_val = depth[depth < depth.max()].max()
     if not remove_max:
         max_val += 1
     if min_val is None:
-        min_val = depth.min()
+        min_val = depth[depth > depth.min()].min()
 
     mask = (depth < max_val) * (depth > min_val)
     depth[np.logical_not(mask)] = np.nan
