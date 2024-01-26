@@ -24,9 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12"
 ]
-dynamic = ["version"]
-
-[tool.setuptools_scm]
+dynamic = ["version", "dependencies", "optional-dependencies"]
 
 
 [tool.ruff]
@@ -75,6 +73,13 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 
+[tool.setuptools_scm]
+
+
 [tool.setuptools.packages.find]
 include = ["bayes3d"]
 namespaces = false
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+optional-dependencies = {dev = { file = ["requirements-dev.txt"] }}
