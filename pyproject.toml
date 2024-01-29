@@ -24,7 +24,22 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12"
 ]
-dynamic = ["version", "dependencies", "optional-dependencies"]
+dependencies = [
+    "distinctipy",
+    "graphviz",
+    "imageio",
+    "matplotlib",
+    "meshcat",
+    "natsort",
+    "numpy",
+    "open3d",
+    "plyfile",
+    "pyransac3d",
+    "tensorflow-probability",
+    "timm",
+    "trimesh",
+]
+dynamic = ["version", "optional-dependencies"]
 
 
 [tool.ruff]
@@ -81,5 +96,4 @@ include = ["bayes3d"]
 namespaces = false
 
 [tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
 optional-dependencies = {dev = { file = ["requirements-dev.txt"] }}
