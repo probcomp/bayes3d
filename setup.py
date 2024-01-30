@@ -4,8 +4,7 @@ import warnings
 import setuptools
 from torch.utils import cpp_extension
 
-CPP_SRC_DIR = "bayes3d/rendering/nvdiffrast/common"
-
+CPP_SRC_DIR = "bayes3d/src/rendering/nvdiffrast/common"
 
 # Nvdiffrast compilation setup
 if os.name == "nt":
@@ -65,7 +64,6 @@ if (os.name == "posix") and ("libGLEW" in os.environ.get("LD_PRELOAD", "")):
         "libGLEW is being loaded via LD_PRELOAD, and will probably conflict with the OpenGL plugin"
     )
 
-
 # Speed up compilation on Windows.
 if os.name == "nt":
     # Skip telemetry sending step in vcvarsall.bat
@@ -82,7 +80,6 @@ if os.name == "nt":
             )
     except Exception:
         pass
-
 
 setuptools.setup(
     ext_modules=[

@@ -35,8 +35,34 @@ pre-commit run --all-files
 
 ## Releasing Bayes3D
 
+Boot up a VM... then start caliban, with the proper caliban config, TODO I'll
+add this:
+
+
+```bash
+caliban shell
+```
+
+Clone the repo:
+
+```bash
+git clone https://github.com/probcomp/bayes3d.git && cd bayes3d
+```
+
 Install the required deps:
 
 ```bash
 python -m pip install cibuildwheel==2.12.0 build==0.10.0 wheel twine
+```
+
+Build the wheel:
+
+```bash
+python -m build
+```
+
+```bash
+pythonc -m twine upload \
+    --repository-url https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/ \
+    dist/*
 ```
