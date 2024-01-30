@@ -1,12 +1,11 @@
 import os
 import time
 
+import bayes3d as b
 import jax
 import jax.numpy as jnp
 from IPython import embed
 from scipy.spatial.transform import Rotation as R
-
-import bayes3d as b
 
 # Can be helpful for debugging:
 # jax.config.update('jax_enable_checks', True)

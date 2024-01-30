@@ -1,7 +1,6 @@
+import bayes3d as b
 import jax
 import jax.numpy as jnp
-
-import bayes3d as b
 
 N = 4
 scene_graph = b.scene_graph.SceneGraph(

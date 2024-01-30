@@ -1,9 +1,8 @@
 import os
 
+import bayes3d as b
 import jax
 import jax.numpy as jnp
-
-import bayes3d as b
 
 are_bboxes_intersecting_jit = jax.jit(b.utils.are_bboxes_intersecting)
 

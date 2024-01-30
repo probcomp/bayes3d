@@ -1,12 +1,11 @@
 import os
 
+import bayes3d as b
+import bayes3d.genjax
 import genjax
 import jax
 import jax.numpy as jnp
 import joblib
-
-import bayes3d as b
-import bayes3d.genjax
 
 console = genjax.pretty(show_locals=False)
 

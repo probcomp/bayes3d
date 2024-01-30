@@ -5,6 +5,7 @@ import warnings
 from pathlib import Path
 from typing import List, Tuple, Union
 
+import bayes3d as b
 import jax.numpy as jnp
 import numpy as np
 import timm
@@ -15,8 +16,6 @@ import torchvision.transforms as T
 from PIL import Image
 from torch import nn
 from torchvision import transforms
-
-import bayes3d as b
 
 
 def get_embeddings(dinov2_vitg14, rgb):

@@ -1,12 +1,11 @@
 import os
 
+import bayes3d as j
 import jax
 import jax.numpy as jnp
 import numpy as np
 import trimesh
 from IPython import embed
-
-import bayes3d as j
 
 # --- creating the model dir from the working directory
 model_dir = os.path.join(j.utils.get_assets_dir(), "ycb_video_models/models")

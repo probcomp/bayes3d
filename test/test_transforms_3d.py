@@ -1,7 +1,6 @@
+import bayes3d as b
 import jax
 import jax.numpy as jnp
-
-import bayes3d as b
 
 
 def test_estimate_transform_between_clouds():

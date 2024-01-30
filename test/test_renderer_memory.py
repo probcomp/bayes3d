@@ -1,9 +1,8 @@
 import gc
 import os
 
-import jax.numpy as jnp
-
 import bayes3d as b
+import jax.numpy as jnp
 
 # setup renderer
 intrinsics = b.Intrinsics(50, 50, 200.0, 200.0, 25.0, 25.0, 0.001, 10.0)

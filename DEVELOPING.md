@@ -32,3 +32,11 @@ following command:
 ```bash
 pre-commit run --all-files
 ```
+
+## Releasing Bayes3D
+
+Install the required deps:
+
+```bash
+python -m pip install cibuildwheel==2.12.0 build==0.10.0 wheel twine
+```

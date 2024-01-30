@@ -1,11 +1,10 @@
 import os
 
+import bayes3d as b
+import bayes3d.genjax
 import genjax
 import jax
 import jax.numpy as jnp
-
-import bayes3d as b
-import bayes3d.genjax
 
 key = jax.random.PRNGKey(1)
 

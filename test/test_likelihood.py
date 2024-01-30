@@ -1,6 +1,5 @@
-import jax.numpy as jnp
-
 import bayes3d as b
+import jax.numpy as jnp
 
 H = 100
 W = 200

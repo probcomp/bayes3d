@@ -1,9 +1,8 @@
 import os
 
+import bayes3d as b
 import jax
 import jax.numpy as jnp
-
-import bayes3d as b
 
 b.setup_visualizer()
 

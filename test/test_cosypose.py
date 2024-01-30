@@ -1,8 +1,7 @@
 import os
 
-import numpy as np
-
 import bayes3d as b
+import numpy as np
 from bayes3d.neural.cosypose_baseline import cosypose_utils
 
 bop_ycb_dir = os.path.join(b.utils.get_assets_dir(), "bop/ycbv")

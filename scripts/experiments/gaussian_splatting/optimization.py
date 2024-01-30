@@ -1,10 +1,9 @@
 import os
 
+import bayes3d as b
 import jax.numpy as jnp
 import numpy as np
 import torch
-
-import bayes3d as b
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

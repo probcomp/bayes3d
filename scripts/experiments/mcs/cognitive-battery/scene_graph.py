@@ -2,7 +2,6 @@
 
 
 import jax.numpy as jnp
-
 from bayes3d.transforms_3d import transform_from_pos
 
 

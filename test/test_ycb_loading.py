@@ -1,11 +1,10 @@
 import os
 
+import bayes3d as b
+import bayes3d.utils.ycb_loader
 import jax
 import jax.numpy as jnp
 import numpy as np
-
-import bayes3d as b
-import bayes3d.utils.ycb_loader
 
 
 def test_ycb_loading():

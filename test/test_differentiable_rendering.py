@@ -1,10 +1,9 @@
 import os
 
+import bayes3d as b
 import jax
 import jax.numpy as jnp
 import numpy as np
-
-import bayes3d as b
 from bayes3d.rendering.nvdiffrast_jax.jax_renderer import Renderer as JaxRenderer
 
 intrinsics = b.Intrinsics(

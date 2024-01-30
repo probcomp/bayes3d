@@ -1,5 +1,6 @@
 import math
 
+import bayes3d as b
 import jax.numpy as jnp
 import torch
 from diff_gaussian_rasterization import (
@@ -7,8 +8,6 @@ from diff_gaussian_rasterization import (
     GaussianRasterizer,
 )
 from IPython import embed
-
-import bayes3d as b
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

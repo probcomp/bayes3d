@@ -1,9 +1,8 @@
 import os
 
+import bayes3d as b
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-
-import bayes3d as b
 
 bop_ycb_dir = os.path.join(b.utils.get_assets_dir(), "bop/ycbv")
 rgbd, gt_ids, gt_poses, masks = b.utils.ycb_loader.get_test_img("52", "1", bop_ycb_dir)

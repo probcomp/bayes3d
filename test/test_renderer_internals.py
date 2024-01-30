@@ -1,11 +1,10 @@
 import os
 
+import bayes3d as b
+import bayes3d._rendering.nvdiffrast.common as dr
 import jax
 import jax.numpy as jnp
 import torch
-
-import bayes3d as b
-import bayes3d._rendering.nvdiffrast.common as dr
 
 intrinsics = b.Intrinsics(300, 300, 200.0, 200.0, 150.0, 150.0, 0.001, 50.0)
 b.setup_renderer(intrinsics)

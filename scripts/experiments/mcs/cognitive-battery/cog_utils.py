@@ -1,12 +1,11 @@
 import json
 from typing import List, Tuple, Union
 
+import bayes3d
 import jax.numpy as jnp
 import numpy as np
-from scipy.spatial.transform import Rotation as R
-
-import bayes3d
 from bayes3d import Renderer
+from scipy.spatial.transform import Rotation as R
 
 
 def get_object_transforms(obj_name: str, init_transform: jnp.ndarray) -> jnp.ndarray:

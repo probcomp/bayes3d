@@ -3,11 +3,10 @@ import pickle
 import sys
 import warnings
 
+import bayes3d as j
 import jax.numpy as jnp
 import numpy as np
 from segment_anything import SamAutomaticMaskGenerator, build_sam
-
-import bayes3d as j
 
 sys.path.extend(["/home/nishadgothoskar/ptamp/pybullet_planning"])
 sys.path.extend(["/home/nishadgothoskar/ptamp"])

@@ -2,16 +2,15 @@ import json
 import os
 from collections import deque
 
+import bayes3d
 import cog_utils as utils
 import jax
 import jax.numpy as jnp
 import numpy as np
-from PIL import Image
-from tqdm import tqdm
-
-import bayes3d
 from bayes3d.transforms_3d import transform_from_pos, unproject_depth
 from bayes3d.viz import get_depth_image, make_gif_from_pil_images, multi_panel
+from PIL import Image
+from tqdm import tqdm
 
 SCENE = "swap"
 

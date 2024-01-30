@@ -1,12 +1,11 @@
 import os
 
+import bayes3d as b
 import jax.numpy as jnp
 import trimesh
+from bayes3d.rendering.photorealistic_renderers.kubric_interface import render_many
 from IPython import embed
 from tqdm import tqdm
-
-import bayes3d as b
-from bayes3d.rendering.photorealistic_renderers.kubric_interface import render_many
 
 # --- creating the ycb dir from the working directory
 bop_ycb_dir = os.path.join(b.utils.get_assets_dir(), "bop/ycbv")
