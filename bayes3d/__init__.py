@@ -12,7 +12,7 @@ from .rgbd import *
 from .transforms_3d import *
 from .viz import *
 
-RENDERER = None
+RENDERER: Renderer = None
 
 __version__ = metadata.version("bayes3d")
 

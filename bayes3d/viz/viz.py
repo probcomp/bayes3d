@@ -66,11 +66,11 @@ def get_depth_image(image, min_val=None, max_val=None, remove_max=True):
         depth = np.array(image)
 
     if max_val is None:
-        max_val = depth[depth < depth.max()].max()
+        max_val = depth[depth < depth.max()].max(initial=0.0)
     if not remove_max:
         max_val += 1
     if min_val is None:
-        min_val = depth[depth > depth.min()].min()
+        min_val = depth[depth > depth.min()].min(initial=0.0)
 
     mask = (depth < max_val) * (depth > min_val)
     depth[np.logical_not(mask)] = np.nan
@@ -208,7 +208,7 @@ def scale_image(img, factor):
     return img.resize((int(w * factor), int(h * factor)))
 
 
-def vstack_images(images, border=10):
+def vstack_images(images, border=10, bg_color=(255, 255, 255)):
     """Stack images vertically.
 
     Args:
@@ -224,7 +224,7 @@ def vstack_images(images, border=10):
         max_w = max(max_w, w)
         sum_h += h
 
-    full_image = Image.new("RGB", (max_w, sum_h), (255, 255, 255))
+    full_image = Image.new("RGB", (max_w, sum_h), bg_color)
     running_h = 0
     for img in images:
         w, h = img.size
@@ -233,7 +233,7 @@ def vstack_images(images, border=10):
     return full_image
 
 
-def hstack_images(images, border=10):
+def hstack_images(images, border=10, bg_color=(255, 255, 255)):
     """Stack images horizontally.
 
     Args:
@@ -249,7 +249,7 @@ def hstack_images(images, border=10):
         max_h = max(max_h, h)
         sum_w += w
 
-    full_image = Image.new("RGB", (sum_w, max_h), (255, 255, 255))
+    full_image = Image.new("RGB", (sum_w, max_h), bg_color)
     running_w = 0
     for img in images:
         w, h = img.size
@@ -258,7 +258,7 @@ def hstack_images(images, border=10):
     return full_image
 
 
-def hvstack_images(images, h, w, border=10):
+def hvstack_images(images, h, w, border=10, bg_color=(255, 255, 255)):
     """Stack images in a grid.
 
     Args:
@@ -274,10 +274,10 @@ def hvstack_images(images, h, w, border=10):
     images_to_vstack = []
 
     for row_idx in range(h):
-        hstacked_row = hstack_images(images[row_idx * w : (row_idx + 1) * w])
+        hstacked_row = hstack_images(images[row_idx * w : (row_idx + 1) * w], border=border, bg_color=bg_color)
         images_to_vstack.append(hstacked_row)
 
-    return vstack_images(images_to_vstack)
+    return vstack_images(images_to_vstack, border=border, bg_color=bg_color)
 
 
 def multi_panel(
