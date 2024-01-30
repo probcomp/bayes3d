@@ -42,7 +42,7 @@ jobs:
           python -m pip install cibuildwheel==2.12.0 build==0.10.0 wheel twine
           python -m pip install keyrings.google-artifactregistry-auth
 
-      - name: Build the artifact
+      - name: Build the wheel and archive
         run: python -m build
 
       - name: Upload to Artifact Registry
