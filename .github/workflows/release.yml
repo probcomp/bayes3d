@@ -1,6 +1,7 @@
 name: Release to Artifact Registry
 
 on:
+  pull_request:
   release:
     types: [published]
 
@@ -19,12 +20,6 @@ jobs:
           # This is here so that the versioning plugin will be able to see tags
           # and version using them.
           fetch-depth: 0
-
-      - name: Test Secrets
-        env:
-          TEST_SECRET: ${{ secrets.ARTIFACT_REGISTRY_KEY }}
-        run: |
-          echo ${#TEST_SECRET}
 
       - uses: actions/setup-python@v4
         with:
@@ -45,12 +40,10 @@ jobs:
         run: |
           python -m pip install -U pip
           python -m pip install cibuildwheel==2.12.0 build==0.10.0 wheel twine
+          python -m pip install keyrings.google-artifactregistry-auth
 
-      - name: Configure deploy keys
-        run: |
-          poetry config pypi-token.pypi ${{ secrets.PYPI_API_KEY }}
-          poetry self add keyrings.google-artifactregistry-auth
-          poetry config repositories.gcp https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/
+      - name: Build the artifact
+        run: python -m build
 
-      - name: Deploy to Artifact Registry
-        run: poetry publish --build --repository gcp
+      - name: Upload to Artifact Registry
+        run: python3 -m twine upload --repository-url https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/ dist/*
