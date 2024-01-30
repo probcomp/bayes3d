@@ -49,7 +49,7 @@ Finally, install Bayes3D:
 
 ```bash
 pip install --extra-index-url https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/simple/ \
-    git+https://github.com/probcomp/bayes3d.git@sritchie/inline_deps#egg=bayes3d
+    git+https://github.com/probcomp/bayes3d.git#egg=bayes3d
 ```
 
 Download model and data assets:
