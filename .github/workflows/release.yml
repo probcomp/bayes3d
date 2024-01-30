@@ -31,6 +31,8 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: '11.8.0'
+          linux-local-args: '["--toolkit"]'
+          method: 'network'
 
       - uses: actions/setup-python@v4
         with:
