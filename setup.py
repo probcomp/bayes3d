@@ -4,7 +4,7 @@ import warnings
 import setuptools
 from torch.utils import cpp_extension
 
-CPP_SRC_DIR = "src/rendering/nvdiffrast/common"
+CPP_SRC_DIR = "src/bayes3d/rendering/nvdiffrast/common"
 
 # Nvdiffrast compilation setup
 if os.name == "nt":
