@@ -15,24 +15,34 @@
 # Installation Guide
 
 Setup Python environment:
-```
+
+```bash
 git clone https://github.com/probcomp/bayes3d.git
 cd bayes3d
 conda create -n bayes3d python=3.9
 conda activate bayes3d
-pip install -r requirements.txt
-pip install -e .
-```
-
-Install GenJAX (optional):
-```
-pip install git+https://github.com/probcomp/genjax.git@v0.1.0
 ```
 
 Install JAX and Torch:
+
+```bash
+pip install --upgrade torch==2.2.0 torchvision==0.17.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+pip install --upgrade jax[cuda11_local]==0.4.20 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
-pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-pip install torch torchvision --upgrade --index-url https://download.pytorch.org/whl/cu118
+
+Install GenJAX:
+
+```bash
+pip install keyring keyrings.google-artifactregistry-auth
+pip install genjax --extra-index-url https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/simple/
+```
+
+Install Bayes3D:
+
+```bash
+pip install git+https://github.com/probcomp/bayes3d.git@sritchie/inline_deps#egg=bayes3d
+# pip install -r requirements.txt
+# pip install -e .
 ```
 
 Download model and data assets:

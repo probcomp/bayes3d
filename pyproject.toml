@@ -26,6 +26,7 @@ classifiers = [
 ]
 dependencies = [
     "distinctipy",
+    "genjax",
     "graphviz",
     "imageio",
     "matplotlib",
@@ -33,7 +34,9 @@ dependencies = [
     "natsort",
     "numpy",
     "open3d",
+    "opencv-python",
     "plyfile",
+    "pyliblzfse",
     "pyransac3d",
     "tensorflow-probability",
     "timm",
