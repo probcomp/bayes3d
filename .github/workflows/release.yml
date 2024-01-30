@@ -1,7 +1,6 @@
 name: Release to Artifact Registry
 
 on:
-  pull_request:
   release:
     types: [published]
 
