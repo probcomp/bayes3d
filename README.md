@@ -14,36 +14,53 @@
 
 # Installation Guide
 
-Setup Python environment:
-```
-git clone https://github.com/probcomp/bayes3d.git
-cd bayes3d
+Set up a fresh Python environment:
+
+```bash
 conda create -n bayes3d python=3.9
 conda activate bayes3d
-pip install -r requirements.txt
-pip install -e .
 ```
 
-Install GenJAX (optional):
-```
-pip install git+https://github.com/probcomp/genjax.git@v0.1.0
+Install compatible versions JAX and Torch:
+
+```bash
+pip install --upgrade torch==2.2.0 torchvision==0.17.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+pip install --upgrade jax[cuda11_local]==0.4.20 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
 
-Install JAX and Torch:
+Bayes3D is built on top of GenJAX, which is currently hosted in a private Python
+package repository. To configure your machine to access GenJAX:
+
+- [File an issue](https://github.com/probcomp/bayes3d/issues/new) asking @sritchie to give you access.
+- [Install the Google Cloud command line tools](https://cloud.google.com/sdk/docs/install).
+- Follow the instructions on the [installation page](https://cloud.google.com/sdk/docs/install)
+- run `gcloud init` as described [in this
+  guide](https://cloud.google.com/sdk/docs/initializing) and configure the tool
+  with the `probcomp-caliban` project ID.
+
+Then run the following command to configure `pip` to use these new gcloud
+commands:
+
+```bash
+pip install keyring keyrings.google-artifactregistry-auth
 ```
-pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-pip install torch torchvision --upgrade --index-url https://download.pytorch.org/whl/cu118
+
+Finally, install Bayes3D:
+
+```bash
+pip install --extra-index-url https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/simple/ \
+    git+https://github.com/probcomp/bayes3d.git#egg=bayes3d
 ```
 
 Download model and data assets:
-```
-bash download.sh
-```
 
+```bash
+wget -q -O - https://raw.githubusercontent.com/probcomp/bayes3d/main/download.sh | bash
+```
 
 ## Test
-Run `python demo.py` to test installation setup.
 
+Run `python demo.py` to test installation setup.
 
 ## Common issues
 
@@ -86,8 +103,6 @@ sudo apt-get update
 sudo apt-get install ninja-build
 ```
 
-I did somethi!
-
 To check your CUDA version:
 ```
 nvcc --version
@@ -95,7 +110,10 @@ nvcc --version
 
 
 # GCP Setup
-- Start new VM instance (see [link](https://cloud.google.com/compute/docs/instances/create-start-instance)). Select GPU - NVIDIA V100 and Machine Type 8vCPU 4 Core 30GB.
+
+- Start new VM instance (see
+  [link](https://cloud.google.com/compute/docs/instances/create-start-instance)).
+  Select GPU - NVIDIA V100 and Machine Type 8vCPU 4 Core 30GB.
 
 -From the VM instances page, searched for public image `c2-deeplearning-pytorch-2-0-gpu-v20230925-debian-11-py310`. Increase storage to 1000GB.
 
