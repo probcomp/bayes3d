@@ -1,0 +1,61 @@
+name: Release to Artifact Registry
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    runs-on: ubuntu-20.04
+
+    # Add "id-token" with the intended permissions.
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # This is here so that the versioning plugin will be able to see tags
+          # and version using them.
+          fetch-depth: 0
+
+      - name: install packages
+        run: sudo apt-get install -y libegl1-mesa-dev libglu1-mesa-dev
+
+      # This is needed to build our wheel. See
+      # https://github.com/Jimver/cuda-toolkit/blob/master/src/links/linux-links.ts
+      # for available versions
+      - uses: Jimver/cuda-toolkit@v0.2.14
+        id: cuda-toolkit
+        with:
+          cuda: '11.8.0'
+          linux-local-args: '["--toolkit"]'
+          method: 'network'
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.11.5
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: "${{ secrets.ARTIFACT_REGISTRY_KEY }}"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Display gcloud info
+        run: gcloud info
+
+      - name: Install release dependencies
+        run: |
+          python -m pip install -U pip
+          python -m pip install cibuildwheel==2.12.0 build==0.10.0 wheel twine
+          python -m pip install keyrings.google-artifactregistry-auth
+
+      - name: Build the wheel and archive
+        run: python -m build
+
+      - name: Upload to Artifact Registry
+        run: python3 -m twine upload --repository-url https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/ dist/*

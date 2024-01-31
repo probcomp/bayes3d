@@ -48,8 +48,7 @@ pip install keyring keyrings.google-artifactregistry-auth
 Finally, install Bayes3D:
 
 ```bash
-pip install --extra-index-url https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/simple/ \
-    git+https://github.com/probcomp/bayes3d.git#egg=bayes3d
+pip install bayes3d --extra-index-url https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/simple/
 ```
 
 Download model and data assets:
