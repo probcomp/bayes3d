@@ -32,7 +32,6 @@ dependencies = [
     "meshcat",
     "natsort",
     "numpy",
-    "open3d",
     "opencv-python",
     "plyfile",
     "pyliblzfse",
