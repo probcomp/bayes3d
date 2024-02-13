@@ -6,11 +6,8 @@
 // distribution of this software and related documentation without an express
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-#include "torch_common.inl"
-#include "jax_binding_ops.h"
 #include "jax_interpolate.h"
-#include "../common/interpolate.h"
-#include "../common/common.h"
+
 
 
 //------------------------------------------------------------------------

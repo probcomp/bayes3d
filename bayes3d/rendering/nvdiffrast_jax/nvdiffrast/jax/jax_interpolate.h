@@ -11,6 +11,10 @@
 #if !(defined(NVDR_TORCH) && defined(__CUDACC__))
 #include "../common/framework.h"
 #include "../common/glutil.h"
+#include "../common/torch_common.inl"
+#include "../common/interpolate.h"
+#include "../common/common.h"
+#include "bindings.h"
 
 struct DiffInterpolateCustomCallDescriptor {
     int num_images;   // attr[0]

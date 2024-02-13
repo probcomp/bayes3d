@@ -334,6 +334,15 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     NVDR_CHECK_GL_ERROR(glGenBuffers(1, &s.glTriBuffer));
     NVDR_CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, s.glTriBuffer));
 
+    NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPoseTexture));
+    NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, s.glPoseTexture));
+    int num_layers = 1024;
+    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, num_layers, 0, GL_RGBA, GL_FLOAT, 0));
+    NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+    NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+    NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+    NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+
     // Set up depth test.
     NVDR_CHECK_GL_ERROR(glEnable(GL_DEPTH_TEST));
     NVDR_CHECK_GL_ERROR(glDepthFunc(GL_LESS));
@@ -361,18 +370,30 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     changes = false;
 
     // Resize vertex buffer?
+    std::cout << "Before 1" << std::endl;
     if (posCount > s.posCount)
     {
+        cudaGraphicsResource_t  test;
+        std::cout << "Before 1111" << std::endl;
+        std::cout << s.cudaPosBuffer << std::endl;
+        std::cout << test << std::endl;
+        std::cout << "Before 111231211" << std::endl;
+
+
         if (s.cudaPosBuffer)
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPosBuffer));
+        std::cout << "Before 111" << std::endl;
         s.posCount = (posCount > 64) ? ROUND_UP_BITS(posCount, 2) : 64;
         LOG(INFO) << "Increasing position buffer size to " << s.posCount << " float32";
+        std::cout << "Before 11" << std::endl;
         NVDR_CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, s.posCount * sizeof(float), NULL, GL_DYNAMIC_DRAW));
+        std::cout << "Before 12" << std::endl;
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterBuffer(&s.cudaPosBuffer, s.glPosBuffer, cudaGraphicsRegisterFlagsWriteDiscard));
         changes = true;
     }
 
     // Resize triangle buffer?
+    std::cout << "Before 2" << std::endl;
     if (triCount > s.triCount)
     {
         if (s.cudaTriBuffer)
@@ -385,6 +406,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     }
 
     // Resize framebuffer?
+    std::cout << "Before 3" << std::endl;
     if (width > s.width || height > s.height || depth > s.depth)
     {
         int num_outputs = s.enableDB ? 2 : 1;
@@ -429,7 +451,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     }
 }
 
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posePtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
 {
     // Only copy inputs if we are on first iteration of depth peeling or not doing it at all.
     if (peeling_idx < 1)
@@ -516,6 +538,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
     if (s.enableZModify)
         NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
 
+
     // Render the meshes.
     if (depth == 1 && !rangesPtr)
     {
@@ -526,6 +549,8 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
     {
         // Populate a buffer for draw commands and execute it.
         std::vector<GLDrawCmd> drawCmdBuffer(depth);
+        cudaArray_t pose_array = 0;
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
 
         if (!rangesPtr)
         {
@@ -537,10 +562,18 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
                 GLDrawCmd& cmd = drawCmdBuffer[i];
                 cmd.firstIndex    = 0;
                 cmd.count         = triCount;
-                cmd.baseVertex    = vtxPerInstance * i;
+                cmd.baseVertex    = 0;
                 cmd.baseInstance  = 0;
                 cmd.instanceCount = 1;
             }
+            
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(
+                pose_array, 0, 0, posePtr,
+                depth*16*sizeof(float), cudaMemcpyDeviceToDevice, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+    
         }
         else
         {

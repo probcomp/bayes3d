@@ -1,28 +1,6 @@
-#include "torch_types.h"
-#include "jax_binding_ops.h"
-#include "jax_rasterize_gl.h"
-#include "jax_interpolate.h"
+#include "jax_bindings.h"
 #include <tuple>
 #include <pybind11/pybind11.h>
-
-//------------------------------------------------------------------------
-// Op prototypes.
-
-void jax_rasterize_fwd_gl(cudaStream_t stream,
-                      void **buffers,
-                      const char *opaque, std::size_t opaque_len);
-
-void jax_rasterize_bwd(cudaStream_t stream,
-                      void **buffers,
-                      const char *opaque, std::size_t opaque_len);
-
-void jax_interpolate_fwd(cudaStream_t stream,
-                      void **buffers,
-                      const char *opaque, std::size_t opaque_len);
-
-void jax_interpolate_bwd(cudaStream_t stream,
-                      void **buffers,
-                      const char *opaque, std::size_t opaque_len);
 
 //---------------------------------------------------
 

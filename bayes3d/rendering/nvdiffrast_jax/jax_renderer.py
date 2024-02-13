@@ -34,16 +34,16 @@ class Renderer(object):
     # ------------------
 
     @functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
-    def _rasterize(self, pos, tri, resolution):
-        return _rasterize_fwd_custom_call(self, pos, tri, resolution)
+    def _rasterize(self, pose, pos, tri, resolution):
+        return _rasterize_fwd_custom_call(self, pose, pos, tri, resolution)
 
-    def _rasterize_fwd(self, pos, tri, resolution):
-        rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pos, tri, resolution)
-        saved_tensors = (pos, tri, rast_out)
+    def _rasterize_fwd(self, pose, pos, tri, resolution):
+        rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pose, pos, tri, resolution)
+        saved_tensors = (pose, pos, tri, rast_out)
         return (rast_out, rast_out_db), saved_tensors
 
     def _rasterize_bwd(self, saved_tensors, diffs):
-        pos, tri, rast_out = saved_tensors
+        pose, pos, tri, rast_out = saved_tensors
         dy, ddb = diffs
 
         grads = _rasterize_bwd_custom_call(self, pos, tri, rast_out, dy, ddb)
@@ -185,8 +185,8 @@ def _register_custom_calls():
 
 
 # @functools.partial(jax.jit, static_argnums=(0,))
-def _rasterize_fwd_custom_call(r: "Renderer", pos, tri, resolution):
-    return _build_rasterize_fwd_primitive(r).bind(pos, tri, resolution)
+def _rasterize_fwd_custom_call(r: "Renderer", pose, pos, tri, resolution):
+    return _build_rasterize_fwd_primitive(r).bind(pose, pos, tri, resolution)
 
 
 @functools.lru_cache(maxsize=None)
@@ -195,14 +195,18 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
 
-    def _rasterize_fwd_abstract(pos, tri, resolution):
-        if len(pos.shape) != 3 or pos.shape[-1] != 4:
+    def _rasterize_fwd_abstract(pose, pos, tri, resolution):
+        if len(pos.shape) != 2 or pos.shape[-1] != 4:
             raise ValueError(
-                "Pass in a [num_images, num_vertices, 4] sized first input"
+                "Pass in pos aa [num_vertices, 4] sized input"
             )
-        num_images = pos.shape[0]
+        if len(pose.shape) != 3 or pose.shape[-1] != 4:
+            raise ValueError(
+                "Pass in pose aa [num_images, 4, 4] sized input"
+            )
+        num_images = pose.shape[0]
 
-        dtype = dtypes.canonicalize_dtype(pos.dtype)
+        dtype = dtypes.canonicalize_dtype(pose.dtype)
 
         return [
             ShapedArray(
@@ -214,26 +218,26 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
         ]
 
     # Provide an MLIR "lowering" of the rasterize primitive.
-    def _rasterize_fwd_lowering(ctx, pos, tri, resolution):
+    def _rasterize_fwd_lowering(ctx, poses, pos, tri, resolution):
         """
         Single-object (one obj represented by tri) rasterization with
         multiple poses (first dimension fo pos)
         dr.rasterize(glctx, pos, tri, resolution=resolution)
         """
         # Extract the numpy type of the inputs
-        poses_aval, tri_aval, resolution_aval = ctx.avals_in
-        if poses_aval.ndim != 3:
-            raise NotImplementedError(
-                f"Only 3D vtx position inputs supported: got {poses_aval.shape}"
-            )
-        if tri_aval.ndim != 2:
-            raise NotImplementedError(
-                f"Only 2D triangle inputs supported: got {tri_aval.shape}"
-            )
-        if resolution_aval.shape[0] != 2:
-            raise NotImplementedError(
-                f"Only 2D resolutions supported: got {resolution_aval.shape}"
-            )
+        poses_aval, pos_aval, tri_aval, resolution_aval = ctx.avals_in
+        # if poses_aval.ndim != 3:
+        #     raise NotImplementedError(
+        #         f"Only 3D vtx position inputs supported: got {poses_aval.shape}"
+        #     )
+        # if tri_aval.ndim != 2:
+        #     raise NotImplementedError(
+        #         f"Only 2D triangle inputs supported: got {tri_aval.shape}"
+        #     )
+        # if resolution_aval.shape[0] != 2:
+        #     raise NotImplementedError(
+        #         f"Only 2D resolutions supported: got {resolution_aval.shape}"
+        #     )
 
         np_dtype = np.dtype(poses_aval.dtype)
         if np_dtype != np.float32:
@@ -241,7 +245,8 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
         if np.dtype(tri_aval.dtype) != np.int32:
             raise NotImplementedError(f"Unsupported triangles dtype {tri_aval.dtype}")
 
-        num_images, num_vertices = poses_aval.shape[:2]
+        num_images = poses_aval.shape[0]
+        num_vertices = pos_aval.shape[0]
         num_triangles = tri_aval.shape[0]
         out_shp_dtype = mlir.ir.RankedTensorType.get(
             [num_images, r.intrinsics.height, r.intrinsics.width, 4],
@@ -259,10 +264,10 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
             # Output types
             result_types=[out_shp_dtype, out_shp_dtype],
             # The inputs:
-            operands=[pos, tri, resolution],
+            operands=[poses, pos, tri, resolution],
             backend_config=opaque,
             operand_layouts=default_layouts(
-                poses_aval.shape, tri_aval.shape, resolution_aval.shape
+                poses_aval.shape, pos_aval.shape, tri_aval.shape, resolution_aval.shape
             ),
             result_layouts=default_layouts(
                 (
