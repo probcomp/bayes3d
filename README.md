@@ -192,7 +192,7 @@ For example, to forward port 8888 on the VM to my local port 8888:
 ssh my-image.us-west1-b.probcomp-caliban -L 8888:localhost:8888
 ```
 
-Now you're ready for the [Installation Guide](#installation-guide).
+Now you're ready to start the [tutorial](https://github.com/probcomp/welcome/tree/main/tutorials/bayes3d).
 
 ---
 ## License
