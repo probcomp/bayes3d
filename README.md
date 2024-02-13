@@ -9,12 +9,11 @@
 
 - **[Documentation](https://probcomp.github.io/bayes3d/)**
 - **[Installation](#installation-guide)**
-- **[Get Assets](#get-assets)**
-- **[Google Cloud Instance Setup](#gcp-setup)**
+- **[Google Cloud Setup](#running-on-a-google-cloud-instance)**
 
 # Installation Guide
 
-Set up a fresh Python environment:
+For a local install (GPU required), set up a fresh Python environment:
 
 ```bash
 conda create -n bayes3d python=3.9
@@ -106,22 +105,91 @@ To check your CUDA version:
 ```
 nvcc --version
 ```
+# Running on a Google Cloud Instance
 
+Bayes3D has high compute/GPU requirements, so working in a Cloud VM is a great option. After you've set up a [Google Cloud Platform]([url](https://cloud.google.com)) account, you can follow these instructions to get up and running.
 
-# GCP Setup
+## Configuring the `gcloud` CLI
 
-- Start new VM instance (see
-  [link](https://cloud.google.com/compute/docs/instances/create-start-instance)).
-  Select GPU - NVIDIA V100 and Machine Type 8vCPU 4 Core 30GB.
+Install the [Google Cloud command line
+tools](https://cloud.google.com/sdk/docs/install).
 
--From the VM instances page, searched for public image `c2-deeplearning-pytorch-2-0-gpu-v20230925-debian-11-py310`. Increase storage to 1000GB.
+- Follow the instructions on the [installation page](https://cloud.google.com/sdk/docs/install)
+- run `gcloud init` as described [in this guide](https://cloud.google.com/sdk/docs/initializing) and configure the tool with the ID of a Cloud project.
 
-- Note that public image names get updated frequently, so it is possible you may not find the one mentioned above. To find the latest public image, go to the [public list](https://cloud.google.com/compute/docs/images#console), and look for an image as close to the one above (Debian 11, CUDA 11.8, Python 3.10, Pytorch 2.0 etc.).
+## Launching a GPU-Configured VM
 
-- SSH into instance and when prompted, install the NVIDIA drivers.
+To launch a Cloud VM, run the following commands at your terminal:
 
-- Follow [installation guide](#installation-guide).
+```bash
+export ZONE="us-west1-b"
+export INSTANCE_NAME="bayes3d-template"
 
+gcloud compute instances create $INSTANCE_NAME \
+  --zone=$ZONE \
+  --image-family="common-gpu-debian-11-py310" \
+  --image-project=deeplearning-platform-release \
+  --maintenance-policy=TERMINATE \
+  --boot-disk-size=300GB \
+  --machine-type n1-standard-8 \
+  --accelerator="type=nvidia-tesla-v100,count=1" \
+  --metadata="install-nvidia-driver=True" \
+  --scopes=https://www.googleapis.com/auth/cloud-platform
+```
+
+- Make sure to customize `INSTANCE_NAME`, these are shared across the project / region.
+- You may need to increase `--boot-disk-size`, but don't go lower.
+
+Of course you can customize anything you like, but don't change the
+`--image-project` or `--image-family` arguments.
+
+## Accessing the VM
+
+After a few minutes your VM will be available for access via SSH. You can reach
+a terminal in a few different ways:
+
+- Locate your image on the [Cloud
+  Console](https://console.cloud.google.com/compute/instances) and click the
+  "SSH" button
+- Log in via the `gcloud` command line tool with the following command:
+
+```bash
+# These environment variables were set in the code block above:
+gcloud compute ssh --zone $ZONE $INSTANCE_NAME
+```
+
+- Configure your `ssh` credentials so the normal `ssh` command works by running
+
+```bash
+gcloud compute config-ssh
+```
+
+Then you should be able to log in like:
+
+```bash
+ssh $INSTANCE_ID.$ZONE.$PROJECT_ID
+```
+
+## Port-forwarding from a VM
+
+Configure your ssh credentials:
+
+```bash
+gcloud compute config-ssh
+```
+
+Then `ssh` into the instance using this command:
+
+```bash
+gcloud ssh $INSTANCE_ID.$ZONE.$PROJECT_ID -L <local_port>:localhost:<remote_port>
+```
+
+For example, to forward port 8888 on the VM to my local port 8888:
+
+```
+gcloud ssh my-image.us-west1-b.probcomp-caliban -L 8888:localhost:8888
+```
+---
 ## License
 
 Distributed under the [Apache 2.0](LICENSE) license. See [LICENSE](LICENSE).
