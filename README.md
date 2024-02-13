@@ -172,6 +172,8 @@ Then you should be able to log in like:
 ssh $INSTANCE_ID.$ZONE.$PROJECT_ID
 ```
 
+The `gcloud compute config-ssh` command needs to be re-run after instances have been stopped/started, as they are often assigned new IP addresses.
+
 ## Port-forwarding from a VM
 
 Configure your ssh credentials:
