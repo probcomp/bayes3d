@@ -34,11 +34,11 @@ class Renderer(object):
     # ------------------
 
     @functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
-    def _rasterize(self, pose, pos, tri, resolution):
-        return _rasterize_fwd_custom_call(self, pose, pos, tri, resolution)
+    def _rasterize(self, pose, pos, tri, projMatrix, resolution):
+        return _rasterize_fwd_custom_call(self, pose, pos, tri, projMatrix, resolution)
 
-    def _rasterize_fwd(self, pose, pos, tri, resolution):
-        rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pose, pos, tri, resolution)
+    def _rasterize_fwd(self, pose, pos, tri, projMatrix, resolution):
+        rast_out, rast_out_db = _rasterize_fwd_custom_call(self, pose, pos, tri, projMatrix, resolution)
         saved_tensors = (pose, pos, tri, rast_out)
         return (rast_out, rast_out_db), saved_tensors
 
@@ -185,8 +185,8 @@ def _register_custom_calls():
 
 
 # @functools.partial(jax.jit, static_argnums=(0,))
-def _rasterize_fwd_custom_call(r: "Renderer", pose, pos, tri, resolution):
-    return _build_rasterize_fwd_primitive(r).bind(pose, pos, tri, resolution)
+def _rasterize_fwd_custom_call(r: "Renderer", pose, pos, tri, projMatrix, resolution):
+    return _build_rasterize_fwd_primitive(r).bind(pose, pos, tri, projMatrix, resolution)
 
 
 @functools.lru_cache(maxsize=None)
@@ -195,7 +195,7 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
     # For JIT compilation we need a function to evaluate the shape and dtype of the
     # outputs of our op for some given inputs
 
-    def _rasterize_fwd_abstract(pose, pos, tri, resolution):
+    def _rasterize_fwd_abstract(pose, pos, tri, projection_matrix, resolution):
         if len(pos.shape) != 2 or pos.shape[-1] != 4:
             raise ValueError(
                 "Pass in pos aa [num_vertices, 4] sized input"
@@ -218,14 +218,14 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
         ]
 
     # Provide an MLIR "lowering" of the rasterize primitive.
-    def _rasterize_fwd_lowering(ctx, poses, pos, tri, resolution):
+    def _rasterize_fwd_lowering(ctx, poses, pos, tri, projection_matrix, resolution):
         """
         Single-object (one obj represented by tri) rasterization with
         multiple poses (first dimension fo pos)
         dr.rasterize(glctx, pos, tri, resolution=resolution)
         """
         # Extract the numpy type of the inputs
-        poses_aval, pos_aval, tri_aval, resolution_aval = ctx.avals_in
+        poses_aval, pos_aval, tri_aval, projection_matrix_aval, resolution_aval = ctx.avals_in
         # if poses_aval.ndim != 3:
         #     raise NotImplementedError(
         #         f"Only 3D vtx position inputs supported: got {poses_aval.shape}"
@@ -264,12 +264,12 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
             # Output types
             result_types=[out_shp_dtype, out_shp_dtype],
             # The inputs:
-            operands=[poses, pos, tri, resolution],
+            operands=[poses, pos, tri, projection_matrix, resolution],
             backend_config=opaque,
             operand_layouts=[
                 (2, 1, 0),
                 *default_layouts(
-                    pos_aval.shape, tri_aval.shape, resolution_aval.shape
+                    pos_aval.shape, tri_aval.shape, projection_matrix_aval.shape, resolution_aval.shape
                 )
             ],
             result_layouts=default_layouts(

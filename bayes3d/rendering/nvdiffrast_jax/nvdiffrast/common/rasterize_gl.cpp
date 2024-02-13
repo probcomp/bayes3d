@@ -127,6 +127,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         "#extension GL_AMD_vertex_shader_layer : enable\n"
         STRINGIFY_SHADER_SOURCE(
             layout(location = 0) in vec4 in_pos;
+            layout(location = 3) uniform mat4 projection_matrix;
             out int v_layer;
             out int v_offset;
             uniform sampler2D texture;
@@ -138,7 +139,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 vec4 v3 = texelFetch(texture, ivec2(2, layer), 0);
                 vec4 v4 = texelFetch(texture, ivec2(3, layer), 0);
                 mat4 pose_mat = transpose(mat4(v1,v2,v3,v4));
-                gl_Position = pose_mat * in_pos;
+                gl_Position = projection_matrix * pose_mat * in_pos;
                 v_layer = layer;
                 v_offset = gl_BaseInstanceARB; // Sneak in TriID offset here.
             }
@@ -446,8 +447,9 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     }
 }
 
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posePtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, std::vector<float>& projMatrix, const float* posePtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
 {
+
     // Only copy inputs if we are on first iteration of depth peeling or not doing it at all.
     if (peeling_idx < 1)
     {
@@ -550,13 +552,13 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+        glUniformMatrix4fv(3, 1, GL_TRUE, &projMatrix[0]);
 
         if (!rangesPtr)
         {
             // Fill in range array to instantiate the same triangles for each output layer.
             // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
             // the first dimension in addressing the triangle array.
-            std::cout << "depth  " << depth << std::endl;
             for (int i=0; i < depth; i++)
             {
                 GLDrawCmd& cmd = drawCmdBuffer[i];

@@ -11,7 +11,7 @@ import trimesh
 intrinsics = b.Intrinsics(
     height=100,
     width=100,
-    fx=75.0, fy=75.0,
+    fx=200.0, fy=200.0,
     cx=50.0, cy=50.0,
     near=0.001, far=16.0
 )
@@ -34,37 +34,16 @@ path = os.path.join(b.utils.get_assets_dir(), "sample_objs/bunny.obj")
 mesh  =trimesh.load(path)
 mesh.vertices  = mesh.vertices * jnp.array([1.0, -1.0, 1.0]) + jnp.array([0.0, 1.0, 0.0])
 vertices = mesh.vertices
+vertices = jnp.concatenate([vertices, jnp.ones((vertices.shape[0], 1))], axis=-1)
 faces = mesh.faces
 
-vertices_h = jnp.hstack([vertices, jnp.ones((vertices.shape[0], 1))])
-
-
-def xfm_points(points, matrix):
-    points2 = jnp.concatenate([points, jnp.ones((*points.shape[:-1], 1))], axis=-1)
-    return jnp.matmul(points2, matrix.T)
-
-object_pose = b.transform_from_pos(jnp.array([0.0, 0.0, 3.0]))
-final_mtx_proj = projection_matrix @ object_pose
-posw = jnp.concatenate([vertices, jnp.ones((*vertices.shape[:-1], 1))], axis=-1)
-pos_clip_ja = xfm_points(vertices, final_mtx_proj)
-
-
-poses =jnp.array([jnp.eye(4)]*1000)
+poses =jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*1000)
+poses = poses.at[:, 1,3].set(jnp.linspace(-0.4, 0.4, len(poses)))
 rast_out, rast_out_db = jax_renderer.rasterize(
     poses,
-    pos_clip_ja,
+    vertices,
     faces,
-    jnp.array([intrinsics.height, intrinsics.width]),
-)
-assert jnp.all(rast_out[0] == rast_out[100])
-
-
-
-poses = poses.at[:, 1,3].set(jnp.linspace(-0.1, 0.1, 1000))
-rast_out, rast_out_db = jax_renderer.rasterize(
-    poses,
-    pos_clip_ja,
-    faces,
+    projection_matrix,
     jnp.array([intrinsics.height, intrinsics.width]),
 )
 b.hstack_images(
@@ -72,8 +51,14 @@ b.hstack_images(
         b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False)
         for i in [1, 500, 999]
     ]
-).save("test.png")
+).save("test2.png")
+
+
+from IPython import embed; embed()
+
+T = 0
+points_transformed = b.apply_transform(vertices[:,:3], poses[T])
 
 import viser
 server = viser.ViserServer()
-server.add_point_cloud("bunny", points=np.array(vertices), colors=np.zeros_like(vertices))
+server.add_point_cloud("bunny", points=np.array(points_transformed)[:,:3], colors=np.zeros_like(points_transformed)[:,:3])

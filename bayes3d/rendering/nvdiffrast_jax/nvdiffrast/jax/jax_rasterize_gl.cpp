@@ -42,14 +42,31 @@ void RasterizeGLStateWrapper::releaseContext(void)
 }
 
 
-// void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int peeling_idx)
-void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrapper,
-                        const float* pose, const float* pos, const int* tri,
-                        int num_images, int num_vertices, int num_triangles,
-                        std::vector<int> resolution,
-                        float* out,
-                        float* out_db)
-{
+
+void jax_rasterize_fwd_gl(cudaStream_t stream,
+                          void **buffers,
+                          const char *opaque, std::size_t opaque_len) {
+    const DiffRasterizeCustomCallDescriptor &d =
+        *UnpackDescriptor<DiffRasterizeCustomCallDescriptor>(opaque, opaque_len);
+    RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
+
+    const float *pose = reinterpret_cast<const float *> (buffers[0]);
+    const float *pos = reinterpret_cast<const float *> (buffers[1]);
+    const int *tri = reinterpret_cast<const int *> (buffers[2]);
+    const float *projectionMatrix = reinterpret_cast<const float *> (buffers[3]);
+    const int *_resolution = reinterpret_cast<const int *> (buffers[4]);
+
+    float *out = reinterpret_cast<float *> (buffers[5]);
+    float *out_db = reinterpret_cast<float *> (buffers[6]);
+
+    auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
+
+    std::vector<int> resolution;
+    resolution.resize(2);
+
+    cudaStreamSynchronize(stream);
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&resolution[0], _resolution, 2 * sizeof(int), cudaMemcpyDeviceToHost));
+
     // const at::cuda::OptionalCUDAGuard device_guard(at::device_of(pos));
     RasterizeGLState& s = *stateWrapper.pState;
 
@@ -59,13 +76,13 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
     // Get output shape.
     int height = resolution[0];
     int width  = resolution[1];
-    int depth = num_images;
+    int depth = d.num_images;
     // int depth  = instance_mode ? pos.size(0) : ranges.size(0);
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0];");
 
     // Get position and triangle buffer sizes in int32/float32.
-    int posCount = 4 * num_vertices;
-    int triCount = 3 * num_triangles;
+    int posCount = 4 * d.num_vertices;
+    int triCount = 3 * d.num_triangles;
 
     // Set the GL context unless manual context.
     if (stateWrapper.automatic)
@@ -83,13 +100,20 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
 #endif
     }
 
+    cudaStreamSynchronize(stream);
+    std::vector<float> projMatrix;
+    projMatrix.resize(16);
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&projMatrix[0], projectionMatrix, 16 * sizeof(int), cudaMemcpyDeviceToHost));
+    cudaStreamSynchronize(stream);
+
+
     // // Copy input data to GL and render.
     int peeling_idx = -1;
     const float* posePtr = pose;
     const float* posPtr = pos;
     const int32_t* rangesPtr = 0; // This is in CPU memory.
     const int32_t* triPtr = tri;
-    rasterizeRender(NVDR_CTX_PARAMS, s, stream, posePtr, posPtr, posCount, num_vertices, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
+    rasterizeRender(NVDR_CTX_PARAMS, s, stream, projMatrix, posePtr, posPtr, posCount, d.num_vertices, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
 
     // Allocate output tensors.
     float* outputPtr[2];
@@ -102,44 +126,6 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
     // Done. Release GL context and return.
     if (stateWrapper.automatic)
         releaseGLContext();
-}
-
-void jax_rasterize_fwd_gl(cudaStream_t stream,
-                          void **buffers,
-                          const char *opaque, std::size_t opaque_len) {
-    const DiffRasterizeCustomCallDescriptor &d =
-        *UnpackDescriptor<DiffRasterizeCustomCallDescriptor>(opaque, opaque_len);
-    RasterizeGLStateWrapper& stateWrapper = *d.gl_state_wrapper;
-
-    const float *pose = reinterpret_cast<const float *> (buffers[0]);
-    const float *pos = reinterpret_cast<const float *> (buffers[1]);
-    const int *tri = reinterpret_cast<const int *> (buffers[2]);
-    const int *_resolution = reinterpret_cast<const int *> (buffers[3]);
-
-    float *out = reinterpret_cast<float *> (buffers[4]);
-    float *out_db = reinterpret_cast<float *> (buffers[5]);
-
-    auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
-
-    std::vector<int> resolution;
-    resolution.resize(2);
-
-    cudaStreamSynchronize(stream);
-    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&resolution[0], _resolution, 2 * sizeof(int), cudaMemcpyDeviceToHost));
-
-    _rasterize_fwd_gl(
-        stream,
-        stateWrapper,
-        pose,
-        pos,
-        tri,
-        d.num_images,
-        d.num_vertices,
-        d.num_triangles,
-        resolution,
-        out,
-        out_db
-    );
 
     cudaStreamSynchronize(stream);
 }
