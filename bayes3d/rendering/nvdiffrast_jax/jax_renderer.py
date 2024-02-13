@@ -87,74 +87,74 @@ class Renderer(object):
 
     _interpolate.defvjp(_interpolate_fwd, _interpolate_bwd)
 
-    def render_many(self, vertices, faces, poses, intrinsics):
-        jax_renderer = self
-        projection_matrix = b.camera._open_gl_projection_matrix(
-            intrinsics.height,
-            intrinsics.width,
-            intrinsics.fx,
-            intrinsics.fy,
-            intrinsics.cx,
-            intrinsics.cy,
-            intrinsics.near,
-            intrinsics.far,
-        )
-        composed_projection = projection_matrix @ poses
-        vertices_homogenous = jnp.concatenate(
-            [vertices, jnp.ones((*vertices.shape[:-1], 1))], axis=-1
-        )
-        clip_spaces_projected_vertices = jnp.einsum(
-            "nij,mj->nmi", composed_projection, vertices_homogenous
-        )
-        rast_out, rast_out_db = jax_renderer.rasterize(
-            clip_spaces_projected_vertices,
-            faces,
-            jnp.array([intrinsics.height, intrinsics.width]),
-        )
-        interpolated_collided_vertices_clip, _ = jax_renderer.interpolate(
-            jnp.tile(vertices_homogenous[None, ...], (poses.shape[0], 1, 1)),
-            rast_out,
-            faces,
-            rast_out_db,
-            jnp.array([0, 1, 2, 3]),
-        )
-        interpolated_collided_vertices = jnp.einsum(
-            "a...ij,a...j->a...i", poses, interpolated_collided_vertices_clip
-        )
-        mask = rast_out[..., -1] > 0
-        depth = interpolated_collided_vertices[..., 2] * mask
-        return depth
+    # def render_many(self, vertices, faces, poses, intrinsics):
+    #     jax_renderer = self
+    #     projection_matrix = b.camera._open_gl_projection_matrix(
+    #         intrinsics.height,
+    #         intrinsics.width,
+    #         intrinsics.fx,
+    #         intrinsics.fy,
+    #         intrinsics.cx,
+    #         intrinsics.cy,
+    #         intrinsics.near,
+    #         intrinsics.far,
+    #     )
+    #     composed_projection = projection_matrix @ poses
+    #     vertices_homogenous = jnp.concatenate(
+    #         [vertices, jnp.ones((*vertices.shape[:-1], 1))], axis=-1
+    #     )
+    #     clip_spaces_projected_vertices = jnp.einsum(
+    #         "nij,mj->nmi", composed_projection, vertices_homogenous
+    #     )
+    #     rast_out, rast_out_db = jax_renderer.rasterize(
+    #         clip_spaces_projected_vertices,
+    #         faces,
+    #         jnp.array([intrinsics.height, intrinsics.width]),
+    #     )
+    #     interpolated_collided_vertices_clip, _ = jax_renderer.interpolate(
+    #         jnp.tile(vertices_homogenous[None, ...], (poses.shape[0], 1, 1)),
+    #         rast_out,
+    #         faces,
+    #         rast_out_db,
+    #         jnp.array([0, 1, 2, 3]),
+    #     )
+    #     interpolated_collided_vertices = jnp.einsum(
+    #         "a...ij,a...j->a...i", poses, interpolated_collided_vertices_clip
+    #     )
+    #     mask = rast_out[..., -1] > 0
+    #     depth = interpolated_collided_vertices[..., 2] * mask
+    #     return depth
 
-    def render(self, vertices, faces, object_pose, intrinsics):
-        jax_renderer = self
-        projection_matrix = b.camera._open_gl_projection_matrix(
-            intrinsics.height,
-            intrinsics.width,
-            intrinsics.fx,
-            intrinsics.fy,
-            intrinsics.cx,
-            intrinsics.cy,
-            intrinsics.near,
-            intrinsics.far,
-        )
-        final_mtx_proj = projection_matrix @ object_pose
-        posw = jnp.concatenate([vertices, jnp.ones((*vertices.shape[:-1], 1))], axis=-1)
-        pos_clip_ja = xfm_points(vertices, final_mtx_proj)
-        rast_out, rast_out_db = jax_renderer.rasterize(
-            pos_clip_ja[None, ...],
-            faces,
-            jnp.array([intrinsics.height, intrinsics.width]),
-        )
-        gb_pos, _ = jax_renderer.interpolate(
-            posw[None, ...], rast_out, faces, rast_out_db, jnp.array([0, 1, 2, 3])
-        )
-        mask = rast_out[..., -1] > 0
-        shape_keep = gb_pos.shape
-        gb_pos = gb_pos.reshape(shape_keep[0], -1, shape_keep[-1])
-        gb_pos = gb_pos[..., :3]
-        depth = xfm_points(gb_pos, object_pose)
-        depth = depth.reshape(shape_keep)[..., 2] * -1
-        return -(depth * mask), mask
+    # def render(self, vertices, faces, object_pose, intrinsics):
+    #     jax_renderer = self
+    #     projection_matrix = b.camera._open_gl_projection_matrix(
+    #         intrinsics.height,
+    #         intrinsics.width,
+    #         intrinsics.fx,
+    #         intrinsics.fy,
+    #         intrinsics.cx,
+    #         intrinsics.cy,
+    #         intrinsics.near,
+    #         intrinsics.far,
+    #     )
+    #     final_mtx_proj = projection_matrix @ object_pose
+    #     posw = jnp.concatenate([vertices, jnp.ones((*vertices.shape[:-1], 1))], axis=-1)
+    #     pos_clip_ja = xfm_points(vertices, final_mtx_proj)
+    #     rast_out, rast_out_db = jax_renderer.rasterize(
+    #         pos_clip_ja[None, ...],
+    #         faces,
+    #         jnp.array([intrinsics.height, intrinsics.width]),
+    #     )
+    #     gb_pos, _ = jax_renderer.interpolate(
+    #         posw[None, ...], rast_out, faces, rast_out_db, jnp.array([0, 1, 2, 3])
+    #     )
+    #     mask = rast_out[..., -1] > 0
+    #     shape_keep = gb_pos.shape
+    #     gb_pos = gb_pos.reshape(shape_keep[0], -1, shape_keep[-1])
+    #     gb_pos = gb_pos[..., :3]
+    #     depth = xfm_points(gb_pos, object_pose)
+    #     depth = depth.reshape(shape_keep)[..., 2] * -1
+    #     return -(depth * mask), mask
 
 
 # ================================================================================================
@@ -266,9 +266,12 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
             # The inputs:
             operands=[poses, pos, tri, resolution],
             backend_config=opaque,
-            operand_layouts=default_layouts(
-                poses_aval.shape, pos_aval.shape, tri_aval.shape, resolution_aval.shape
-            ),
+            operand_layouts=[
+                (2, 1, 0),
+                *default_layouts(
+                    pos_aval.shape, tri_aval.shape, resolution_aval.shape
+                )
+            ],
             result_layouts=default_layouts(
                 (
                     num_images,

@@ -62,7 +62,6 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
     int depth = num_images;
     // int depth  = instance_mode ? pos.size(0) : ranges.size(0);
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0];");
-    std::cout << "hwd" << height << " " << width << " " << depth << std::endl;
 
     // Get position and triangle buffer sizes in int32/float32.
     int posCount = 4 * num_vertices;
@@ -74,9 +73,7 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
 
     // Resize all buffers.
     bool changes = false;
-    std::cout << "Before rasterizeResizeBuffers" << std::endl;
     rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, changes, posCount, triCount, width, height, depth);
-    std::cout << "after rasterizeResizeBuffers" << std::endl;
     if (changes)
     {
 #ifdef _WIN32
@@ -92,9 +89,7 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
     const float* posPtr = pos;
     const int32_t* rangesPtr = 0; // This is in CPU memory.
     const int32_t* triPtr = tri;
-    std::cout << "Before rasterizeRender" << std::endl;
     rasterizeRender(NVDR_CTX_PARAMS, s, stream, posePtr, posPtr, posCount, num_vertices, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
-    std::cout << "after rasterizeRender" << std::endl;
 
     // Allocate output tensors.
     float* outputPtr[2];
@@ -102,9 +97,7 @@ void _rasterize_fwd_gl(cudaStream_t stream, RasterizeGLStateWrapper& stateWrappe
     outputPtr[1] = s.enableDB ? out_db : NULL;
 
     // Copy rasterized results into CUDA buffers.
-    std::cout << "bef rasterizeCopyResults" << std::endl;
     rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, depth);
-    std::cout << "after rasterizeCopyResults" << std::endl;
 
     // Done. Release GL context and return.
     if (stateWrapper.automatic)
@@ -133,7 +126,6 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
 
     cudaStreamSynchronize(stream);
     NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&resolution[0], _resolution, 2 * sizeof(int), cudaMemcpyDeviceToHost));
-    std::cout << "Before rasterize_fwd_gl" << std::endl;
 
     _rasterize_fwd_gl(
         stream,
@@ -149,7 +141,6 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
         out_db
     );
 
-    std::cout << "Done with rasterize_fwd_gl" << std::endl;
     cudaStreamSynchronize(stream);
 }
 

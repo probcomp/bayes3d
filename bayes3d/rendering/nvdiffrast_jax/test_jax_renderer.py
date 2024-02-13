@@ -38,7 +38,6 @@ faces = mesh.faces
 
 vertices_h = jnp.hstack([vertices, jnp.ones((vertices.shape[0], 1))])
 
-poses =jnp.array([jnp.eye(4)]*1000)
 
 def xfm_points(points, matrix):
     points2 = jnp.concatenate([points, jnp.ones((*points.shape[:-1], 1))], axis=-1)
@@ -48,22 +47,33 @@ object_pose = b.transform_from_pos(jnp.array([0.0, 0.0, 3.0]))
 final_mtx_proj = projection_matrix @ object_pose
 posw = jnp.concatenate([vertices, jnp.ones((*vertices.shape[:-1], 1))], axis=-1)
 pos_clip_ja = xfm_points(vertices, final_mtx_proj)
+
+
+poses =jnp.array([jnp.eye(4)]*1000)
 rast_out, rast_out_db = jax_renderer.rasterize(
     poses,
     pos_clip_ja,
     faces,
     jnp.array([intrinsics.height, intrinsics.width]),
 )
-img = rast_out[150,...,3]
-b.get_depth_image(img).save("test.png")
+assert jnp.all(rast_out[0] == rast_out[100])
 
 
 
-shape_keep = gb_pos.shape
-
-gb_pos, _ = jax_renderer.interpolate(
-    posw[None, ...], rast_out, faces, rast_out_db, jnp.array([0, 1, 2, 3])
+poses = poses.at[:, 1,3].set(jnp.linspace(-0.1, 0.1, 1000))
+rast_out, rast_out_db = jax_renderer.rasterize(
+    poses,
+    pos_clip_ja,
+    faces,
+    jnp.array([intrinsics.height, intrinsics.width]),
 )
-gb_pos = gb_pos[..., :3]
-depth = xfm_points(gb_pos, object_pose)
-depth = depth.reshape(shape_keep)[..., 2] * -1
+b.hstack_images(
+    [
+        b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False)
+        for i in [1, 500, 999]
+    ]
+).save("test.png")
+
+import viser
+server = viser.ViserServer()
+server.add_point_cloud("bunny", points=np.array(vertices), colors=np.zeros_like(vertices))

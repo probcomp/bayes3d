@@ -123,14 +123,22 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     compileGLShader(NVDR_CTX_PARAMS, s, &s.glVertexShader, GL_VERTEX_SHADER,
         "#version 330\n"
         "#extension GL_ARB_shader_draw_parameters : enable\n"
+        "#extension GL_ARB_explicit_uniform_location : enable\n"
+        "#extension GL_AMD_vertex_shader_layer : enable\n"
         STRINGIFY_SHADER_SOURCE(
             layout(location = 0) in vec4 in_pos;
             out int v_layer;
             out int v_offset;
+            uniform sampler2D texture;
             void main()
             {
                 int layer = gl_DrawIDARB;
-                gl_Position = in_pos;
+                vec4 v1 = texelFetch(texture, ivec2(0, layer), 0);
+                vec4 v2 = texelFetch(texture, ivec2(1, layer), 0);
+                vec4 v3 = texelFetch(texture, ivec2(2, layer), 0);
+                vec4 v4 = texelFetch(texture, ivec2(3, layer), 0);
+                mat4 pose_mat = transpose(mat4(v1,v2,v3,v4));
+                gl_Position = pose_mat * in_pos;
                 v_layer = layer;
                 v_offset = gl_BaseInstanceARB; // Sneak in TriID offset here.
             }
@@ -370,30 +378,18 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     changes = false;
 
     // Resize vertex buffer?
-    std::cout << "Before 1" << std::endl;
     if (posCount > s.posCount)
     {
-        cudaGraphicsResource_t  test;
-        std::cout << "Before 1111" << std::endl;
-        std::cout << s.cudaPosBuffer << std::endl;
-        std::cout << test << std::endl;
-        std::cout << "Before 111231211" << std::endl;
-
-
         if (s.cudaPosBuffer)
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPosBuffer));
-        std::cout << "Before 111" << std::endl;
         s.posCount = (posCount > 64) ? ROUND_UP_BITS(posCount, 2) : 64;
         LOG(INFO) << "Increasing position buffer size to " << s.posCount << " float32";
-        std::cout << "Before 11" << std::endl;
         NVDR_CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, s.posCount * sizeof(float), NULL, GL_DYNAMIC_DRAW));
-        std::cout << "Before 12" << std::endl;
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterBuffer(&s.cudaPosBuffer, s.glPosBuffer, cudaGraphicsRegisterFlagsWriteDiscard));
         changes = true;
     }
 
     // Resize triangle buffer?
-    std::cout << "Before 2" << std::endl;
     if (triCount > s.triCount)
     {
         if (s.cudaTriBuffer)
@@ -406,7 +402,6 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     }
 
     // Resize framebuffer?
-    std::cout << "Before 3" << std::endl;
     if (width > s.width || height > s.height || depth > s.depth)
     {
         int num_outputs = s.enableDB ? 2 : 1;
@@ -549,14 +544,19 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
     {
         // Populate a buffer for draw commands and execute it.
         std::vector<GLDrawCmd> drawCmdBuffer(depth);
-        cudaArray_t pose_array = 0;
+
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
+        cudaArray_t pose_array = 0;
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
 
         if (!rangesPtr)
         {
             // Fill in range array to instantiate the same triangles for each output layer.
             // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
             // the first dimension in addressing the triangle array.
+            std::cout << "depth  " << depth << std::endl;
             for (int i=0; i < depth; i++)
             {
                 GLDrawCmd& cmd = drawCmdBuffer[i];
@@ -598,6 +598,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
         // Draw!
         NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
     }
+
 }
 
 void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth)
