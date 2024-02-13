@@ -13,7 +13,9 @@
 
 # Installation Guide
 
-For a local install (GPU required), set up a fresh Python environment:
+These instructions require a GPU. To run on a cloud instance, follow [Google Cloud Setup](#running-on-a-google-cloud-instance) and then return here. 
+
+First, set up a fresh Python environment:
 
 ```bash
 conda create -n bayes3d python=3.9
@@ -181,13 +183,13 @@ gcloud compute config-ssh
 Then `ssh` into the instance using this command:
 
 ```bash
-gcloud ssh $INSTANCE_ID.$ZONE.$PROJECT_ID -L <local_port>:localhost:<remote_port>
+ssh $INSTANCE_ID.$ZONE.$PROJECT_ID -L <local_port>:localhost:<remote_port>
 ```
 
 For example, to forward port 8888 on the VM to my local port 8888:
 
 ```
-gcloud ssh my-image.us-west1-b.probcomp-caliban -L 8888:localhost:8888
+ssh my-image.us-west1-b.probcomp-caliban -L 8888:localhost:8888
 ```
 ---
 ## License
