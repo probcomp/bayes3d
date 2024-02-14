@@ -40,76 +40,35 @@ vertices = mesh.vertices
 vertices = jnp.concatenate([vertices, jnp.ones((vertices.shape[0], 1))], axis=-1)
 faces = jnp.array(mesh.faces)
 
-poses =jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*10)
-poses = poses.at[:, 1,3].set(jnp.linspace(-1.4, 0.1, len(poses)))
+poses =jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*1000)
+poses = poses.at[:, 1,3].set(jnp.linspace(-1.4, 0.2, len(poses)))
 
-images = []
-i = 3
-individual, _ = jax_renderer.rasterize(
-    poses[i:i+1],
-    vertices,
-    faces,
-    projection_matrix,
-    jnp.array([intrinsics.height, intrinsics.width]),
-)
-individual = jnp.array(individual)
-images.append(b.get_depth_image((individual[0,...,3]) *1.0, remove_max=False))
-
-full, _ = jax_renderer.rasterize(
+parallel_render, _ = jax_renderer.rasterize(
     poses,
     vertices,
     faces,
     projection_matrix,
     jnp.array([intrinsics.height, intrinsics.width]),
 )
-for j in tqdm(range(len(poses))):
-    print(jnp.allclose(full[j], individual[0]))
 
+images = []
 for i in [0, int(len(poses)/2), len(poses)-1]:
-    images.append(b.get_depth_image((full[i,...,3]) *1.0, remove_max=False))
+    images.append(b.get_depth_image((parallel_render[i,...,3]) *1.0, remove_max=False))
 b.hstack_images(
     images
 ).save("sweep.png")
 
+test_indices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+for i in test_indices:
+    individual, rast_out_db = jax_renderer.rasterize(
+        poses[i:i+1],
+        vertices,
+        faces,
+        projection_matrix,
+        jnp.array([intrinsics.height, intrinsics.width]),
+    )
+    assert jnp.allclose(parallel_render[i], individual[0])
 
-
-# images = []
-# for i in [1, int(len(poses)/2), len(poses)-1]:
-#     images.append(b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False))
-# b.hstack_images(
-#     images
-# ).save("sweep.png")
-
-# i = 1
-# rast_out_individual, rast_out_db = jax_renderer.rasterize(
-#     poses[i:i+2],
-#     vertices,
-#     faces,
-#     projection_matrix,
-#     jnp.array([intrinsics.height, intrinsics.width]),
-# )
-# for j in tqdm(range(len(poses))):
-#     print(jnp.allclose(rast_out[j], rast_out_individual[0]))
-
-
-# original = b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False)
-# individual = b.get_depth_image((rast_out_individual[0,...,3]) *1.0, remove_max=False)
-# b.hstack_images([original, individual, b.overlay_image(original, individual)]).save(f"compare.png")
-
-# from IPython import embed; embed()
-
-# jnp.abs(rast_out[i,...,3]- rast_out_individual[0,...,3]).max()
-
-# for i in test_indices:
-#     print(i)
-#     rast_out_individual, rast_out_db = jax_renderer.rasterize(
-#         poses[i:i+1],
-#         vertices,
-#         faces,
-#         projection_matrix,
-#         jnp.array([intrinsics.height, intrinsics.width]),
-#     )
-#     assert jnp.allclose(rast_out[i], rast_out_individual[0])
 
 
 
