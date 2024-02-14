@@ -66,6 +66,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
 
     cudaStreamSynchronize(stream);
     NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&resolution[0], _resolution, 2 * sizeof(int), cudaMemcpyDeviceToHost));
+    cudaStreamSynchronize(stream);
 
     // const at::cuda::OptionalCUDAGuard device_guard(at::device_of(pos));
     RasterizeGLState& s = *stateWrapper.pState;
@@ -90,7 +91,11 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
 
     // Resize all buffers.
     bool changes = false;
+    cudaStreamSynchronize(stream);
+
     rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, changes, posCount, triCount, width, height, depth);
+    cudaStreamSynchronize(stream);
+
     if (changes)
     {
 #ifdef _WIN32
@@ -107,13 +112,25 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     cudaStreamSynchronize(stream);
 
 
+    cudaStreamSynchronize(stream);
+    std::vector<float> firstPose;
+    firstPose.resize(16);
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&firstPose[0], pose, 16 * sizeof(int), cudaMemcpyDeviceToHost));
+    cudaStreamSynchronize(stream);
+    for(int i = 0; i < 16; i++) {
+        std::cout << firstPose[i] << " ";
+    }
+    std::cout << std::endl;
+
     // // Copy input data to GL and render.
     int peeling_idx = -1;
     const float* posePtr = pose;
     const float* posPtr = pos;
     const int32_t* rangesPtr = 0; // This is in CPU memory.
     const int32_t* triPtr = tri;
+    cudaStreamSynchronize(stream);
     rasterizeRender(NVDR_CTX_PARAMS, s, stream, projMatrix, posePtr, posPtr, posCount, d.num_vertices, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
+    cudaStreamSynchronize(stream);
 
     // Allocate output tensors.
     float* outputPtr[2];
@@ -121,7 +138,9 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     outputPtr[1] = s.enableDB ? out_db : NULL;
 
     // Copy rasterized results into CUDA buffers.
+    cudaStreamSynchronize(stream);
     rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, depth);
+    cudaStreamSynchronize(stream);
 
     // Done. Release GL context and return.
     if (stateWrapper.automatic)
@@ -146,7 +165,8 @@ void _rasterize_grad_db(cudaStream_t stream,
                         std::vector<int> pos_shape,
                         std::vector<int> tri_shape,
                         std::vector<int> rast_out_shape,
-                        float* grad)
+                        float* grad
+)
 {
     RasterizeGradParams p;
     bool enable_db = true;

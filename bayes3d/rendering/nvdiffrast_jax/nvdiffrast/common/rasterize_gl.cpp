@@ -141,7 +141,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 mat4 pose_mat = transpose(mat4(v1,v2,v3,v4));
                 gl_Position = projection_matrix * pose_mat * in_pos;
                 v_layer = layer;
-                v_offset = gl_BaseInstanceARB; // Sneak in TriID offset here.
+                v_offset = 0; // Sneak in TriID offset here.
             }
         )
     );
@@ -556,6 +556,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, st
 
         if (!rangesPtr)
         {
+            std::cout << "No rangesPtr" << std::endl;
             // Fill in range array to instantiate the same triangles for each output layer.
             // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
             // the first dimension in addressing the triangle array.

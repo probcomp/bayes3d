@@ -40,8 +40,8 @@ vertices = mesh.vertices
 vertices = jnp.concatenate([vertices, jnp.ones((vertices.shape[0], 1))], axis=-1)
 faces = jnp.array(mesh.faces)
 
-poses =jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*1000)
-poses = poses.at[:, 1,3].set(jnp.linspace(-0.4, 0.4, len(poses)))
+poses =jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*10)
+poses = poses.at[:, 1,3].set(jnp.linspace(-1.4, 0.1, len(poses)))
 rast_out, rast_out_db = jax_renderer.rasterize(
     poses,
     vertices,
@@ -49,12 +49,47 @@ rast_out, rast_out_db = jax_renderer.rasterize(
     projection_matrix,
     jnp.array([intrinsics.height, intrinsics.width]),
 )
+images = []
+for i in [1, int(len(poses)/2), len(poses)-1]:
+    images.append(b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False))
 b.hstack_images(
-    [
-        b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False)
-        for i in [1, 500, 999]
-    ]
-).save("test2.png")
+    images
+).save("sweep.png")
+
+i = 1
+rast_out_individual, rast_out_db = jax_renderer.rasterize(
+    poses[i:i+2],
+    vertices,
+    faces,
+    projection_matrix,
+    jnp.array([intrinsics.height, intrinsics.width]),
+)
+for j in tqdm(range(len(poses))):
+    print(jnp.allclose(rast_out[j], rast_out_individual[0]))
+
+
+original = b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False)
+individual = b.get_depth_image((rast_out_individual[0,...,3]) *1.0, remove_max=False)
+b.hstack_images([original, individual, b.overlay_image(original, individual)]).save(f"compare.png")
+
+from IPython import embed; embed()
+
+jnp.abs(rast_out[i,...,3]- rast_out_individual[0,...,3]).max()
+
+for i in test_indices:
+    print(i)
+    rast_out_individual, rast_out_db = jax_renderer.rasterize(
+        poses[i:i+1],
+        vertices,
+        faces,
+        projection_matrix,
+        jnp.array([intrinsics.height, intrinsics.width]),
+    )
+    assert jnp.allclose(rast_out[i], rast_out_individual[0])
+
+
+
+
 uvs = rast_out[...,:2]
 triangle_ids = rast_out[...,3:4].astype(jnp.int32)
 
