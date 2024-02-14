@@ -8,6 +8,9 @@ import numpy as np
 import os
 import trimesh
 
+import viser
+server = viser.ViserServer()
+
 intrinsics = b.Intrinsics(
     height=100,
     width=100,
@@ -35,7 +38,7 @@ mesh  =trimesh.load(path)
 mesh.vertices  = mesh.vertices * jnp.array([1.0, -1.0, 1.0]) + jnp.array([0.0, 1.0, 0.0])
 vertices = mesh.vertices
 vertices = jnp.concatenate([vertices, jnp.ones((vertices.shape[0], 1))], axis=-1)
-faces = mesh.faces
+faces = jnp.array(mesh.faces)
 
 poses =jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*1000)
 poses = poses.at[:, 1,3].set(jnp.linspace(-0.4, 0.4, len(poses)))
@@ -52,13 +55,49 @@ b.hstack_images(
         for i in [1, 500, 999]
     ]
 ).save("test2.png")
+uvs = rast_out[...,:2]
+triangle_ids = rast_out[...,3:4].astype(jnp.int32)
+
+mask = rast_out[...,2] > 0
+b.get_depth_image((mask[0]) *1.0, remove_max=False).save("mask.png")
+
+import functools
+@functools.partial(
+    jnp.vectorize,
+    signature="(2),(1),(4,4)->(3)",
+    excluded=(
+        3,
+        4,
+    ),
+)
+def interpolate_(uv, triangle_id, pose, vertices, faces):
+    u,v = uv
+    relevant_vertices = vertices[faces[triangle_id-1][0]]
+    relevant_vertices_transformed = relevant_vertices @ pose.T
+    barycentric = jnp.concatenate([uv, jnp.array([1.0 - uv.sum()])])
+    interpolated_value = (relevant_vertices_transformed[:,:3] * barycentric.reshape(3,1)).sum(0)
+    return interpolated_value
+
+interpolated_values = interpolate_(uvs, triangle_ids, poses[...,None, None,:,:], vertices, faces)
+image = interpolated_values * mask[...,None]
 
 
-from IPython import embed; embed()
 
 T = 0
 points_transformed = b.apply_transform(vertices[:,:3], poses[T])
 
-import viser
-server = viser.ViserServer()
-server.add_point_cloud("bunny", points=np.array(points_transformed)[:,:3], colors=np.zeros_like(points_transformed)[:,:3])
+
+server.add_point_cloud(
+    "bunny",
+    points=np.array(points_transformed)[:,:3],
+    colors=np.zeros_like(points_transformed)[:,:3]
+)
+
+server.add_point_cloud(
+    "image",
+    points=np.array(image[T]).reshape(-1,3),
+    colors=np.array([1.0, 0.0, 0.0])
+)
+
+
+from IPython import embed; embed()
