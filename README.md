@@ -13,7 +13,7 @@
 
 # Installation Guide
 
-These instructions require a GPU. To run on a cloud instance, follow [Google Cloud Setup](#running-on-a-google-cloud-instance) and then return here. 
+These instructions require a GPU. To run on a cloud instance, follow [Google Cloud Setup](#running-on-a-google-cloud-instance) and then return here.
 
 First, set up a fresh Python environment:
 
