@@ -136,6 +136,8 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     float* outputPtr[2];
     outputPtr[0] = out;
     outputPtr[1] = s.enableDB ? out_db : NULL;
+    cudaMemset(out, 0, d.num_images*width*height*4*sizeof(float));
+    cudaMemset(out_db, 0, d.num_images*width*height*4*sizeof(float));
 
     // Copy rasterized results into CUDA buffers.
     cudaStreamSynchronize(stream);

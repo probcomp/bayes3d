@@ -42,97 +42,121 @@ faces = jnp.array(mesh.faces)
 
 poses =jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*10)
 poses = poses.at[:, 1,3].set(jnp.linspace(-1.4, 0.1, len(poses)))
-rast_out, rast_out_db = jax_renderer.rasterize(
+
+images = []
+i = 3
+individual, _ = jax_renderer.rasterize(
+    poses[i:i+1],
+    vertices,
+    faces,
+    projection_matrix,
+    jnp.array([intrinsics.height, intrinsics.width]),
+)
+individual = jnp.array(individual)
+images.append(b.get_depth_image((individual[0,...,3]) *1.0, remove_max=False))
+
+full, _ = jax_renderer.rasterize(
     poses,
     vertices,
     faces,
     projection_matrix,
     jnp.array([intrinsics.height, intrinsics.width]),
 )
-images = []
-for i in [1, int(len(poses)/2), len(poses)-1]:
-    images.append(b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False))
+for j in tqdm(range(len(poses))):
+    print(jnp.allclose(full[j], individual[0]))
+
+for i in [0, int(len(poses)/2), len(poses)-1]:
+    images.append(b.get_depth_image((full[i,...,3]) *1.0, remove_max=False))
 b.hstack_images(
     images
 ).save("sweep.png")
 
-i = 1
-rast_out_individual, rast_out_db = jax_renderer.rasterize(
-    poses[i:i+2],
-    vertices,
-    faces,
-    projection_matrix,
-    jnp.array([intrinsics.height, intrinsics.width]),
-)
-for j in tqdm(range(len(poses))):
-    print(jnp.allclose(rast_out[j], rast_out_individual[0]))
 
 
-original = b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False)
-individual = b.get_depth_image((rast_out_individual[0,...,3]) *1.0, remove_max=False)
-b.hstack_images([original, individual, b.overlay_image(original, individual)]).save(f"compare.png")
+# images = []
+# for i in [1, int(len(poses)/2), len(poses)-1]:
+#     images.append(b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False))
+# b.hstack_images(
+#     images
+# ).save("sweep.png")
 
-from IPython import embed; embed()
-
-jnp.abs(rast_out[i,...,3]- rast_out_individual[0,...,3]).max()
-
-for i in test_indices:
-    print(i)
-    rast_out_individual, rast_out_db = jax_renderer.rasterize(
-        poses[i:i+1],
-        vertices,
-        faces,
-        projection_matrix,
-        jnp.array([intrinsics.height, intrinsics.width]),
-    )
-    assert jnp.allclose(rast_out[i], rast_out_individual[0])
-
+# i = 1
+# rast_out_individual, rast_out_db = jax_renderer.rasterize(
+#     poses[i:i+2],
+#     vertices,
+#     faces,
+#     projection_matrix,
+#     jnp.array([intrinsics.height, intrinsics.width]),
+# )
+# for j in tqdm(range(len(poses))):
+#     print(jnp.allclose(rast_out[j], rast_out_individual[0]))
 
 
+# original = b.get_depth_image((rast_out[i,...,3]) *1.0, remove_max=False)
+# individual = b.get_depth_image((rast_out_individual[0,...,3]) *1.0, remove_max=False)
+# b.hstack_images([original, individual, b.overlay_image(original, individual)]).save(f"compare.png")
 
-uvs = rast_out[...,:2]
-triangle_ids = rast_out[...,3:4].astype(jnp.int32)
+# from IPython import embed; embed()
 
-mask = rast_out[...,2] > 0
-b.get_depth_image((mask[0]) *1.0, remove_max=False).save("mask.png")
+# jnp.abs(rast_out[i,...,3]- rast_out_individual[0,...,3]).max()
 
-import functools
-@functools.partial(
-    jnp.vectorize,
-    signature="(2),(1),(4,4)->(3)",
-    excluded=(
-        3,
-        4,
-    ),
-)
-def interpolate_(uv, triangle_id, pose, vertices, faces):
-    u,v = uv
-    relevant_vertices = vertices[faces[triangle_id-1][0]]
-    relevant_vertices_transformed = relevant_vertices @ pose.T
-    barycentric = jnp.concatenate([uv, jnp.array([1.0 - uv.sum()])])
-    interpolated_value = (relevant_vertices_transformed[:,:3] * barycentric.reshape(3,1)).sum(0)
-    return interpolated_value
-
-interpolated_values = interpolate_(uvs, triangle_ids, poses[...,None, None,:,:], vertices, faces)
-image = interpolated_values * mask[...,None]
+# for i in test_indices:
+#     print(i)
+#     rast_out_individual, rast_out_db = jax_renderer.rasterize(
+#         poses[i:i+1],
+#         vertices,
+#         faces,
+#         projection_matrix,
+#         jnp.array([intrinsics.height, intrinsics.width]),
+#     )
+#     assert jnp.allclose(rast_out[i], rast_out_individual[0])
 
 
 
-T = 0
-points_transformed = b.apply_transform(vertices[:,:3], poses[T])
+
+# uvs = rast_out[...,:2]
+# triangle_ids = rast_out[...,3:4].astype(jnp.int32)
+
+# mask = rast_out[...,2] > 0
+# b.get_depth_image((mask[0]) *1.0, remove_max=False).save("mask.png")
+
+# import functools
+# @functools.partial(
+#     jnp.vectorize,
+#     signature="(2),(1),(4,4)->(3)",
+#     excluded=(
+#         3,
+#         4,
+#     ),
+# )
+# def interpolate_(uv, triangle_id, pose, vertices, faces):
+#     u,v = uv
+#     relevant_vertices = vertices[faces[triangle_id-1][0]]
+#     relevant_vertices_transformed = relevant_vertices @ pose.T
+#     barycentric = jnp.concatenate([uv, jnp.array([1.0 - uv.sum()])])
+#     interpolated_value = (relevant_vertices_transformed[:,:3] * barycentric.reshape(3,1)).sum(0)
+#     return interpolated_value
+
+# interpolated_values = interpolate_(uvs, triangle_ids, poses[...,None, None,:,:], vertices, faces)
+# image = interpolated_values * mask[...,None]
 
 
-server.add_point_cloud(
-    "bunny",
-    points=np.array(points_transformed)[:,:3],
-    colors=np.zeros_like(points_transformed)[:,:3]
-)
 
-server.add_point_cloud(
-    "image",
-    points=np.array(image[T]).reshape(-1,3),
-    colors=np.array([1.0, 0.0, 0.0])
-)
+# T = 0
+# points_transformed = b.apply_transform(vertices[:,:3], poses[T])
+
+
+# server.add_point_cloud(
+#     "bunny",
+#     points=np.array(points_transformed)[:,:3],
+#     colors=np.zeros_like(points_transformed)[:,:3]
+# )
+
+# server.add_point_cloud(
+#     "image",
+#     points=np.array(image[T]).reshape(-1,3),
+#     colors=np.array([1.0, 0.0, 0.0])
+# )
 
 
 from IPython import embed; embed()

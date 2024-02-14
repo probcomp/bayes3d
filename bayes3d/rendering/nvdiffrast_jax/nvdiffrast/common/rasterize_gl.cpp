@@ -536,71 +536,70 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, st
         NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
 
 
-    // Render the meshes.
-    if (depth == 1 && !rangesPtr)
+    // // Render the meshes.
+    // if (depth == 1 && !rangesPtr)
+    // {
+    //     // Trivial case.
+    //     NVDR_CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, triCount, GL_UNSIGNED_INT, 0));
+    // }
+    // else
+    // {
+    // Populate a buffer for draw commands and execute it.
+    std::vector<GLDrawCmd> drawCmdBuffer(depth);
+
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
+    cudaArray_t pose_array = 0;
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+    NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+    glUniformMatrix4fv(3, 1, GL_TRUE, &projMatrix[0]);
+
+    if (!rangesPtr)
     {
-        // Trivial case.
-        NVDR_CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, triCount, GL_UNSIGNED_INT, 0));
+        std::cout << "depth  " << depth << std::endl;
+        // Fill in range array to instantiate the same triangles for each output layer.
+        // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
+        // the first dimension in addressing the triangle array.
+        for (int i=0; i < depth; i++)
+        {
+            GLDrawCmd& cmd = drawCmdBuffer[i];
+            cmd.firstIndex    = 0;
+            cmd.count         = triCount;
+            cmd.baseVertex    = 0;
+            cmd.baseInstance  = 0;
+            cmd.instanceCount = 1;
+        }
+        
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(
+            pose_array, 0, 0, posePtr,
+            depth*16*sizeof(float), cudaMemcpyDeviceToDevice, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+
     }
     else
     {
-        // Populate a buffer for draw commands and execute it.
-        std::vector<GLDrawCmd> drawCmdBuffer(depth);
-
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
-        cudaArray_t pose_array = 0;
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
-        glUniformMatrix4fv(3, 1, GL_TRUE, &projMatrix[0]);
-
-        if (!rangesPtr)
+        // Fill in the range array according to user-given ranges. Triangle IDs point
+        // to the input triangle array, NOT index within range, so they correspond to
+        // the first dimension in addressing the triangle array.
+        for (int i=0, j=0; i < depth; i++)
         {
-            std::cout << "No rangesPtr" << std::endl;
-            // Fill in range array to instantiate the same triangles for each output layer.
-            // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
-            // the first dimension in addressing the triangle array.
-            for (int i=0; i < depth; i++)
-            {
-                GLDrawCmd& cmd = drawCmdBuffer[i];
-                cmd.firstIndex    = 0;
-                cmd.count         = triCount;
-                cmd.baseVertex    = 0;
-                cmd.baseInstance  = 0;
-                cmd.instanceCount = 1;
-            }
-            
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
-            NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(
-                pose_array, 0, 0, posePtr,
-                depth*16*sizeof(float), cudaMemcpyDeviceToDevice, stream));
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
-    
+            GLDrawCmd& cmd = drawCmdBuffer[i];
+            int first = rangesPtr[j++];
+            int count = rangesPtr[j++];
+            NVDR_CHECK(first >= 0 && count >= 0, "range contains negative values");
+            NVDR_CHECK((first + count) * 3 <= triCount, "range extends beyond end of triangle buffer");
+            cmd.firstIndex    = first * 3;
+            cmd.count         = count * 3;
+            cmd.baseVertex    = 0;
+            cmd.baseInstance  = first;
+            cmd.instanceCount = 1;
         }
-        else
-        {
-            // Fill in the range array according to user-given ranges. Triangle IDs point
-            // to the input triangle array, NOT index within range, so they correspond to
-            // the first dimension in addressing the triangle array.
-            for (int i=0, j=0; i < depth; i++)
-            {
-                GLDrawCmd& cmd = drawCmdBuffer[i];
-                int first = rangesPtr[j++];
-                int count = rangesPtr[j++];
-                NVDR_CHECK(first >= 0 && count >= 0, "range contains negative values");
-                NVDR_CHECK((first + count) * 3 <= triCount, "range extends beyond end of triangle buffer");
-                cmd.firstIndex    = first * 3;
-                cmd.count         = count * 3;
-                cmd.baseVertex    = 0;
-                cmd.baseInstance  = first;
-                cmd.instanceCount = 1;
-            }
-        }
-
-        // Draw!
-        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
     }
+
+    // Draw!
+    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
 
 }
 
