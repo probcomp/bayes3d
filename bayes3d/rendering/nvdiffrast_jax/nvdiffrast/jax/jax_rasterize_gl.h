@@ -24,9 +24,11 @@
 struct DiffRasterizeCustomCallDescriptor {
     RasterizeGLStateWrapper* gl_state_wrapper;
     int num_images;
+    int num_objects;
     int num_vertices;
     int num_triangles;
 };
+
 struct DiffRasterizeBwdCustomCallDescriptor {
     int num_images;    // pos[0]
     int num_vertices;  //  pos[1]

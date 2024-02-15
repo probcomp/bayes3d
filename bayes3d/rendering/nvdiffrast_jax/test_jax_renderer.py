@@ -39,14 +39,19 @@ mesh.vertices  = mesh.vertices * jnp.array([1.0, -1.0, 1.0]) + jnp.array([0.0, 1
 vertices = mesh.vertices
 vertices = jnp.concatenate([vertices, jnp.ones((vertices.shape[0], 1))], axis=-1)
 faces = jnp.array(mesh.faces)
+ranges = jnp.array([[0, faces.shape[0]]])
+
 
 poses =jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*6000)
 poses = poses.at[:, 1,3].set(jnp.linspace(-1.9, 0.5, len(poses)))
+poses2 = poses.at[:, 1,3].set(jnp.linspace(-1.0, 1.5, len(poses)))
+poses = poses[:,None,...]
 
 parallel_render, _ = jax_renderer.rasterize(
     poses,
     vertices,
     faces,
+    ranges,
     projection_matrix,
     jnp.array([intrinsics.height, intrinsics.width]),
 )
@@ -64,6 +69,7 @@ for i in test_indices:
         poses[i:i+1],
         vertices,
         faces,
+        ranges,
         projection_matrix,
         jnp.array([intrinsics.height, intrinsics.width]),
     )
@@ -92,20 +98,22 @@ def interpolate_(uv, triangle_id, pose, vertices, faces):
     interpolated_value = (relevant_vertices_transformed[:,:3] * barycentric.reshape(3,1)).sum(0)
     return interpolated_value
 
-interpolated_values = interpolate_(uvs, triangle_ids, poses[...,None, None,:,:], vertices, faces)
+interpolated_values = interpolate_(uvs, triangle_ids, poses[...,0,None, None,:,:], vertices, faces)
 image = interpolated_values * mask[...,None]
 
 T = 3000
-points_transformed = b.apply_transform(vertices[:,:3], poses[T])
+points_transformed = b.apply_transform(vertices[:,:3], poses[T,0])
 server.add_point_cloud(
     "bunny",
     points=np.array(points_transformed)[:,:3],
-    colors=np.zeros_like(points_transformed)[:,:3]
+    colors=np.zeros_like(points_transformed)[:,:3],
+    point_size=0.005
 )
 server.add_point_cloud(
     "image",
     points=np.array(image[T]).reshape(-1,3),
-    colors=np.array([1.0, 0.0, 0.0])
+    colors=np.array([1.0, 0.0, 0.0]),
+    point_size=0.005
 )
 
 

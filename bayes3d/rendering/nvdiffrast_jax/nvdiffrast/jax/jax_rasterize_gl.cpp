@@ -53,19 +53,32 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     const float *pose = reinterpret_cast<const float *> (buffers[0]);
     const float *pos = reinterpret_cast<const float *> (buffers[1]);
     const int *tri = reinterpret_cast<const int *> (buffers[2]);
-    const float *projectionMatrix = reinterpret_cast<const float *> (buffers[3]);
-    const int *_resolution = reinterpret_cast<const int *> (buffers[4]);
+    const int *_ranges = reinterpret_cast<const int *> (buffers[3]);
+    const float *projectionMatrix = reinterpret_cast<const float *> (buffers[4]);
+    const int *_resolution = reinterpret_cast<const int *> (buffers[5]);
 
-    float *out = reinterpret_cast<float *> (buffers[5]);
-    float *out_db = reinterpret_cast<float *> (buffers[6]);
+    float *out = reinterpret_cast<float *> (buffers[6]);
+    float *out_db = reinterpret_cast<float *> (buffers[7]);
 
     auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
 
     std::vector<int> resolution;
     resolution.resize(2);
+    int ranges[2*d.num_objects];
+
+    // std::cout << "num_images: " << d.num_images << std::endl;
+    // std::cout << "num_objects: " << d.num_objects << std::endl;
+    // std::cout << "num_vertices: " << d.num_vertices << std::endl;
+    // std::cout << "num_triangles: " << d.num_triangles << std::endl;
 
     cudaStreamSynchronize(stream);
     NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&resolution[0], _resolution, 2 * sizeof(int), cudaMemcpyDeviceToHost));
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&ranges[0], _ranges, 2 * d.num_objects * sizeof(int), cudaMemcpyDeviceToHost));
+    cudaStreamSynchronize(stream);
+
+    // Allocate output tensors.
+    cudaStreamSynchronize(stream);
+
     cudaStreamSynchronize(stream);
 
     // const at::cuda::OptionalCUDAGuard device_guard(at::device_of(pos));
@@ -121,11 +134,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     cudaStreamSynchronize(stream);
 
 
-    cudaStreamSynchronize(stream);
-    std::vector<float> firstPose;
-    firstPose.resize(16);
-    NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&firstPose[0], pose, 16 * sizeof(int), cudaMemcpyDeviceToHost));
-    cudaStreamSynchronize(stream);
+
     // for(int i = 0; i < 16; i++) {
     //     std::cout << firstPose[i] << " ";
     // }
@@ -135,7 +144,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     int peeling_idx = -1;
     const float* posePtr = pose;
     const float* posPtr = pos;
-    const int32_t* rangesPtr = 0; // This is in CPU memory.
+    const int32_t* rangesPtr = ranges; // This is in CPU memory.
     const int32_t* triPtr = tri;
     cudaStreamSynchronize(stream);
     rasterizeRender(NVDR_CTX_PARAMS, s, stream, outputPtr, projMatrix, posePtr, posPtr, posCount, d.num_vertices, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
