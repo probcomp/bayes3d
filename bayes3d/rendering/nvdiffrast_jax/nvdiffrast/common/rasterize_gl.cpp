@@ -130,8 +130,10 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         STRINGIFY_SHADER_SOURCE(
             layout(location = 0) in vec4 in_pos;
             layout(location = 3) uniform mat4 projection_matrix;
+            layout(location = 5) uniform float seg_id;
             out int v_layer;
             out int v_offset;
+            out float seg_id_out;
             uniform sampler2D texture;
             void main()
             {
@@ -143,7 +145,8 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 mat4 pose_mat = transpose(mat4(v1,v2,v3,v4));
                 gl_Position = projection_matrix * pose_mat * in_pos;
                 v_layer = layer;
-                v_offset = 0; // Sneak in TriID offset here.
+                v_offset = gl_BaseInstanceARB; // Sneak in TriID offset here.
+                seg_id_out = seg_id;
             }
         )
     );
@@ -164,8 +167,10 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 layout(location = 0) uniform vec2 vp_scale;
                 in int v_layer[];
                 in int v_offset[];
+                in float seg_id_out[];
                 out vec4 var_uvzw;
                 out vec4 var_db;
+                out float seg_id;
                 void main()
                 {
                     // Plane equations for bary differentials.
@@ -204,9 +209,9 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                     int layer_id = v_layer[0];
                     int prim_id = gl_PrimitiveIDIn + v_offset[0];
 
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_db = db0; EmitVertex();
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_db = db1; EmitVertex();
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_db = db2; EmitVertex();
+                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_db = db0; seg_id = seg_id_out[0]; EmitVertex();
+                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_db = db1; seg_id = seg_id_out[1]; EmitVertex();
+                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_db = db2; seg_id = seg_id_out[2]; EmitVertex();
                 }
             )
         );
@@ -217,6 +222,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
                 in vec4 var_db;
+                in float seg_id;
                 layout(location = 0) out vec4 out_raster;
                 layout(location = 1) out vec4 out_db;
                 IF_ZMODIFY(
@@ -224,7 +230,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 )
                 void main()
                 {
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, seg_id, float(gl_PrimitiveID + 1));
                     out_db = var_db * var_uvzw.w;
                     IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
@@ -448,7 +454,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     }
 }
 
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr,  std::vector<float>& projMatrix, const float* posePtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr,  std::vector<float>& projMatrix, const float* posePtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int num_objects, int width, int height, int depth, int peeling_idx)
 {
 
     // Only copy inputs if we are on first iteration of depth peeling or not doing it at all.
@@ -568,24 +574,30 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, fl
         NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
         NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
 
-        for (int i=0; i < poses_on_this_iter; i++)
+        for(int object_idx=0; object_idx < num_objects; object_idx++)
         {
-            GLDrawCmd& cmd = drawCmdBuffer[i];
-            cmd.firstIndex    = 0;
-            cmd.count         = triCount;
-            cmd.baseVertex    = 0;
-            cmd.baseInstance  = 0;
-            cmd.instanceCount = 1;
-        }
-        
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(
-            pose_array, 0, 0, posePtr + start_pose_idx*16,
-            poses_on_this_iter*16*sizeof(float), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+            for (int i=0; i < poses_on_this_iter; i++)
+            {
+                int first = rangesPtr[2*object_idx];
+                int count = rangesPtr[2*object_idx+1];
+                GLDrawCmd& cmd = drawCmdBuffer[i];
+                cmd.firstIndex    = first * 3;
+                cmd.count         = count * 3;
+                cmd.baseVertex    = 0;
+                cmd.baseInstance  = first;
+                cmd.instanceCount = 1;
+            }
+            
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(
+                pose_array, 0, 0, posePtr + depth * 16 * object_idx + start_pose_idx * 16,
+                poses_on_this_iter * 16 * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
+            glUniform1f(5, object_idx+1.0);
 
-        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], poses_on_this_iter, sizeof(GLDrawCmd)));
+            NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], poses_on_this_iter, sizeof(GLDrawCmd)));
+        }
 
         // Copy color buffers to output tensors.
         cudaArray_t array = 0;
@@ -613,7 +625,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, fl
             NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
         }
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(num_outputs, s.cudaColorBuffer, stream));
-
+        
     }
 
     // }
@@ -638,7 +650,6 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, fl
     // }
 
     // Draw!
-
 }
 
 void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth)

@@ -147,7 +147,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     const int32_t* rangesPtr = ranges; // This is in CPU memory.
     const int32_t* triPtr = tri;
     cudaStreamSynchronize(stream);
-    rasterizeRender(NVDR_CTX_PARAMS, s, stream, outputPtr, projMatrix, posePtr, posPtr, posCount, d.num_vertices, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
+    rasterizeRender(NVDR_CTX_PARAMS, s, stream, outputPtr, projMatrix, posePtr, posPtr, posCount, d.num_vertices, triPtr, triCount, rangesPtr, d.num_objects, width, height, depth, peeling_idx);
     cudaStreamSynchronize(stream);
 
 

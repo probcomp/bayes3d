@@ -39,13 +39,13 @@ mesh.vertices  = mesh.vertices * jnp.array([1.0, -1.0, 1.0]) + jnp.array([0.0, 1
 vertices = mesh.vertices
 vertices = jnp.concatenate([vertices, jnp.ones((vertices.shape[0], 1))], axis=-1)
 faces = jnp.array(mesh.faces)
-ranges = jnp.array([[0, faces.shape[0]]])
+ranges = jnp.array([[0, faces.shape[0]], [0, faces.shape[0]]])
 
 
 poses =jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*6000)
 poses = poses.at[:, 1,3].set(jnp.linspace(-1.9, 0.5, len(poses)))
 poses2 = poses.at[:, 1,3].set(jnp.linspace(-1.0, 1.5, len(poses)))
-poses = poses[:,None,...]
+poses = jnp.stack([poses, poses2], axis=1)
 
 parallel_render, _ = jax_renderer.rasterize(
     poses,
@@ -56,12 +56,15 @@ parallel_render, _ = jax_renderer.rasterize(
     jnp.array([intrinsics.height, intrinsics.width]),
 )
 
-images = []
-for i in [0, int(len(poses)/2), len(poses)-1]:
-    images.append(b.get_depth_image((parallel_render[i,...,3]) *1.0, remove_max=False))
+images = [b.get_depth_image((parallel_render[i,...,3]) *1.0, remove_max=False) for i in [0, int(len(poses)/2), len(poses)-1]]
 b.hstack_images(
     images
 ).save("sweep.png")
+images = [b.get_depth_image((parallel_render[i,...,2]) *1.0, remove_max=False) for i in [0, int(len(poses)/2), len(poses)-1]]
+b.hstack_images(
+    images
+).save("sweep.png")
+
 
 test_indices = jax.random.randint(jax.random.PRNGKey(0), (100,), 0, len(poses))
 for i in test_indices:
@@ -79,7 +82,7 @@ for i in test_indices:
 uvs = parallel_render[...,:2]
 triangle_ids = parallel_render[...,3:4].astype(jnp.int32)
 mask = parallel_render[...,2] > 0
-    
+
 
 import functools
 @functools.partial(
@@ -101,7 +104,7 @@ def interpolate_(uv, triangle_id, pose, vertices, faces):
 interpolated_values = interpolate_(uvs, triangle_ids, poses[...,0,None, None,:,:], vertices, faces)
 image = interpolated_values * mask[...,None]
 
-T = 3000
+T = 0
 points_transformed = b.apply_transform(vertices[:,:3], poses[T,0])
 server.add_point_cloud(
     "bunny",
