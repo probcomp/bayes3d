@@ -62,6 +62,8 @@ static void compileGLShader(NVDR_CTX_ARGS, const RasterizeGLState& s, GLuint* pS
     NVDR_CHECK_GL_ERROR(glCompileShader(*pShader));
 }
 
+int NUM_LAYERS = 2048;
+
 static void constructGLProgram(NVDR_CTX_ARGS, GLuint* pProgram, GLuint glVertexShader, GLuint glGeometryShader, GLuint glFragmentShader)
 {
     *pProgram = 0;
@@ -345,8 +347,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
 
     NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPoseTexture));
     NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, s.glPoseTexture));
-    int num_layers = 1024;
-    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, num_layers, 0, GL_RGBA, GL_FLOAT, 0));
+    NVDR_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, NUM_LAYERS, 0, GL_RGBA, GL_FLOAT, 0));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
     NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
@@ -403,7 +404,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     }
 
     // Resize framebuffer?
-    if (width > s.width || height > s.height || depth > s.depth)
+    if (width > s.width || height > s.height) // || depth > s.depth)
     {
         int num_outputs = s.enableDB ? 2 : 1;
         if (s.cudaColorBuffer[0])
@@ -428,7 +429,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
         for (int i=0; i < num_outputs; i++)
         {
             NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
-            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
+            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, NUM_LAYERS, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
             NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
             NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
             NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
@@ -437,7 +438,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
 
         // Allocate depth/stencil buffer.
         NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glDepthStencilBuffer));
-        NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, s.width, s.height, s.depth, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0));
+        NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, s.width, s.height, NUM_LAYERS, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0));
 
         // (Re-)register all GL buffers into Cuda.
         for (int i=0; i < num_outputs; i++)
@@ -447,7 +448,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
     }
 }
 
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, std::vector<float>& projMatrix, const float* posePtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr,  std::vector<float>& projMatrix, const float* posePtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
 {
 
     // Only copy inputs if we are on first iteration of depth peeling or not doing it at all.
@@ -494,7 +495,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, st
         if (!s.cudaPrevOutBuffer)
         {
             NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glPrevOutBuffer));
-            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
+            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, NUM_LAYERS, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
             NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
             NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
             NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
@@ -545,7 +546,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, st
     // else
     // {
     // Populate a buffer for draw commands and execute it.
-    std::vector<GLDrawCmd> drawCmdBuffer(depth);
+    std::vector<GLDrawCmd> drawCmdBuffer(NUM_LAYERS);
 
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPoseTexture, s.glPoseTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsReadOnly));
     cudaArray_t pose_array = 0;
@@ -554,13 +555,20 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, st
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
     glUniformMatrix4fv(3, 1, GL_TRUE, &projMatrix[0]);
 
-    if (!rangesPtr)
+    // if (!rangesPtr)
+    // {
+
+    // std::cout << "depth  " << depth << std::endl;
+    // Fill in range array to instantiate the same triangles for each output layer.
+    // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
+    // the first dimension in addressing the triangle array.
+    for(int start_pose_idx=0; start_pose_idx < depth; start_pose_idx+=NUM_LAYERS)
     {
-        std::cout << "depth  " << depth << std::endl;
-        // Fill in range array to instantiate the same triangles for each output layer.
-        // Triangle IDs starts at zero (i.e., one) for each layer, so they correspond to
-        // the first dimension in addressing the triangle array.
-        for (int i=0; i < depth; i++)
+        int poses_on_this_iter = std::min(depth-start_pose_idx, NUM_LAYERS);
+        NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
+        NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
+
+        for (int i=0; i < poses_on_this_iter; i++)
         {
             GLDrawCmd& cmd = drawCmdBuffer[i];
             cmd.firstIndex    = 0;
@@ -573,33 +581,63 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, st
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPoseTexture, stream));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&pose_array, s.cudaPoseTexture, 0, 0));
         NVDR_CHECK_CUDA_ERROR(cudaMemcpyToArrayAsync(
-            pose_array, 0, 0, posePtr,
-            depth*16*sizeof(float), cudaMemcpyDeviceToDevice, stream));
+            pose_array, 0, 0, posePtr + start_pose_idx*16,
+            poses_on_this_iter*16*sizeof(float), cudaMemcpyDeviceToDevice, stream));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
 
-    }
-    else
-    {
-        // Fill in the range array according to user-given ranges. Triangle IDs point
-        // to the input triangle array, NOT index within range, so they correspond to
-        // the first dimension in addressing the triangle array.
-        for (int i=0, j=0; i < depth; i++)
+        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], poses_on_this_iter, sizeof(GLDrawCmd)));
+
+        // Copy color buffers to output tensors.
+        cudaArray_t array = 0;
+        cudaChannelFormatDesc arrayDesc = {};   // For error checking.
+        cudaExtent arrayExt = {};               // For error checking.
+        int num_outputs = s.enableDB ? 2 : 1;
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(num_outputs, s.cudaColorBuffer, stream));
+        for (int i=0; i < num_outputs; i++)
         {
-            GLDrawCmd& cmd = drawCmdBuffer[i];
-            int first = rangesPtr[j++];
-            int count = rangesPtr[j++];
-            NVDR_CHECK(first >= 0 && count >= 0, "range contains negative values");
-            NVDR_CHECK((first + count) * 3 <= triCount, "range extends beyond end of triangle buffer");
-            cmd.firstIndex    = first * 3;
-            cmd.count         = count * 3;
-            cmd.baseVertex    = 0;
-            cmd.baseInstance  = first;
-            cmd.instanceCount = 1;
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[i], 0, 0));
+            NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
+            NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
+            NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
+            // NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= depth, "CUDA mapped array extent mismatch");
+            cudaMemcpy3DParms p = {0};
+            p.srcArray = array;
+            p.dstPtr.ptr = ((float * ) outputPtr[i]) + start_pose_idx * width * height * 4;;
+            p.dstPtr.pitch = width * 4 * sizeof(float);
+            p.dstPtr.xsize = width;
+            p.dstPtr.ysize = height;
+            p.extent.width = width;
+            p.extent.height = height;
+            p.extent.depth = poses_on_this_iter;
+            p.kind = cudaMemcpyDeviceToDevice;
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
         }
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(num_outputs, s.cudaColorBuffer, stream));
+
     }
 
+    // }
+    // else
+    // {
+    //     // Fill in the range array according to user-given ranges. Triangle IDs point
+    //     // to the input triangle array, NOT index within range, so they correspond to
+    //     // the first dimension in addressing the triangle array.
+    //     for (int i=0, j=0; i < depth; i++)
+    //     {
+    //         GLDrawCmd& cmd = drawCmdBuffer[i];
+    //         int first = rangesPtr[j++];
+    //         int count = rangesPtr[j++];
+    //         NVDR_CHECK(first >= 0 && count >= 0, "range contains negative values");
+    //         NVDR_CHECK((first + count) * 3 <= triCount, "range extends beyond end of triangle buffer");
+    //         cmd.firstIndex    = first * 3;
+    //         cmd.count         = count * 3;
+    //         cmd.baseVertex    = 0;
+    //         cmd.baseInstance  = first;
+    //         cmd.instanceCount = 1;
+    //     }
+    // }
+
     // Draw!
-    NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
 
 }
 

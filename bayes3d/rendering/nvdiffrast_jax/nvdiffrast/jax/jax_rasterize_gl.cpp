@@ -78,6 +78,7 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     int height = resolution[0];
     int width  = resolution[1];
     int depth = d.num_images;
+    int max_parallel_images = 1024;
     // int depth  = instance_mode ? pos.size(0) : ranges.size(0);
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0];");
 
@@ -105,6 +106,14 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
 #endif
     }
 
+    // Allocate output tensors.
+    float* outputPtr[2];
+    outputPtr[0] = out;
+    outputPtr[1] = s.enableDB ? out_db : NULL;
+    cudaMemset(out, 0, d.num_images*width*height*4*sizeof(float));
+    cudaMemset(out_db, 0, d.num_images*width*height*4*sizeof(float));
+
+
     cudaStreamSynchronize(stream);
     std::vector<float> projMatrix;
     projMatrix.resize(16);
@@ -117,10 +126,10 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     firstPose.resize(16);
     NVDR_CHECK_CUDA_ERROR(cudaMemcpy(&firstPose[0], pose, 16 * sizeof(int), cudaMemcpyDeviceToHost));
     cudaStreamSynchronize(stream);
-    for(int i = 0; i < 16; i++) {
-        std::cout << firstPose[i] << " ";
-    }
-    std::cout << std::endl;
+    // for(int i = 0; i < 16; i++) {
+    //     std::cout << firstPose[i] << " ";
+    // }
+    // std::cout << std::endl;
 
     // // Copy input data to GL and render.
     int peeling_idx = -1;
@@ -129,20 +138,14 @@ void jax_rasterize_fwd_gl(cudaStream_t stream,
     const int32_t* rangesPtr = 0; // This is in CPU memory.
     const int32_t* triPtr = tri;
     cudaStreamSynchronize(stream);
-    rasterizeRender(NVDR_CTX_PARAMS, s, stream, projMatrix, posePtr, posPtr, posCount, d.num_vertices, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
+    rasterizeRender(NVDR_CTX_PARAMS, s, stream, outputPtr, projMatrix, posePtr, posPtr, posCount, d.num_vertices, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
     cudaStreamSynchronize(stream);
 
-    // Allocate output tensors.
-    float* outputPtr[2];
-    outputPtr[0] = out;
-    outputPtr[1] = s.enableDB ? out_db : NULL;
-    cudaMemset(out, 0, d.num_images*width*height*4*sizeof(float));
-    cudaMemset(out_db, 0, d.num_images*width*height*4*sizeof(float));
 
-    // Copy rasterized results into CUDA buffers.
-    cudaStreamSynchronize(stream);
-    rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, depth);
-    cudaStreamSynchronize(stream);
+    // // Copy rasterized results into CUDA buffers.
+    // cudaStreamSynchronize(stream);
+    // rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, depth);
+    // cudaStreamSynchronize(stream);
 
     // Done. Release GL context and return.
     if (stateWrapper.automatic)
