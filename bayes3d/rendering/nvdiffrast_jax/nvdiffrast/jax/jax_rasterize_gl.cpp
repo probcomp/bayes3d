@@ -173,104 +173,80 @@ void RasterizeGradKernel(const RasterizeGradParams p);
 void RasterizeGradKernelDb(const RasterizeGradParams p);
 //------------------------------------------------------------------------
 
-void _rasterize_grad_db(cudaStream_t stream,
-                        const float* pos, const int* tri, const float* rast_out,
-                        const float* dy, const float* ddb,
-                        std::vector<int> pos_shape,
-                        std::vector<int> tri_shape,
-                        std::vector<int> rast_out_shape,
-                        float* grad
-)
-{
-    RasterizeGradParams p;
-    bool enable_db = true;
-
-    // Determine instance mode.
-    p.instance_mode = 1;
-    NVDR_CHECK(p.instance_mode == 1, "Should be in instance mode; check input sizes");
-
-    // Shape is taken from the rasterizer output tensor.
-    p.depth  = rast_out_shape[0];
-    p.height = rast_out_shape[1];
-    p.width  = rast_out_shape[2];
-    NVDR_CHECK(p.depth > 0 && p.height > 0 && p.width > 0, "resolution must be [>0, >0, >0]");
-
-    // Populate parameters.
-    p.numTriangles = tri_shape[0];
-    p.numVertices = p.instance_mode ? pos_shape[1] : pos_shape[0];
-    p.pos = pos;
-    p.tri = tri;
-    p.out = rast_out;
-    p.dy  = dy;
-    p.ddb = enable_db ? ddb : NULL;
-
-    // Set up pixel position to clip space x, y transform.
-    p.xs = 2.f / (float)p.width;
-    p.xo = 1.f / (float)p.width - 1.f;
-    p.ys = 2.f / (float)p.height;
-    p.yo = 1.f / (float)p.height - 1.f;
-
-    // Output tensor for position gradients.
-    p.grad = grad;
-
-    // Verify that buffers are aligned to allow float2/float4 operations.
-    NVDR_CHECK(!((uintptr_t)p.pos & 15), "pos input tensor not aligned to float4");
-    NVDR_CHECK(!((uintptr_t)p.dy  &  7), "dy input tensor not aligned to float2");
-    NVDR_CHECK(!((uintptr_t)p.ddb & 15), "ddb input tensor not aligned to float4");
-
-    // Choose launch parameters.
-    dim3 blockSize = getLaunchBlockSize(RAST_GRAD_MAX_KERNEL_BLOCK_WIDTH, RAST_GRAD_MAX_KERNEL_BLOCK_HEIGHT, p.width, p.height);
-    dim3 gridSize  = getLaunchGridSize(blockSize, p.width, p.height, p.depth);
-
-    // Launch CUDA kernel to populate gradient values.
-    void* args[] = {&p};
-    void* func = enable_db ? (void*)RasterizeGradKernelDb : (void*)RasterizeGradKernel;
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
-}
 
 void jax_rasterize_bwd(cudaStream_t stream,
                         void **buffers,
                         const char *opaque, std::size_t opaque_len) {
 
-    const DiffRasterizeBwdCustomCallDescriptor &d =
-        *UnpackDescriptor<DiffRasterizeBwdCustomCallDescriptor>(opaque, opaque_len);
+    // const DiffRasterizeBwdCustomCallDescriptor &d =
+    //     *UnpackDescriptor<DiffRasterizeBwdCustomCallDescriptor>(opaque, opaque_len);
 
-    const float *pos = reinterpret_cast<const float *> (buffers[0]);
-    const int *tri = reinterpret_cast<const int *> (buffers[1]);
-    const float *rast_out = reinterpret_cast<const float *> (buffers[2]);
-    const float *dy = reinterpret_cast<const float *> (buffers[3]);
-    const float *ddb = reinterpret_cast<const float *> (buffers[4]);
+    // const float *pose = reinterpret_cast<const float *> (buffers[0]);
+    // const float *pos = reinterpret_cast<const float *> (buffers[1]);
+    // const int *tri = reinterpret_cast<const int *> (buffers[2]);
+    // const int *_ranges = reinterpret_cast<const int *> (buffers[3]);
+    // const float *projectionMatrix = reinterpret_cast<const float *> (buffers[4]);
+    // const int *_resolution = reinterpret_cast<const int *> (buffers[5]);
+    
+    // float *out = reinterpret_cast<float *> (buffers[6]);
+    // float *out_db = reinterpret_cast<float *> (buffers[7]);
 
-    float *grad = reinterpret_cast<float *> (buffers[5]);  // output
-    cudaMemset(grad, 0, d.num_images*d.num_vertices*4*sizeof(float));
+    // const float *dy = reinterpret_cast<const float *> (buffers[8]);
+    // const float *ddb = reinterpret_cast<const float *> (buffers[9]);
 
-    auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
+    // float *grad = reinterpret_cast<float *> (buffers[10]);  // output
+    // cudaMemset(grad, 0, d.num_images*d.num_vertices*4*sizeof(float));
 
-    std::vector<int> pos_shape;
-    pos_shape.resize(2);
-    std::vector<int> tri_shape;
-    tri_shape.resize(1);
-    std::vector<int> rast_out_shape;
-    rast_out_shape.resize(3);
+    // auto opts = torch::dtype(torch::kFloat32).device(torch::kCUDA);
 
-    pos_shape[0] = d.num_images;
-    pos_shape[1] = d.num_vertices;
-    tri_shape[0] = d.num_triangles;
-    rast_out_shape[0] = d.rast_depth;
-    rast_out_shape[1] = d.rast_height;
-    rast_out_shape[2] = d.rast_width;
+    // cudaStreamSynchronize(stream);
 
-    cudaStreamSynchronize(stream);
-    _rasterize_grad_db(stream,
-                      pos,
-                      tri,
-                      rast_out,
-                      dy,
-                      ddb,
-                      pos_shape,
-                      tri_shape,
-                      rast_out_shape,
-                      grad
-                      );
-    cudaStreamSynchronize(stream);
+    // RasterizeGradParams p;
+    // bool enable_db = true;
+
+    // // Determine instance mode.
+    // p.instance_mode = 1;
+    // NVDR_CHECK(p.instance_mode == 1, "Should be in instance mode; check input sizes");
+
+    // // Shape is taken from the rasterizer output tensor.
+    // p.depth  = d.num_images;
+    // p.height = d.height;
+    // p.width  = d.width
+    // NVDR_CHECK(p.depth > 0 && p.height > 0 && p.width > 0, "resolution must be [>0, >0, >0]");
+
+    // // Populate parameters.
+    // p.numTriangles = d.num_triangles
+    // p.numVertices = d.num_vertices;
+    // p.pose = pose;
+    // p.pos = pos;
+    // p.tri = tri;
+    // p.out = rast_out;
+    // p.dy  = dy;
+    // p.ddb = enable_db ? ddb : NULL;
+
+    // // Set up pixel position to clip space x, y transform.
+    // p.xs = 2.f / (float)p.width;
+    // p.xo = 1.f / (float)p.width - 1.f;
+    // p.ys = 2.f / (float)p.height;
+    // p.yo = 1.f / (float)p.height - 1.f;
+
+    // // Output tensor for position gradients.
+    // p.grad = grad;
+
+    // // Verify that buffers are aligned to allow float2/float4 operations.
+    // NVDR_CHECK(!((uintptr_t)p.pos & 15), "pos input tensor not aligned to float4");
+    // NVDR_CHECK(!((uintptr_t)p.dy  &  7), "dy input tensor not aligned to float2");
+    // NVDR_CHECK(!((uintptr_t)p.ddb & 15), "ddb input tensor not aligned to float4");
+
+    // // Choose launch parameters.
+    // dim3 blockSize = getLaunchBlockSize(RAST_GRAD_MAX_KERNEL_BLOCK_WIDTH, RAST_GRAD_MAX_KERNEL_BLOCK_HEIGHT, p.width, p.height);
+    // dim3 gridSize  = getLaunchGridSize(blockSize, p.width, p.height, p.depth);
+
+    // // Launch CUDA kernel to populate gradient values.
+    // void* args[] = {&p};
+    // enable_db = false;
+    // void* func = enable_db ? (void*)RasterizeGradKernelDb : (void*)RasterizeGradKernel;
+    // NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
+
+    // cudaStreamSynchronize(stream);
 }

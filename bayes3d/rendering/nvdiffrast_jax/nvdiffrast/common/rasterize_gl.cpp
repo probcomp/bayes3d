@@ -130,10 +130,10 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         STRINGIFY_SHADER_SOURCE(
             layout(location = 0) in vec4 in_pos;
             layout(location = 3) uniform mat4 projection_matrix;
-            layout(location = 5) uniform float seg_id;
+            layout(location = 5) uniform int seg_id;
             out int v_layer;
             out int v_offset;
-            out float seg_id_out;
+            flat out int seg_id_out;
             uniform sampler2D texture;
             void main()
             {
@@ -167,10 +167,10 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 layout(location = 0) uniform vec2 vp_scale;
                 in int v_layer[];
                 in int v_offset[];
-                in float seg_id_out[];
+                flat in int seg_id_out[];
                 out vec4 var_uvzw;
                 out vec4 var_db;
-                out float seg_id;
+                flat out int seg_id;
                 void main()
                 {
                     // Plane equations for bary differentials.
@@ -222,16 +222,16 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
                 in vec4 var_db;
-                in float seg_id;
+                flat in int seg_id;
                 layout(location = 0) out vec4 out_raster;
-                layout(location = 1) out vec4 out_db;
+                layout(location = 1) out ivec4 out_db;
                 IF_ZMODIFY(
                     layout(location = 1) uniform float in_dummy;
                 )
                 void main()
-                {
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, seg_id, float(gl_PrimitiveID + 1));
-                    out_db = var_db * var_uvzw.w;
+                {   
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+                    out_db = ivec4(seg_id, gl_PrimitiveID + 1, 0.0, 0.0);
                     IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
             )
@@ -262,72 +262,72 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             )
         );
     }
-    else
-    {
-        // Geometry shader without bary differential output.
-        compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
-            "#version 330\n"
-            STRINGIFY_SHADER_SOURCE(
-                layout(triangles) in;
-                layout(triangle_strip, max_vertices=3) out;
-                in int v_layer[];
-                in int v_offset[];
-                out vec4 var_uvzw;
-                void main()
-                {
-                    int layer_id = v_layer[0];
-                    int prim_id = gl_PrimitiveIDIn + v_offset[0];
+    // else
+    // {
+    //     // Geometry shader without bary differential output.
+    //     compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
+    //         "#version 330\n"
+    //         STRINGIFY_SHADER_SOURCE(
+    //             layout(triangles) in;
+    //             layout(triangle_strip, max_vertices=3) out;
+    //             in int v_layer[];
+    //             in int v_offset[];
+    //             out vec4 var_uvzw;
+    //             void main()
+    //             {
+    //                 int layer_id = v_layer[0];
+    //                 int prim_id = gl_PrimitiveIDIn + v_offset[0];
 
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); EmitVertex();
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); EmitVertex();
-                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); EmitVertex();
-                }
-            )
-        );
+    //                 gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); EmitVertex();
+    //                 gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); EmitVertex();
+    //                 gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); EmitVertex();
+    //             }
+    //         )
+    //     );
 
-        // Fragment shader without bary differential output.
-        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
-            "#version 430\n"
-            STRINGIFY_SHADER_SOURCE(
-                in vec4 var_uvzw;
-                layout(location = 0) out vec4 out_raster;
-                IF_ZMODIFY(
-                    layout(location = 1) uniform float in_dummy;
-                )
-                void main()
-                {
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
-                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
-                }
-            )
-        );
+    //     // Fragment shader without bary differential output.
+    //     compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
+    //         "#version 430\n"
+    //         STRINGIFY_SHADER_SOURCE(
+    //             in vec4 var_uvzw;
+    //             layout(location = 0) out vec4 out_raster;
+    //             IF_ZMODIFY(
+    //                 layout(location = 1) uniform float in_dummy;
+    //             )
+    //             void main()
+    //             {
+    //                 out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+    //                 IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
+    //             }
+    //         )
+    //     );
 
-        // Depth peeling variant of fragment shader.
-        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
-            "#version 430\n"
-            STRINGIFY_SHADER_SOURCE(
-                in vec4 var_uvzw;
-                layout(binding = 0) uniform sampler2DArray out_prev;
-                layout(location = 0) out vec4 out_raster;
-                IF_ZMODIFY(
-                    layout(location = 1) uniform float in_dummy;
-                )
-                void main()
-                {
-                    vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
-                    float depth_new = var_uvzw.z / var_uvzw.w;
-                    if (prev.w == 0 || depth_new <= prev.z)
-                        discard;
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
-                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
-                }
-            )
-        );
-    }
+    //     // Depth peeling variant of fragment shader.
+    //     compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
+    //         "#version 430\n"
+    //         STRINGIFY_SHADER_SOURCE(
+    //             in vec4 var_uvzw;
+    //             layout(binding = 0) uniform sampler2DArray out_prev;
+    //             layout(location = 0) out vec4 out_raster;
+    //             IF_ZMODIFY(
+    //                 layout(location = 1) uniform float in_dummy;
+    //             )
+    //             void main()
+    //             {
+    //                 vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
+    //                 float depth_new = var_uvzw.z / var_uvzw.w;
+    //                 if (prev.w == 0 || depth_new <= prev.z)
+    //                     discard;
+    //                 out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+    //                 IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
+    //             }
+    //         )
+    //     );
+    // }
 
     // Finalize programs.
     constructGLProgram(NVDR_CTX_PARAMS, &s.glProgram, s.glVertexShader, s.glGeometryShader, s.glFragmentShader);
-    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgramDP, s.glVertexShader, s.glGeometryShader, s.glFragmentShaderDP);
+    // constructGLProgram(NVDR_CTX_PARAMS, &s.glProgramDP, s.glVertexShader, s.glGeometryShader, s.glFragmentShaderDP);
 
     // Construct main fbo and bind permanently.
     NVDR_CHECK_GL_ERROR(glGenFramebuffers(1, &s.glFBO));
@@ -431,16 +431,20 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, i
         s.height = ROUND_UP(s.height, 32);
         LOG(INFO) << "Increasing frame buffer size to (width, height, depth) = (" << s.width << ", " << s.height << ", " << s.depth << ")";
 
-        // Allocate color buffers.
-        for (int i=0; i < num_outputs; i++)
-        {
-            NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
-            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, NUM_LAYERS, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-        }
+        int i =0;
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
+        NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, NUM_LAYERS, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+        i =1;
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
+        NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32UI, s.width, s.height, NUM_LAYERS, 0, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, 0));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+        NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 
         // Allocate depth/stencil buffer.
         NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glDepthStencilBuffer));
@@ -573,16 +577,16 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, fl
         int poses_on_this_iter = std::min(depth-start_pose_idx, NUM_LAYERS);
         NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
         NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
-        std::cout << "start_pose_idx  " << start_pose_idx << std::endl;
+        // std::cout << "start_pose_idx  " << start_pose_idx << std::endl;
         for(int object_idx=0; object_idx < num_objects; object_idx++)
         {
-            std::cout << "object_idx  " << object_idx << std::endl;
+            // std::cout << "object_idx  " << object_idx << std::endl;
             for (int i=0; i < poses_on_this_iter; i++)
             {
                 int first = rangesPtr[2*object_idx];
                 int count = rangesPtr[2*object_idx+1];
-                std::cout << "first  " << first << std::endl;
-                std::cout << "count  " << count << std::endl;
+                // std::cout << "first  " << first << std::endl;
+                // std::cout << "count  " << count << std::endl;
                 GLDrawCmd& cmd = drawCmdBuffer[i];
                 cmd.firstIndex    = first * 3;
                 cmd.count         = count * 3;
@@ -597,7 +601,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, fl
                 pose_array, 0, 0, posePtr + depth * 16 * object_idx + start_pose_idx * 16,
                 poses_on_this_iter * 16 * sizeof(float), cudaMemcpyDeviceToDevice, stream));
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPoseTexture, stream));
-            glUniform1f(5, object_idx+1.0);
+            glUniform1i(5, object_idx+1);
 
             NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], poses_on_this_iter, sizeof(GLDrawCmd)));
         }
@@ -608,27 +612,43 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, fl
         cudaExtent arrayExt = {};               // For error checking.
         int num_outputs = s.enableDB ? 2 : 1;
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(num_outputs, s.cudaColorBuffer, stream));
-        for (int i=0; i < num_outputs; i++)
-        {
-            NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[i], 0, 0));
-            NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
-            NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
-            NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
-            // NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= depth, "CUDA mapped array extent mismatch");
-            cudaMemcpy3DParms p = {0};
-            p.srcArray = array;
-            p.dstPtr.ptr = ((float * ) outputPtr[i]) + start_pose_idx * width * height * 4;;
-            p.dstPtr.pitch = width * 4 * sizeof(float);
-            p.dstPtr.xsize = width;
-            p.dstPtr.ysize = height;
-            p.extent.width = width;
-            p.extent.height = height;
-            p.extent.depth = poses_on_this_iter;
-            p.kind = cudaMemcpyDeviceToDevice;
-            NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
-        }
+        int i = 0;
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[i], 0, 0));
+        NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
+        NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
+        NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
+        // NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= depth, "CUDA mapped array extent mismatch");
+        cudaMemcpy3DParms p = {0};
+        p.srcArray = array;
+        p.dstPtr.ptr = ((float * ) outputPtr[i]) + start_pose_idx * width * height * 4;;
+        p.dstPtr.pitch = width * 4 * sizeof(float);
+        p.dstPtr.xsize = width;
+        p.dstPtr.ysize = height;
+        p.extent.width = width;
+        p.extent.height = height;
+        p.extent.depth = poses_on_this_iter;
+        p.kind = cudaMemcpyDeviceToDevice;
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
+    
+        i = 1;
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsSubResourceGetMappedArray(&array, s.cudaColorBuffer[i], 0, 0));
+        NVDR_CHECK_CUDA_ERROR(cudaArrayGetInfo(&arrayDesc, &arrayExt, NULL, array));
+        // NVDR_CHECK(arrayDesc.f == cudaChannelFormatKindFloat, "CUDA mapped array data kind mismatch");
+        // NVDR_CHECK(arrayDesc.x == 32 && arrayDesc.y == 32 && arrayDesc.z == 32 && arrayDesc.w == 32, "CUDA mapped array data width mismatch");
+        // NVDR_CHECK(arrayExt.width >= width && arrayExt.height >= height && arrayExt.depth >= depth, "CUDA mapped array extent mismatch");
+        p = {0};
+        p.srcArray = array;
+        p.dstPtr.ptr = ((int * ) outputPtr[i]) + start_pose_idx * width * height * 4;;
+        p.dstPtr.pitch = width * 4 * sizeof(int);
+        p.dstPtr.xsize = width;
+        p.dstPtr.ysize = height;
+        p.extent.width = width;
+        p.extent.height = height;
+        p.extent.depth = poses_on_this_iter;
+        p.kind = cudaMemcpyDeviceToDevice;
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));    
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(num_outputs, s.cudaColorBuffer, stream));
-        
+
     }
 
     // }

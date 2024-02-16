@@ -30,12 +30,12 @@ struct DiffRasterizeCustomCallDescriptor {
 };
 
 struct DiffRasterizeBwdCustomCallDescriptor {
-    int num_images;    // pos[0]
-    int num_vertices;  //  pos[1]
-    int num_triangles;  // tri[0]
-    int rast_height;  // rast[1]
-    int rast_width;  // rast[2]
-    int rast_depth;  // rast[0]
+    int num_images;
+    int num_objects;
+    int num_vertices;
+    int num_triangles;
+    int height;
+    int width;
 };
 
 //------------------------------------------------------------------------

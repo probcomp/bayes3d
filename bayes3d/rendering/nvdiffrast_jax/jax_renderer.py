@@ -207,13 +207,14 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
         num_images = pose.shape[0]
 
         dtype = dtypes.canonicalize_dtype(pose.dtype)
+        int_dtype = dtypes.canonicalize_dtype(np.int32)
 
         return [
             ShapedArray(
                 (num_images, r.intrinsics.height, r.intrinsics.width, 4), dtype
             ),
             ShapedArray(
-                (num_images, r.intrinsics.height, r.intrinsics.width, 4), dtype
+                (num_images, r.intrinsics.height, r.intrinsics.width, 4), int_dtype
             ),
         ]
 
@@ -254,7 +255,10 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
             [num_images, r.intrinsics.height, r.intrinsics.width, 4],
             mlir.dtype_to_ir_type(np_dtype),
         )
-
+        out_shp_dtype_int = mlir.ir.RankedTensorType.get(
+            [num_images, r.intrinsics.height, r.intrinsics.width, 4],
+            mlir.dtype_to_ir_type(np.dtype(np.int32)),
+        )
         opaque = dr._get_plugin(gl=True).build_diff_rasterize_fwd_descriptor(
             r.renderer_env.cpp_wrapper, [num_images, num_objects, num_vertices, num_triangles]
         )
@@ -264,7 +268,7 @@ def _build_rasterize_fwd_primitive(r: "Renderer"):
         return custom_call(
             op_name,
             # Output types
-            result_types=[out_shp_dtype, out_shp_dtype],
+            result_types=[out_shp_dtype, out_shp_dtype_int],
             # The inputs:
             operands=[poses, pos, tri, ranges, projection_matrix, resolution],
             backend_config=opaque,
