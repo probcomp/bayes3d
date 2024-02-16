@@ -573,18 +573,21 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, fl
         int poses_on_this_iter = std::min(depth-start_pose_idx, NUM_LAYERS);
         NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
         NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
-
+        std::cout << "start_pose_idx  " << start_pose_idx << std::endl;
         for(int object_idx=0; object_idx < num_objects; object_idx++)
         {
+            std::cout << "object_idx  " << object_idx << std::endl;
             for (int i=0; i < poses_on_this_iter; i++)
             {
                 int first = rangesPtr[2*object_idx];
                 int count = rangesPtr[2*object_idx+1];
+                std::cout << "first  " << first << std::endl;
+                std::cout << "count  " << count << std::endl;
                 GLDrawCmd& cmd = drawCmdBuffer[i];
                 cmd.firstIndex    = first * 3;
                 cmd.count         = count * 3;
                 cmd.baseVertex    = 0;
-                cmd.baseInstance  = first;
+                cmd.baseInstance  = 0;
                 cmd.instanceCount = 1;
             }
             
