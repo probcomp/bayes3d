@@ -591,7 +591,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, fl
                 cmd.firstIndex    = first * 3;
                 cmd.count         = count * 3;
                 cmd.baseVertex    = 0;
-                cmd.baseInstance  = 0;
+                cmd.baseInstance  = first;
                 cmd.instanceCount = 1;
             }
             
