@@ -62,8 +62,6 @@ faces = jnp.concatenate([faces + vertices_lens_cumsum[i] for (i,faces) in enumer
 
 resolution = jnp.array([intrinsics.height, intrinsics.width])
 
-
-
 import functools
 @functools.partial(
     jnp.vectorize,
@@ -82,18 +80,36 @@ def interpolate_(uv, triangle_id, poses, object_id, vertices, faces, ranges):
     interpolated_value = (relevant_vertices_transformed[:,:3] * barycentric.reshape(3,1)).sum(0)
     return interpolated_value
 
+def render(poses, vertices, faces, ranges, projection_matrix, resolution):
+    rast_out, rast_out_aux = jax_renderer.rasterize(
+        poses,
+        vertices,
+        faces,
+        ranges,
+        projection_matrix,
+        resolution
+    )
+    uvs = rast_out[...,:2]
+    object_ids = rast_out_aux[...,0]
+    triangle_ids = rast_out_aux[...,1]
+    mask = object_ids > 0
 
-object_indices = jnp.array([0, 1])
+    interpolated_values = interpolate_(uvs, triangle_ids, poses[:,None, None,:,:], object_ids, vertices, faces, ranges)
+    image = interpolated_values * mask[...,None]
+    return image
+
+render_jit = jax.jit(render)
+
+object_indices = jnp.array([1, 0])
 ranges = jnp.hstack([faces_lens_cumsum[object_indices].reshape(-1,1), faces_lens[object_indices].reshape(-1,1)])
 
-
-poses = jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*5)
+poses = jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*100)
 poses = poses.at[:, 1,3].set(jnp.linspace(-0.2, 0.5, len(poses)))
 poses2 = poses.at[:, 1,3].set(jnp.linspace(-0.0, 1.5, len(poses)))
 poses2 = poses2.at[:, 0,3].set(-0.5)
 poses = jnp.stack([poses, poses2], axis=1)
 
-rast_out, rast_out_aux = jax_renderer.rasterize(
+image = render_jit(
     poses,
     vertices,
     faces,
@@ -101,25 +117,13 @@ rast_out, rast_out_aux = jax_renderer.rasterize(
     projection_matrix,
     resolution
 )
-uvs = rast_out[...,:2]
-object_ids = jnp.rint(rast_out_aux[...,0]).astype(jnp.int32)
-triangle_ids = jnp.rint(rast_out_aux[...,1]).astype(jnp.int32)
-mask = object_ids > 0
-
-interpolated_values = interpolate_(uvs, triangle_ids, poses[:,None, None,:,:], object_ids, vertices, faces, ranges)
-image = interpolated_values * mask[...,None]
 
 server.reset_scene()
+
 server.add_point_cloud(
     "image1",
-    points=np.array(image[0]).reshape(-1,3),
+    points=np.array(image[10]).reshape(-1,3),
     colors=np.array([1.0, 0.0, 0.0]),
-    point_size=0.01
-)
-server.add_point_cloud(
-    "image2",
-    points=np.array(image[1]).reshape(-1,3),
-    colors=np.array([0.0, 0.0, 0.0]),
     point_size=0.01
 )
 
