@@ -270,6 +270,10 @@ static __forceinline__ __device__ void RasterizeGradKernelTemplate(const Rasteri
         accumulated_gradient += loss_grad_v2_clip_space[1] * proj[4 + row]* vertex_term2;
         accumulated_gradient += loss_grad_v3_clip_space[1] * proj[4 + row]* vertex_term3;
 
+        accumulated_gradient += loss_grad_v1_clip_space[2] * proj[8 + row] * vertex_term1;
+        accumulated_gradient += loss_grad_v2_clip_space[2] * proj[8 + row]* vertex_term2;
+        accumulated_gradient += loss_grad_v3_clip_space[2] * proj[8 + row]* vertex_term3;
+
         accumulated_gradient += loss_grad_v1_clip_space[3] * proj[12 + row] * vertex_term1;
         accumulated_gradient += loss_grad_v2_clip_space[3] * proj[12 + row]* vertex_term2;
         accumulated_gradient += loss_grad_v3_clip_space[3] * proj[12 + row]* vertex_term3;

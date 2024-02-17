@@ -16,7 +16,7 @@ intrinsics = b.Intrinsics(
     height=100,
     width=100,
     fx=200.0, fy=200.0,
-    cx=50.0, cy=50.0,
+    cx=50., cy=50.,
     near=0.001, far=16.0
 )
 
@@ -36,10 +36,10 @@ jax_renderer = JaxRenderer(intrinsics)
 
 meshes = []
 
-# path = os.path.join(b.utils.get_assets_dir(), "sample_objs/bunny.obj")
-# bunny_mesh = trimesh.load(path)
-# bunny_mesh.vertices  = bunny_mesh.vertices * jnp.array([1.0, -1.0, 1.0]) + jnp.array([0.0, 1.0, 0.0])
-# meshes.append(bunny_mesh)
+path = os.path.join(b.utils.get_assets_dir(), "sample_objs/bunny.obj")
+bunny_mesh = trimesh.load(path)
+bunny_mesh.vertices  = bunny_mesh.vertices * jnp.array([1.0, -1.0, 1.0]) + jnp.array([0.0, 1.0, 0.0])
+meshes.append(bunny_mesh)
 
 path = os.path.join(b.utils.get_assets_dir(), "sample_objs/cube.obj")
 mesh = trimesh.load(path)
@@ -58,9 +58,6 @@ vertices = jnp.concatenate([vertices, jnp.ones((vertices.shape[0], 1))], axis=-1
 faces = jnp.concatenate([faces + vertices_lens_cumsum[i] for (i,faces) in enumerate(all_faces)])
 
 resolution = jnp.array([intrinsics.height, intrinsics.width])
-
-object_indices = jnp.array([0])
-ranges = jnp.hstack([faces_lens_cumsum[object_indices].reshape(-1,1), faces_lens[object_indices].reshape(-1,1)])
 
 
 import functools
@@ -99,9 +96,11 @@ def render(poses, vertices, faces, ranges, projection_matrix, resolution):
     image = interpolated_values * mask[...,None]
     return image
 
+object_indices = jnp.array([1])
+ranges = jnp.hstack([faces_lens_cumsum[object_indices].reshape(-1,1), faces_lens[object_indices].reshape(-1,1)])
+
 
 pose_gt = b.transform_from_pos(jnp.array([0.0, 0.0, 3.0]))
-pose_estim = b.transform_from_pos(jnp.array([0.0, 0.0, 2.0]))
 image_gt = render(
     pose_gt[None, None,...],
     vertices,
@@ -121,14 +120,16 @@ def loss(pose_estim, image_gt):
         projection_matrix,
         resolution
     )
-    return ((image_gt[...,2] - image_estim[...,2])**2).mean()
+    mask = (image_gt[...,2] > 0) * (image_estim[...,2] > 0)
+    return (((image_gt[...,2] - image_estim[...,2]) * mask ) **2).mean()
 
 grad = jax.grad(loss, argnums=0)
-for _ in range(5):
-    print(pose_estim[:3,3])
-    pose_estim = pose_estim - 1.0 * grad(pose_estim, image_gt)
+pose_estim = b.transform_from_pos(jnp.array([0.0, 0.0, 2.0]))
+
+for _ in range(100):
+    print("estim ", pose_estim[:3,3])
+    pose_estim = pose_estim - 0.1 * grad(pose_estim, image_gt)
     pose_estim = pose_estim.at[:3,:3].set(jnp.eye(3))
-    print(pose_estim[:3,3])
 
 
 
