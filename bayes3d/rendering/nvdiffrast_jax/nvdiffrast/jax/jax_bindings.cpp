@@ -37,6 +37,17 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             d.num_triangles = images_objects_vertices_triangles[3];
             return PackDescriptor(d);
         });
+    m.def("build_diff_rasterize_bwd_descriptor",
+            [](std::vector<int> all_info) {
+            DiffRasterizeBwdCustomCallDescriptor d;
+            d.num_images = all_info[0];
+            d.num_objects = all_info[1];
+            d.num_vertices = all_info[2];
+            d.num_triangles = all_info[3];
+            d.height = all_info[4];
+            d.width = all_info[5];
+            return PackDescriptor(d);
+        });
     m.def("build_diff_interpolate_descriptor",
             [](std::vector<int> attr_shape,
             std::vector<int> rast_shape,
@@ -54,17 +65,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             d.num_diff_attributes = num_diff_attrs;
             return PackDescriptor(d);
         });
-    m.def("build_diff_rasterize_bwd_descriptor",
-            [](std::vector<int> pos_shape, std::vector<int> tri_shape, std::vector<int> rast_shape) {
-            DiffRasterizeBwdCustomCallDescriptor d;
-            // d.num_images = pos_shape[0];
-            // d.num_vertices = pos_shape[1];
-            // d.num_triangles = tri_shape[0];
-            // d.rast_height = rast_shape[1];
-            // d.rast_width = rast_shape[2];
-            // d.rast_depth = rast_shape[0];
-            return PackDescriptor(d);
-        });
+
 }
 
 

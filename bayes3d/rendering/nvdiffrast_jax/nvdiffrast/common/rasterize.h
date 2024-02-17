@@ -40,14 +40,18 @@ struct RasterizeCudaFwdShaderParams
 
 struct RasterizeGradParams
 {
-    const float*    pos;            // Incoming position buffer.
-    const int*      tri;            // Incoming triangle buffer.
-    const float*    out;            // Rasterizer output buffer.
-    const float*    dy;             // Incoming gradients of rasterizer output buffer.
-    const float*    ddb;            // Incoming gradients of bary diff output buffer.
+    float*    pose;            // Incoming position buffer.
+    float*    pos;            // Incoming position buffer.
+    float*    proj;            // Incoming position buffer.
+    int*      tri;            // Incoming triangle buffer.
+    float*    out;            // Rasterizer output buffer.
+    float*    out2;            // Rasterizer output buffer.
+    float*    dy;             // Incoming gradients of rasterizer output buffer.
+    float*    ddb;            // Incoming gradients of bary diff output buffer.
     float*          grad;           // Outgoing position gradients.
     int             numTriangles;   // Number of triangles.
     int             numVertices;    // Number of vertices.
+    int             num_objects;    // Number of vertices.
     int             width;          // Image width.
     int             height;         // Image height.
     int             depth;          // Size of minibatch.

@@ -262,6 +262,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             )
         );
     }
+
     // else
     // {
     //     // Geometry shader without bary differential output.
