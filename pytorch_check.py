@@ -83,35 +83,30 @@ pos_gt, quat_gt = (
     torch.from_numpy(np.array([0.2, 0.4, 1.0, 0.1]).astype(np.float32)).cuda()
 )
 
-def render(pos, quat):
+
+def render(pos, quat, stop_grad=False):
     vertices_camera = xfm_points(vertices, posevec_to_matrix(pos, quat)[None,...])
     vertices_clip = xfm_points(vertices_camera[...,:3], proj_cam[None,...]).contiguous()
     rast_out, _ = dr.rasterize(torch_glctx, vertices_clip, faces, resolution=[intrinsics.height, intrinsics.width])
+    if stop_grad:
+        rast_out = rast_out.detach()
     color   , _ = dr.interpolate(vertices_camera[0,...,2:3].contiguous(), rast_out, faces)
     return color
-
 
 gt_color = render(pos_gt, quat_gt)
 
 
-
-pos, quat = (
+init_pos, init_quat = (
     torch.from_numpy(np.array([-0.3, 0.1, 6.5]).astype(np.float32)).cuda(),
     torch.from_numpy(np.array([0.5, 0.4, 1.0, 0.1]).astype(np.float32)).cuda()
 )
+pos,quat = init_pos.clone(), init_quat.clone()
 pos.requires_grad = True
 quat.requires_grad = True
 
-b.hstack_images(
-    [
-        b.get_depth_image(gt_color[0,...,0].detach().cpu().numpy()),
-        b.get_depth_image(render(pos, quat)[0,...,0].detach().cpu().numpy())
-    ]
-).save("depth.png")
 
-
-for _ in range(100):
-    color = render(pos, quat)
+for _ in range(500):
+    color = render(pos, quat, stop_grad=False)
     mask = (color[...,-1] > 0.0) * (gt_color[...,-1] > 0.0)
     loss = (torch.abs(gt_color - color) * mask[...,None]).mean()
     loss.backward()
@@ -120,9 +115,17 @@ for _ in range(100):
     quat.data -= 0.1 * quat.grad
     pos.grad.zero_()
     quat.grad.zero_()
-
 print(quat_gt / torch.linalg.norm(quat_gt))
 print(quat / torch.linalg.norm(quat))
+
+
+b.hstack_images(
+    [
+        b.get_depth_image(gt_color[0,...,0].detach().cpu().numpy()),
+        b.get_depth_image(render(init_pos, init_quat)[0,...,0].detach().cpu().numpy()),
+        b.get_depth_image(render(pos, quat)[0,...,0].detach().cpu().numpy())
+    ]
+).save("depth.png")
 
 
 
