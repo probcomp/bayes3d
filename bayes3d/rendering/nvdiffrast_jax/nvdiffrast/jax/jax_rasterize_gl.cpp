@@ -262,7 +262,7 @@ void jax_rasterize_bwd(cudaStream_t stream,
     enable_db = false;
     void* func = enable_db ? (void*)RasterizeGradKernelDb : (void*)RasterizeGradKernel;
     // std::cout << "not calling: "<< std::endl;
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
+    // NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
 
     cudaStreamSynchronize(stream);
 }
