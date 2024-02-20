@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 from PIL import Image, ImageDraw, ImageFont
 
 import bayes3d.utils
@@ -458,3 +459,59 @@ def viz_graph(num_nodes, edges, filename, node_names=None):
     )
     filename_prefix, filetype = filename.split(".")
     g_out.render(filename_prefix, format=filetype)
+
+
+
+
+def visualize_rotation_headings(rot_matrices, init_vector = None):
+    """
+    rot_matrices: rotation matrics of shape (N,3,3)
+    init_vector: rotation about init vector of shape (3,)
+    if not specified, it will use the first rotation matrix about the vector [1,0,0]
+    """
+
+    def plot_vector(fig, start, end, name, color, width = 5):
+        fig.add_trace(go.Scatter3d(x=[start[0], end[0]], y=[start[1], end[1]], z=[start[2], end[2]],
+                                mode='lines+text',
+                                line=dict(width=width, color=color)))
+
+    # Sphere
+    u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
+    x = np.cos(u) * np.sin(v)
+    y = np.sin(u) * np.sin(v)
+    z = np.cos(v)
+    
+    # Initialize figure
+    fig = go.Figure(data=[go.Surface(z=z, x=x, y=y, colorscale='Greys', opacity=0.3, showscale = False)])
+    
+    # Original unit vector
+    if init_vector is None:
+        unit_vector = np.array([1, 0, 0])
+        origin_vector = rot_matrices[0] @ unit_vector
+
+    else:
+        unit_vector = init_vector/np.linalg.norm(init_vector) 
+        origin_vector = unit_vector
+        
+    plot_vector(fig, [0, 0, 0], origin_vector, "Original", "blue", width = 5)
+    
+    # Apply rotation matrices to the unit vector
+    for i, R in enumerate(rot_matrices):
+        if i == 0 and init_vector is None:
+            continue
+        transformed_vector = R @ unit_vector
+        plot_vector(fig, [0, 0, 0], transformed_vector, f"Transformed {i+1}", "red")
+    
+    # Update layout for a better view
+    fig.update_layout(scene=dict(xaxis_title='X axis',
+                                 yaxis_title='Y axis',
+                                 zaxis_title='Z axis',
+                                 xaxis=dict(range=[-1,1], autorange=False),
+                                 yaxis=dict(range=[-1,1], autorange=False),
+                                 zaxis=dict(range=[-1,1], autorange=False),
+                                 aspectratio=dict(x=1, y=1, z=1)),
+                                 showlegend = False,
+                                 
+                      margin=dict(l=0, r=0, b=0, t=0))
+    
+    fig.show()
