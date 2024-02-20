@@ -62,44 +62,6 @@ faces = jnp.concatenate([faces + vertices_lens_cumsum[i] for (i,faces) in enumer
 
 resolution = jnp.array([intrinsics.height, intrinsics.width])
 
-import functools
-@functools.partial(
-    jnp.vectorize,
-    signature="(2),(),(m,4,4),()->(3)",
-    excluded=(
-        4,
-        5,
-        6,
-    ),
-)
-def interpolate_(uv, triangle_id, poses, object_id, vertices, faces, ranges):
-    relevant_vertices = vertices[faces[triangle_id-1]]
-    pose_of_object = poses[object_id-1]
-    relevant_vertices_transformed = relevant_vertices @ pose_of_object.T
-    barycentric = jnp.concatenate([uv, jnp.array([1.0 - uv.sum()])])
-    interpolated_value = (relevant_vertices_transformed[:,:3] * barycentric.reshape(3,1)).sum(0)
-    return interpolated_value
-
-def render(poses, vertices, faces, ranges, projection_matrix, resolution):
-    rast_out, rast_out_aux = jax_renderer.rasterize(
-        poses,
-        vertices,
-        faces,
-        ranges,
-        projection_matrix,
-        resolution
-    )
-    uvs = rast_out[...,:2]
-    object_ids = rast_out_aux[...,0]
-    triangle_ids = rast_out_aux[...,1]
-    mask = object_ids > 0
-
-    interpolated_values = interpolate_(uvs, triangle_ids, poses[:,None, None,:,:], object_ids, vertices, faces, ranges)
-    image = interpolated_values * mask[...,None]
-    return image
-
-render_jit = jax.jit(render)
-
 object_indices = jnp.array([1, 0])
 ranges = jnp.hstack([faces_lens_cumsum[object_indices].reshape(-1,1), faces_lens[object_indices].reshape(-1,1)])
 
@@ -108,6 +70,8 @@ poses = poses.at[:, 1,3].set(jnp.linspace(-0.2, 0.5, len(poses)))
 poses2 = poses.at[:, 1,3].set(jnp.linspace(-0.0, 1.5, len(poses)))
 poses2 = poses2.at[:, 0,3].set(-0.5)
 poses = jnp.stack([poses, poses2], axis=1)
+
+render_jit = jax.jit(jax_renderer.render)
 
 image = render_jit(
     poses,

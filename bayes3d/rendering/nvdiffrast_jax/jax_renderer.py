@@ -8,12 +8,31 @@ from jax.core import ShapedArray
 from jax.interpreters import mlir, xla
 from jax.lib import xla_client
 from jaxlib.hlo_helpers import custom_call
+import functools
 
 import bayes3d as b
 import bayes3d.camera
 
-# import bayes3d._rendering.nvdiffrast.common as dr
 import bayes3d.rendering.nvdiffrast_jax.nvdiffrast.jax as dr
+
+
+@staticmethod
+@functools.partial(
+    jnp.vectorize,
+    signature="(2),(),(m,4,4),()->(3)",
+    excluded=(
+        4,
+        5,
+        6,
+    ),
+)
+def interpolate_(uv, triangle_id, poses, object_id, vertices, faces, ranges):
+    relevant_vertices = vertices[faces[triangle_id-1]]
+    pose_of_object = poses[object_id-1]
+    relevant_vertices_transformed = relevant_vertices @ pose_of_object.T
+    barycentric = jnp.concatenate([uv, jnp.array([1.0 - uv.sum()])])
+    interpolated_value = (relevant_vertices_transformed[:,:3] * barycentric.reshape(3,1)).sum(0)
+    return interpolated_value
 
 
 class Renderer(object):
@@ -27,7 +46,6 @@ class Renderer(object):
         self.intrinsics = intrinsics
         self.renderer_env = dr.RasterizeGLContext(output_db=True)
         self.rasterize = jax.tree_util.Partial(self._rasterize, self)
-        self.interpolate = jax.tree_util.Partial(self._interpolate, self)
 
     # ------------------
     # Rasterization
@@ -51,118 +69,23 @@ class Renderer(object):
 
     _rasterize.defvjp(_rasterize_fwd, _rasterize_bwd)
 
-    # ------------------
-    # Interpolation
-    # ------------------
-
-    @functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
-    def _interpolate(self, attr, rast, tri, rast_db, diff_attrs):
-        num_total_attrs = attr.shape[-1]
-        diff_attrs_all = jax.lax.cond(
-            diff_attrs.shape[0] == num_total_attrs, lambda: True, lambda: False
+    def render(self, poses, vertices, faces, ranges, projection_matrix, resolution):
+        rast_out, rast_out_aux = self.rasterize(
+            poses,
+            vertices,
+            faces,
+            ranges,
+            projection_matrix,
+            resolution
         )
-        return _interpolate_fwd_custom_call(
-            self, attr, rast, tri, rast_db, diff_attrs_all, diff_attrs
-        )
+        uvs = rast_out[...,:2]
+        object_ids = rast_out_aux[...,0]
+        triangle_ids = rast_out_aux[...,1]
+        mask = object_ids > 0
 
-    def _interpolate_fwd(self, attr, rast, tri, rast_db, diff_attrs):
-        num_total_attrs = attr.shape[-1]
-        diff_attrs_all = jax.lax.cond(
-            diff_attrs.shape[0] == num_total_attrs, lambda: True, lambda: False
-        )
-        out, out_da = _interpolate_fwd_custom_call(
-            self, attr, rast, tri, rast_db, diff_attrs_all, diff_attrs
-        )
-        saved_tensors = (attr, rast, tri, rast_db, diff_attrs_all, diff_attrs)
-
-        return (out, out_da), saved_tensors
-
-    def _interpolate_bwd(self, saved_tensors, diffs):
-        attr, rast, tri, rast_db, diff_attrs_all, diff_attrs_list = saved_tensors
-        dy, dda = diffs
-        g_attr, g_rast, g_rast_db = _interpolate_bwd_custom_call(
-            self, attr, rast, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list
-        )
-        return g_attr, g_rast, None, g_rast_db, None
-
-    _interpolate.defvjp(_interpolate_fwd, _interpolate_bwd)
-
-    # def render_many(self, vertices, faces, poses, intrinsics):
-    #     jax_renderer = self
-    #     projection_matrix = b.camera._open_gl_projection_matrix(
-    #         intrinsics.height,
-    #         intrinsics.width,
-    #         intrinsics.fx,
-    #         intrinsics.fy,
-    #         intrinsics.cx,
-    #         intrinsics.cy,
-    #         intrinsics.near,
-    #         intrinsics.far,
-    #     )
-    #     composed_projection = projection_matrix @ poses
-    #     vertices_homogenous = jnp.concatenate(
-    #         [vertices, jnp.ones((*vertices.shape[:-1], 1))], axis=-1
-    #     )
-    #     clip_spaces_projected_vertices = jnp.einsum(
-    #         "nij,mj->nmi", composed_projection, vertices_homogenous
-    #     )
-    #     rast_out, rast_out_db = jax_renderer.rasterize(
-    #         clip_spaces_projected_vertices,
-    #         faces,
-    #         jnp.array([intrinsics.height, intrinsics.width]),
-    #     )
-    #     interpolated_collided_vertices_clip, _ = jax_renderer.interpolate(
-    #         jnp.tile(vertices_homogenous[None, ...], (poses.shape[0], 1, 1)),
-    #         rast_out,
-    #         faces,
-    #         rast_out_db,
-    #         jnp.array([0, 1, 2, 3]),
-    #     )
-    #     interpolated_collided_vertices = jnp.einsum(
-    #         "a...ij,a...j->a...i", poses, interpolated_collided_vertices_clip
-    #     )
-    #     mask = rast_out[..., -1] > 0
-    #     depth = interpolated_collided_vertices[..., 2] * mask
-    #     return depth
-
-    # def render(self, vertices, faces, object_pose, intrinsics):
-    #     jax_renderer = self
-    #     projection_matrix = b.camera._open_gl_projection_matrix(
-    #         intrinsics.height,
-    #         intrinsics.width,
-    #         intrinsics.fx,
-    #         intrinsics.fy,
-    #         intrinsics.cx,
-    #         intrinsics.cy,
-    #         intrinsics.near,
-    #         intrinsics.far,
-    #     )
-    #     final_mtx_proj = projection_matrix @ object_pose
-    #     posw = jnp.concatenate([vertices, jnp.ones((*vertices.shape[:-1], 1))], axis=-1)
-    #     pos_clip_ja = xfm_points(vertices, final_mtx_proj)
-    #     rast_out, rast_out_db = jax_renderer.rasterize(
-    #         pos_clip_ja[None, ...],
-    #         faces,
-    #         jnp.array([intrinsics.height, intrinsics.width]),
-    #     )
-    #     gb_pos, _ = jax_renderer.interpolate(
-    #         posw[None, ...], rast_out, faces, rast_out_db, jnp.array([0, 1, 2, 3])
-    #     )
-    #     mask = rast_out[..., -1] > 0
-    #     shape_keep = gb_pos.shape
-    #     gb_pos = gb_pos.reshape(shape_keep[0], -1, shape_keep[-1])
-    #     gb_pos = gb_pos[..., :3]
-    #     depth = xfm_points(gb_pos, object_pose)
-    #     depth = depth.reshape(shape_keep)[..., 2] * -1
-    #     return -(depth * mask), mask
-
-
-# ================================================================================================
-# Register custom call targets helpers
-# ================================================================================================
-def xfm_points(points, matrix):
-    points2 = jnp.concatenate([points, jnp.ones((*points.shape[:-1], 1))], axis=-1)
-    return jnp.matmul(points2, matrix.T)
+        interpolated_values = interpolate_(uvs, triangle_ids, poses[:,None, None,:,:], object_ids, vertices, faces, ranges)
+        image = interpolated_values * mask[...,None]
+        return image
 
 
 # XLA array layout in memory
