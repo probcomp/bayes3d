@@ -25,7 +25,7 @@ Install compatible versions JAX and Torch:
 
 ```bash
 pip install --upgrade torch==2.2.0 torchvision==0.17.0+cu118 --index-url https://download.pytorch.org/whl/cu118
-pip install --upgrade jax[cuda11_local] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+pip install --upgrade jax[cuda11_local]==0.4.20 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
 
 Bayes3D is built on top of GenJAX, which is currently hosted in a private Python

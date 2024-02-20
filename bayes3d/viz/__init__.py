@@ -1,2 +1,2 @@
-from .meshcatviz import *
+# from .meshcatviz import *
 from .viz import *
