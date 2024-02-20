@@ -103,7 +103,7 @@ render_jit = jax.jit(render)
 object_indices = jnp.array([1, 0])
 ranges = jnp.hstack([faces_lens_cumsum[object_indices].reshape(-1,1), faces_lens[object_indices].reshape(-1,1)])
 
-poses = jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*100)
+poses = jnp.array([b.transform_from_pos(jnp.array([0.0, 0.0, 5.0]))]*8000)
 poses = poses.at[:, 1,3].set(jnp.linspace(-0.2, 0.5, len(poses)))
 poses2 = poses.at[:, 1,3].set(jnp.linspace(-0.0, 1.5, len(poses)))
 poses2 = poses2.at[:, 0,3].set(-0.5)
@@ -122,7 +122,7 @@ server.reset_scene()
 
 server.add_point_cloud(
     "image1",
-    points=np.array(image[10]).reshape(-1,3),
+    points=np.array(image[20]).reshape(-1,3),
     colors=np.array([1.0, 0.0, 0.0]),
     point_size=0.01
 )
