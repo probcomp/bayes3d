@@ -45,12 +45,13 @@ def preprocess_for_viz(img):
     return depth_np
 
 
-cmap  = copy.copy(plt.get_cmap('turbo'))
+cmap = copy.copy(plt.get_cmap("turbo"))
 cmap.set_bad(color=(1.0, 1.0, 1.0, 1.0))
+
 
 def get_depth_image(image, max=None):
     """Convert a depth image to a PIL image.
-    
+
     Args:
         image (np.ndarray): Depth image. Shape (H, W).
         min (float): Minimum depth value for colormap.
@@ -74,6 +75,7 @@ def get_depth_image(image, max=None):
         np.rint(cmap(depth) * 255.0).astype(np.int8), mode="RGBA"
     ).convert("RGB")
     return img
+
 
 def get_rgb_image(image, max=255.0):
     """Convert an RGB image to a PIL image.
