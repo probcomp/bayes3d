@@ -33,12 +33,14 @@ struct RasterizeGLState // Must be initializable by memset to zero.
     GLuint                  glVAO;
     GLuint                  glTriBuffer;
     GLuint                  glPosBuffer;
+    GLuint                  glPoseTexture;
     GLuint                  glProgram;
     GLuint                  glProgramDP;
     GLuint                  glVertexShader;
     GLuint                  glGeometryShader;
     GLuint                  glFragmentShader;
     GLuint                  glFragmentShaderDP;
+    cudaGraphicsResource_t  cudaPoseTexture;
     cudaGraphicsResource_t  cudaColorBuffer[2];
     cudaGraphicsResource_t  cudaPrevOutBuffer;
     cudaGraphicsResource_t  cudaPosBuffer;
@@ -52,7 +54,7 @@ struct RasterizeGLState // Must be initializable by memset to zero.
 
 void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceIdx);
 void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, int posCount, int triCount, int width, int height, int depth);
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx);
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, std::vector<float>& projMatrix, const float* posePtr, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int num_objects, int width, int height, int depth, int peeling_idx);
 void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth);
 void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s);
 
