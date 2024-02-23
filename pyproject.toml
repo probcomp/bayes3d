@@ -26,12 +26,14 @@ classifiers = [
 ]
 dependencies = [
     "distinctipy",
+    "genjax>=0.2.0",
     "graphviz",
     "imageio",
     "matplotlib",
     "meshcat",
     "natsort",
     "numpy",
+    "open3d",
     "opencv-python",
     "plyfile",
     "pyliblzfse",
