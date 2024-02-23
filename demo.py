@@ -7,7 +7,6 @@ from IPython import embed
 from scipy.spatial.transform import Rotation as R
 
 import bayes3d as b
-from bayes3d import distributions
 
 # Can be helpful for debugging:
 # jax.config.update('jax_enable_checks', True)

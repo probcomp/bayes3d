@@ -274,7 +274,9 @@ def hvstack_images(images, h, w, border=10, bg_color=(255, 255, 255)):
     images_to_vstack = []
 
     for row_idx in range(h):
-        hstacked_row = hstack_images(images[row_idx * w : (row_idx + 1) * w], border=border, bg_color=bg_color)
+        hstacked_row = hstack_images(
+            images[row_idx * w : (row_idx + 1) * w], border=border, bg_color=bg_color
+        )
         images_to_vstack.append(hstacked_row)
 
     return vstack_images(images_to_vstack, border=border, bg_color=bg_color)

@@ -4,7 +4,7 @@
 
 from importlib import metadata
 
-from . import colmap, distributions, scene_graph, utils
+from . import Renderer, colmap, distributions, scene_graph, utils
 from .camera import *
 from .likelihood import *
 from .renderer import *
