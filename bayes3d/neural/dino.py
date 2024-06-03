@@ -151,7 +151,9 @@ class ViTExtractor:
             # compute number of tokens taking stride into account
             w0 = 1 + (w - patch_size) // stride_hw[1]
             h0 = 1 + (h - patch_size) // stride_hw[0]
-            assert w0 * h0 == npatch, f"""got wrong grid size for {h}x{w} with patch_size {patch_size} and
+            assert (
+                w0 * h0 == npatch
+            ), f"""got wrong grid size for {h}x{w} with patch_size {patch_size} and
                                             stride {stride_hw} got {h0}x{w0}={h0 * w0} expecting {npatch}"""
             # we add a small number to avoid floating point error in the interpolation
             # see discussion at https://github.com/facebookresearch/dino/issues/8
@@ -399,7 +401,12 @@ class ViTExtractor:
         :param bin: apply log binning to the descriptor. default is False.
         :return: tensor of descriptors. Bx1xtxd' where d' is the dimension of the descriptors.
         """
-        assert facet in ["key", "query", "value", "token"], f"""{facet} is not a supported facet for descriptors.
+        assert facet in [
+            "key",
+            "query",
+            "value",
+            "token",
+        ], f"""{facet} is not a supported facet for descriptors.
                                                              choose from ['key' | 'query' | 'value' | 'token'] """
         self._extract_features(batch, [layer], facet)
         x = self._feats[0]
