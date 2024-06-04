@@ -34,9 +34,8 @@ package repository. To configure your machine to access GenJAX:
 - [File an issue](https://github.com/probcomp/bayes3d/issues/new) asking @sritchie to give you access.
 - [Install the Google Cloud command line tools](https://cloud.google.com/sdk/docs/install).
 - Follow the instructions on the [installation page](https://cloud.google.com/sdk/docs/install)
-- run `gcloud init` as described [in this
-  guide](https://cloud.google.com/sdk/docs/initializing) and configure the tool
-  with the `probcomp-caliban` project ID.
+- run `gcloud auth application-default login` as described [in this
+  guide](https://cloud.google.com/sdk/docs/initializing).
 
 Then run the following command to configure `pip` to use these new gcloud
 commands:
