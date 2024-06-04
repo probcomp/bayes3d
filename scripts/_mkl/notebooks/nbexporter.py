@@ -1,8 +1,9 @@
 """
 
-    Exports notebooks to `.py` files using `nbdev.nb_export`.
+Exports notebooks to `.py` files using `nbdev.nb_export`.
 
 """
+
 import glob
 import os
 from pathlib import Path
