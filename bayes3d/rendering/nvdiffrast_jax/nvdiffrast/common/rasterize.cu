@@ -109,6 +109,19 @@ __global__ void RasterizeCudaFwdShaderKernel(const RasterizeCudaFwdShaderParams 
     ((float4*)p.out_db)[pidx] = make_float4(dudx, dudy, dvdx, dvdy);
 }
 
+
+__device__ inline void mv_multiply_4(float* matrix, float* vector, float* res)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            res[i] += matrix[4*i + j] * vector[j];
+        }
+    }
+}
+
+
 //------------------------------------------------------------------------
 // Gradient Cuda kernel.
 
@@ -131,7 +144,12 @@ static __forceinline__ __device__ void RasterizeGradKernelTemplate(const Rasteri
     // Read triangle idx and dy.
     float2 dy  = ((float2*)p.dy)[pidx * 2];
     float4 ddb = ENABLE_DB ? ((float4*)p.ddb)[pidx] : make_float4(0.f, 0.f, 0.f, 0.f);
+
     int triIdx = (int)(((float*)p.out)[pidx * 4 + 3]) - 1;
+
+    int object_idx = (int)(((int*)p.out2)[pidx * 4 + 0]) - 1;
+    int depth = p.depth;
+    float* pose = p.pose + ( depth * 16 * object_idx +  pz * 16);
 
     // Exit if nothing to do.
     if (triIdx < 0 || triIdx >= p.numTriangles)
@@ -154,21 +172,46 @@ static __forceinline__ __device__ void RasterizeGradKernelTemplate(const Rasteri
         vi2 < 0 || vi2 >= p.numVertices)
         return;
 
-    // In instance mode, adjust vertex indices by minibatch index.
-    if (p.instance_mode)
-    {
-        vi0 += pz * p.numVertices;
-        vi1 += pz * p.numVertices;
-        vi2 += pz * p.numVertices;
-    }
+    // // In instance mode, adjust vertex indices by minibatch index.
+    // if (p.instance_mode)
+    // {
+    //     vi0 += pz * p.numVertices;
+    //     vi1 += pz * p.numVertices;
+    //     vi2 += pz * p.numVertices;
+    // }
+
+    float* proj = p.proj;
 
     // Initialize coalesced atomics.
     CA_SET_GROUP(triIdx);
 
+    // Apply projection_matrix  * pose[frame_idx, object_index] * p.pos (which is in object space) to get the clip vertex positions.
+    // The following computations assume p.pos is in clip space.
+    float* vertex_1_object_frame = p.pos + vi0 * 4;
+    float* vertex_2_object_frame = p.pos + vi1 * 4;
+    float* vertex_3_object_frame = p.pos + vi2 * 4;
+
+    float vertex_1_camera_frame[4] = {0};
+    float vertex_2_camera_frame[4] = {0};
+    float vertex_3_camera_frame[4] = {0};
+    mv_multiply_4(pose, vertex_1_object_frame, vertex_1_camera_frame);
+    mv_multiply_4(pose, vertex_2_object_frame, vertex_2_camera_frame);
+    mv_multiply_4(pose, vertex_3_object_frame, vertex_3_camera_frame);
+
+    float vertex_1_clip_space[4] = {0};
+    float vertex_2_clip_space[4] = {0};
+    float vertex_3_clip_space[4] = {0};
+    mv_multiply_4(proj, vertex_1_object_frame, vertex_1_clip_space);
+    mv_multiply_4(proj, vertex_2_object_frame, vertex_2_clip_space);
+    mv_multiply_4(proj, vertex_3_object_frame, vertex_3_clip_space);
+
     // Fetch vertex positions.
-    float4 p0 = ((float4*)p.pos)[vi0];
-    float4 p1 = ((float4*)p.pos)[vi1];
-    float4 p2 = ((float4*)p.pos)[vi2];
+    // float4 p0 = ((float4*)p.pos)[vi0];
+    // float4 p1 = ((float4*)p.pos)[vi1];
+    // float4 p2 = ((float4*)p.pos)[vi2];
+    float4 p0 = ((float4*)vertex_1_clip_space)[0];
+    float4 p1 = ((float4*)vertex_2_clip_space)[0];
+    float4 p2 = ((float4*)vertex_3_clip_space)[0];
 
     // Evaluate edge functions.
     float fx = p.xs * (float)px + p.xo;
@@ -206,66 +249,41 @@ static __forceinline__ __device__ void RasterizeGradKernelTemplate(const Rasteri
     float gp1w = -fx * gp1x - fy * gp1y;
     float gp2w = -fx * gp2x - fy * gp2y;
 
-    // Bary differential gradients.
-    if (ENABLE_DB && ((grad_all_ddb) << 1) != 0)
-    {
-        float dfxdX = p.xs * iw;
-        float dfydY = p.ys * iw;
-        ddb.x *= dfxdX;
-        ddb.y *= dfydY;
-        ddb.z *= dfxdX;
-        ddb.w *= dfydY;
+    float loss_grad_v1_clip_space[4] = {gp0x, gp0y, 0.f, gp0w};
+    float loss_grad_v2_clip_space[4] = {gp1x, gp1y, 0.f, gp1w};
+    float loss_grad_v3_clip_space[4] = {gp2x, gp2y, 0.f, gp2w};
 
-        float da0dX = p1.y * p2.w - p2.y * p1.w;
-        float da1dX = p2.y * p0.w - p0.y * p2.w;
-        float da2dX = p0.y * p1.w - p1.y * p0.w;
-        float da0dY = p2.x * p1.w - p1.x * p2.w;
-        float da1dY = p0.x * p2.w - p2.x * p0.w;
-        float da2dY = p1.x * p0.w - p0.x * p1.w;
-        float datdX = da0dX + da1dX + da2dX;
-        float datdY = da0dY + da1dY + da2dY;
+    for (int i = 0; i < 16; i++) {
+        int row=i/4, col=i%4;
+        //XXX somehow get the xyzw of the vertices
+        //col-th coordinate of vi0-, vi1-, vi2-th vertices
+        float  vertex_term1 = ((float*) vertex_1_object_frame)[col];
+        float  vertex_term2 = ((float*) vertex_2_object_frame)[col];
+        float  vertex_term3 = ((float*) vertex_3_object_frame)[col];
 
-        float x01 = p0.x - p1.x;
-        float x12 = p1.x - p2.x;
-        float x20 = p2.x - p0.x;
-        float y01 = p0.y - p1.y;
-        float y12 = p1.y - p2.y;
-        float y20 = p2.y - p0.y;
-        float w01 = p0.w - p1.w;
-        float w12 = p1.w - p2.w;
-        float w20 = p2.w - p0.w;
+        float accumulated_gradient = 0.0;
+        accumulated_gradient += loss_grad_v1_clip_space[0] * proj[row] * vertex_term1;
+        accumulated_gradient += loss_grad_v2_clip_space[0] * proj[row] * vertex_term2;
+        accumulated_gradient += loss_grad_v3_clip_space[0] * proj[row] * vertex_term3;
 
-        float a0p1 = fy * p2.x - fx * p2.y;
-        float a0p2 = fx * p1.y - fy * p1.x;
-        float a1p0 = fx * p2.y - fy * p2.x;
-        float a1p2 = fy * p0.x - fx * p0.y;
+        accumulated_gradient += loss_grad_v1_clip_space[1] * proj[4 + row] * vertex_term1;
+        accumulated_gradient += loss_grad_v2_clip_space[1] * proj[4 + row]* vertex_term2;
+        accumulated_gradient += loss_grad_v3_clip_space[1] * proj[4 + row]* vertex_term3;
 
-        float wdudX = 2.f * b0 * datdX - da0dX;
-        float wdudY = 2.f * b0 * datdY - da0dY;
-        float wdvdX = 2.f * b1 * datdX - da1dX;
-        float wdvdY = 2.f * b1 * datdY - da1dY;
+        accumulated_gradient += loss_grad_v1_clip_space[2] * proj[8 + row] * vertex_term1;
+        accumulated_gradient += loss_grad_v2_clip_space[2] * proj[8 + row]* vertex_term2;
+        accumulated_gradient += loss_grad_v3_clip_space[2] * proj[8 + row]* vertex_term3;
 
-        float c0  = iw * (ddb.x * wdudX + ddb.y * wdudY + ddb.z * wdvdX + ddb.w * wdvdY);
-        float cx  = c0 * fx - ddb.x * b0 - ddb.z * b1;
-        float cy  = c0 * fy - ddb.y * b0 - ddb.w * b1;
-        float cxy = iw * (ddb.x * datdX + ddb.y * datdY);
-        float czw = iw * (ddb.z * datdX + ddb.w * datdY);
+        accumulated_gradient += loss_grad_v1_clip_space[3] * proj[12 + row] * vertex_term1;
+        accumulated_gradient += loss_grad_v2_clip_space[3] * proj[12 + row]* vertex_term2;
+        accumulated_gradient += loss_grad_v3_clip_space[3] * proj[12 + row]* vertex_term3;
 
-        gp0x += c0 * y12 - cy * w12              + czw * p2y                                               + ddb.w * p2.w;
-        gp1x += c0 * y20 - cy * w20 - cxy * p2y                              - ddb.y * p2.w;
-        gp2x += c0 * y01 - cy * w01 + cxy * p1y  - czw * p0y                 + ddb.y * p1.w                - ddb.w * p0.w;
-        gp0y += cx * w12 - c0 * x12              - czw * p2x                                - ddb.z * p2.w;
-        gp1y += cx * w20 - c0 * x20 + cxy * p2x               + ddb.x * p2.w;
-        gp2y += cx * w01 - c0 * x01 - cxy * p1x  + czw * p0x  - ddb.x * p1.w                + ddb.z * p0.w;
-        gp0w += cy * x12 - cx * y12              - czw * a1p0                               + ddb.z * p2.y - ddb.w * p2.x;
-        gp1w += cy * x20 - cx * y20 - cxy * a0p1              - ddb.x * p2.y + ddb.y * p2.x;
-        gp2w += cy * x01 - cx * y01 - cxy * a0p2 - czw * a1p2 + ddb.x * p1.y - ddb.y * p1.x - ddb.z * p0.y + ddb.w * p0.x;
+        // Fix this;
+        caAtomicAdd(
+            p.grad + (depth * 16 * object_idx +  pz * 16 + i),
+            accumulated_gradient
+        );
     }
-
-    // Accumulate using coalesced atomics.
-    caAtomicAdd3_xyw(p.grad + 4 * vi0, gp0x, gp0y, gp0w);
-    caAtomicAdd3_xyw(p.grad + 4 * vi1, gp1x, gp1y, gp1w);
-    caAtomicAdd3_xyw(p.grad + 4 * vi2, gp2x, gp2y, gp2w);
 }
 
 // Template specializations.

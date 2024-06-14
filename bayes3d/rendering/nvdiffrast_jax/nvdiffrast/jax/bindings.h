@@ -1,5 +1,5 @@
-#include <string>
-#include <pybind11/pybind11.h>
+#ifndef INV_TREE_H
+#define INV_TREE_H
 
 // https://en.cppreference.com/w/cpp/numeric/bit_cast
 template <class To, class From>
@@ -35,3 +35,4 @@ const T* UnpackDescriptor(const char* opaque, std::size_t opaque_len) {
   }
   return bit_cast<const T*>(opaque);
 }
+#endif
