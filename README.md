@@ -28,26 +28,10 @@ pip install --upgrade torch==2.2.0 torchvision==0.17.0+cu118 --index-url https:/
 pip install --upgrade jax[cuda11_local]==0.4.20 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
 
-Bayes3D is built on top of GenJAX, which is currently hosted in a private Python
-package repository. To configure your machine to access GenJAX:
-
-- [File an issue](https://github.com/probcomp/bayes3d/issues/new) asking @sritchie to give you access.
-- [Install the Google Cloud command line tools](https://cloud.google.com/sdk/docs/install).
-- Follow the instructions on the [installation page](https://cloud.google.com/sdk/docs/install)
-- run `gcloud auth application-default login` as described [in this
-  guide](https://cloud.google.com/sdk/docs/initializing).
-
-Then run the following command to configure `pip` to use these new gcloud
-commands:
+Install Bayes3D:
 
 ```bash
-pip install keyring keyrings.google-artifactregistry-auth
-```
-
-Finally, install Bayes3D:
-
-```bash
-pip install bayes3d --extra-index-url https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/simple/
+pip install bayes3d
 ```
 
 Download model and data assets:
