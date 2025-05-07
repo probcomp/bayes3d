@@ -211,14 +211,14 @@ def relative_pose_from_edge(
     face_child,
     dims_child,
 ):
-    x, y, angle = contact_params
-    contact_transform = t3d.transform_from_pos(jnp.array([x, y, 0.0])).dot(
-        t3d.transform_from_axis_angle(jnp.array([1.0, 1.0, 0.0]), jnp.pi).dot(
-            t3d.transform_from_axis_angle(jnp.array([0.0, 0.0, 1.0]), angle)
-        )
-    )
+    contact_transform = contact_params_to_pose(contact_params)
     child_plane = get_contact_planes(dims_child)[face_child]
     return contact_transform.dot(jnp.linalg.inv(child_plane))
+
+
+def relative_pose_from_edge_pose(contact_pose, face_child, dims_child):
+    child_plane = get_contact_planes(dims_child)[face_child]
+    return contact_pose.dot(jnp.linalg.inv(child_plane))
 
 
 relative_pose_from_edge_jit = jax.jit(relative_pose_from_edge)
