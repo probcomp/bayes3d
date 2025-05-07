@@ -35,6 +35,7 @@ dependencies = [
     "numpy",
     "open3d",
     "opencv-python",
+    "plotly",
     "plyfile",
     "pyliblzfse",
     "pyransac3d",
