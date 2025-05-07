@@ -1,28 +1,6 @@
-#include "torch_types.h"
-#include "jax_binding_ops.h"
-#include "jax_rasterize_gl.h"
-#include "jax_interpolate.h"
+#include "jax_bindings.h"
 #include <tuple>
 #include <pybind11/pybind11.h>
-
-//------------------------------------------------------------------------
-// Op prototypes.
-
-void jax_rasterize_fwd_gl(cudaStream_t stream,
-                      void **buffers,
-                      const char *opaque, std::size_t opaque_len);
-
-void jax_rasterize_bwd(cudaStream_t stream,
-                      void **buffers,
-                      const char *opaque, std::size_t opaque_len);
-
-void jax_interpolate_fwd(cudaStream_t stream,
-                      void **buffers,
-                      const char *opaque, std::size_t opaque_len);
-
-void jax_interpolate_bwd(cudaStream_t stream,
-                      void **buffers,
-                      const char *opaque, std::size_t opaque_len);
 
 //---------------------------------------------------
 
@@ -50,12 +28,24 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("registrations", &Registrations, "custom call registrations");
     m.def("build_diff_rasterize_fwd_descriptor",
             [](RasterizeGLStateWrapper& stateWrapper,
-            std::vector<int> images_vertices_triangles) {
+            std::vector<int> images_objects_vertices_triangles) {
             DiffRasterizeCustomCallDescriptor d;
             d.gl_state_wrapper = &stateWrapper;
-            d.num_images = images_vertices_triangles[0];
-            d.num_vertices = images_vertices_triangles[1];
-            d.num_triangles = images_vertices_triangles[2];
+            d.num_images = images_objects_vertices_triangles[0];
+            d.num_objects = images_objects_vertices_triangles[1];
+            d.num_vertices = images_objects_vertices_triangles[2];
+            d.num_triangles = images_objects_vertices_triangles[3];
+            return PackDescriptor(d);
+        });
+    m.def("build_diff_rasterize_bwd_descriptor",
+            [](std::vector<int> all_info) {
+            DiffRasterizeBwdCustomCallDescriptor d;
+            d.num_images = all_info[0];
+            d.num_objects = all_info[1];
+            d.num_vertices = all_info[2];
+            d.num_triangles = all_info[3];
+            d.height = all_info[4];
+            d.width = all_info[5];
             return PackDescriptor(d);
         });
     m.def("build_diff_interpolate_descriptor",
@@ -75,17 +65,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             d.num_diff_attributes = num_diff_attrs;
             return PackDescriptor(d);
         });
-    m.def("build_diff_rasterize_bwd_descriptor",
-            [](std::vector<int> pos_shape, std::vector<int> tri_shape, std::vector<int> rast_shape) {
-            DiffRasterizeBwdCustomCallDescriptor d;
-            d.num_images = pos_shape[0];
-            d.num_vertices = pos_shape[1];
-            d.num_triangles = tri_shape[0];
-            d.rast_height = rast_shape[1];
-            d.rast_width = rast_shape[2];
-            d.rast_depth = rast_shape[0];
-            return PackDescriptor(d);
-        });
+
 }
 
 
