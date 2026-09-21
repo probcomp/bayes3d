@@ -189,9 +189,9 @@ class ViTExtractor:
             return model
 
         stride = nn_utils._pair(stride)
-        assert all(
-            [(patch_size // s_) * s_ == patch_size for s_ in stride]
-        ), f"stride {stride} should divide patch_size {patch_size}"
+        assert all([(patch_size // s_) * s_ == patch_size for s_ in stride]), (
+            f"stride {stride} should divide patch_size {patch_size}"
+        )
 
         # fix the stride
         model.patch_embed.proj.stride = stride
@@ -415,7 +415,9 @@ class ViTExtractor:
         if not include_cls:
             x = x[:, :, 1:, :]  # remove cls token
         else:
-            assert not bin, "bin = True and include_cls = True are not supported together, set one of them False."
+            assert not bin, (
+                "bin = True and include_cls = True are not supported together, set one of them False."
+            )
         if not bin:
             desc = (
                 x.permute(0, 2, 3, 1).flatten(start_dim=-2, end_dim=-1).unsqueeze(dim=1)
@@ -431,9 +433,9 @@ class ViTExtractor:
         :param batch: batch to extract saliency maps for. Has shape BxCxHxW.
         :return: a tensor of saliency maps. has shape Bxt-1
         """
-        assert (
-            self.model_type == "dino_vits8"
-        ), "saliency maps are supported only for dino_vits model_type."
+        assert self.model_type == "dino_vits8", (
+            "saliency maps are supported only for dino_vits model_type."
+        )
         self._extract_features(batch, [11], "attn")
         head_idxs = [0, 2, 4, 5]
         curr_feats = self._feats[0]  # Bxhxtxt
