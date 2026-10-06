@@ -21,7 +21,7 @@ for i in range(5):
     for x in range(1):
         renderer.add_mesh_from_file(
             os.path.join(b.utils.get_assets_dir(), "sample_objs/cube.obj"),
-            mesh_name=f"cube_{i+1}",
+            mesh_name=f"cube_{i + 1}",
         )
 
     post_add_mesh = b.utils.get_gpu_memory()[0]

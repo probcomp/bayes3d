@@ -178,7 +178,7 @@ if JAX_RENDERER:
         pos_grads.min().item(),
         pos_grads.max().item(),
     )
-    print(f"JAX rasterization (eval + grad): {(end_time - start_time)*1000} ms")
+    print(f"JAX rasterization (eval + grad): {(end_time - start_time) * 1000} ms")
 
     # save viz
     b.viz.get_depth_image(rast_out[0][:, :, 2]).save("img_jax.png")
@@ -229,7 +229,7 @@ else:
         pos_grads.min().item(),
         pos_grads.max().item(),
     )
-    print(f"Torch rasterization (eval + grad): {(end_time - start_time)*1000} ms")
+    print(f"Torch rasterization (eval + grad): {(end_time - start_time) * 1000} ms")
 
     # save viz
     b.viz.get_depth_image(jnp.array(rast_out[0][:, :, 2].cpu())).save("img_torch.png")
@@ -278,7 +278,7 @@ if JAX_RENDERER:
     print(
         f"JAX BWD (sum, min, max): g_attr={g_attr.sum().item(), g_attr.min().item(), g_attr.max().item()}\ng_rast={g_rast.sum().item(), g_rast.min().item(), g_rast.max().item()}"
     )
-    print(f"JAX interpolation: {(end_time - start_time)*1000} ms")
+    print(f"JAX interpolation: {(end_time - start_time) * 1000} ms")
 
     # save viz
     b.viz.get_depth_image(gb_pos[0][:, :, 2]).save("interpolate_jax.png")
@@ -316,7 +316,7 @@ else:
     print(
         f"TORCH BWD (sum, min, max): g_attr={g_attr.sum().item(), g_attr.min().item(), g_attr.max().item()}\ng_rast={g_rast.sum().item(), g_rast.min().item(), g_rast.max().item()}"
     )
-    print(f"Torch interpolation: {(end_time - start_time)*1000} ms")
+    print(f"Torch interpolation: {(end_time - start_time) * 1000} ms")
 
     # save viz
     b.viz.get_depth_image(jnp.array(gb_pos[0][:, :, 2].cpu())).save(
