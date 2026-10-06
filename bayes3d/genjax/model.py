@@ -129,11 +129,11 @@ def get_far_plane(trace):
 def add_object(trace, key, obj_id, parent, face_parent, face_child):
     N = b.get_indices(trace).shape[0] + 1
     choices = trace.get_choices()
-    choices[f"parent_{N-1}"] = parent
-    choices[f"id_{N-1}"] = obj_id
-    choices[f"face_parent_{N-1}"] = face_parent
-    choices[f"face_child_{N-1}"] = face_child
-    choices[f"contact_params_{N-1}"] = jnp.zeros(3)
+    choices[f"parent_{N - 1}"] = parent
+    choices[f"id_{N - 1}"] = obj_id
+    choices[f"face_parent_{N - 1}"] = face_parent
+    choices[f"face_child_{N - 1}"] = face_child
+    choices[f"contact_params_{N - 1}"] = jnp.zeros(3)
     return model.importance(key, choices, (jnp.arange(N), *trace.get_args()[1:]))[1]
 
 
