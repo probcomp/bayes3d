@@ -206,7 +206,7 @@ if __name__ == "__main__":
     all_scores = []
     for i, rgb_img in enumerate(rgb_imgs):
         pred = COSYPOSE_MODEL.inference(rgb_img, camera_k)
-        print(f"{i+1}/{num_imgs} inference done")
+        print(f"{i + 1}/{num_imgs} inference done")
 
         pred_poses = np.asarray(pred.poses.cpu())
         pred_ids = [
